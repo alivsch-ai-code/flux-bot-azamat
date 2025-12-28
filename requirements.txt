@@ -2,3 +2,4 @@ pyTelegramBotAPI
 replicate
 flask
 gunicorn
+requests
