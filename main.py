@@ -15,7 +15,7 @@ REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN")
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 app = Flask(__name__)
 
-# --- MODELLE & PREISE (Config) ---
+# --- MODELLE & PREISE ---
 MODELS = {
     "text": {
         "Llama 3 70B (Smart)": "meta/meta-llama-3-70b-instruct",
@@ -23,21 +23,24 @@ MODELS = {
     },
     "code": {
         "Code Llama 70B": "meta/codellama-70b-instruct:a279116fe47a0f6570f496f9553698c1d27958561d56e9c017d74f20817c16c4",
-        "DeepSeek Coder": "deepseek-ai/deepseek-coder-33b-instruct" # Beispiel, falls auf Replicate verfügbar
     },
     "image": {
         "FLUX.1 Schnell (Turbo)": "black-forest-labs/flux-schnell",
         "Stable Diffusion XL": "stability-ai/sdxl:39ed52f2a78e934b3ba6e3a89f3325401994b91f4e24d435348658145025d57d",
-        "Playground v2.5": "playgroundai/playground-v2.5-1024px-aesthetic:a45f82a1382bed5c7aeb861dac7c7d1919428cf3954f9084657a1b38cd6888db"
     },
     "video": {
-        "Google Veo 3.1 Fast": "google/veo-3.1-fast",
-        "Zeroscope (Günstig)": "anotherjesse/zeroscope-v2-xl:9f747673945c62801b13b84701c783929c0ee784e4748ec062204894dda1a351"
+        # --- NEUE MODELLE ---
+        "Wan 2.1 (Günstig & Gut)": "wan-video/wan-2.1-1.3b",
+        "Kling 1.6 (Standard)": "kwaivgi/kling-v1.6-standard",
+        
+        # --- ALTE MODELLE (Auskommentiert) ---
+        # "Google Veo 3.1 Fast": "google/veo-3.1-fast",
+        # "Zeroscope (Alt)": "anotherjesse/zeroscope-v2-xl:9f747673945c62801b13b84701c783929c0ee784e4748ec062204894dda1a351"
     },
-    "vision": { # Bildbeschreibung
+    "vision": { 
         "LLaVa 1.5": "yorickvp/llava-13b:b5f6212d032508382d61ff00469dd1d608d34f944985223c72b83445cd3c4314"
     },
-    "edit": { # Bild verändern
+    "edit": { 
         "InstructPix2Pix": "timothybrooks/instruct-pix2pix:30c1d0b916a6f8efce20493f5d61ee27491b63d3e9e0811e1976db17f804d6ce"
     },
     "faceswap": {
@@ -45,23 +48,19 @@ MODELS = {
     }
 }
 
-# Preise in "Credits"
+# Preise in "Credits" (1000 Credits = 1 Euro ca.)
 PRICES = {
     "text": 10,
     "code": 15,
-    "image": 50,
-    "video": 500,
+    "image": 50,      # ca. 0,05 €
+    "video": 400,     # ca. 0,40 € (Einkauf: ~0,20 $)
     "vision": 20,
     "edit": 40,
     "faceswap": 60
 }
 
-# --- STATE MANAGEMENT ---
-# Hier speichern wir temporär, was der User gerade tut
-# Struktur: { user_id: { "state": "waiting_for_prompt", "model": "...", "mode": "image", "temp_image": data } }
+# --- STATE & DATABASE (Mock) ---
 user_states = {}
-
-# Demo-Datenbank für Credits (Reset bei Neustart!)
 user_credits = {} 
 START_CREDITS = 1000
 
@@ -83,23 +82,21 @@ def main_menu_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         types.InlineKeyboardButton("📝 Text Chat", callback_data="menu_text"),
-        types.InlineKeyboardButton("💻 Code Generieren", callback_data="menu_code"),
-        types.InlineKeyboardButton("🎨 Bild Generieren", callback_data="menu_image"),
-        types.InlineKeyboardButton("🎬 Video Generieren", callback_data="menu_video"),
-        types.InlineKeyboardButton("👁️ Bild Beschreiben", callback_data="menu_vision"),
-        types.InlineKeyboardButton("✏️ Bild Bearbeiten", callback_data="menu_edit"),
+        types.InlineKeyboardButton("💻 Code", callback_data="menu_code"),
+        types.InlineKeyboardButton("🎨 Bild", callback_data="menu_image"),
+        types.InlineKeyboardButton("🎬 Video", callback_data="menu_video"),
+        types.InlineKeyboardButton("👁️ Vision", callback_data="menu_vision"),
+        types.InlineKeyboardButton("✏️ Edit", callback_data="menu_edit"),
         types.InlineKeyboardButton("🎭 Face Swap", callback_data="menu_faceswap"),
-        types.InlineKeyboardButton("💰 Mein Guthaben", callback_data="menu_balance")
+        types.InlineKeyboardButton("💰 Guthaben", callback_data="menu_balance")
     )
     return markup
 
 def model_menu_keyboard(category):
     markup = types.InlineKeyboardMarkup(row_width=1)
     for name, model_id in MODELS[category].items():
-        # Wir übergeben Kategorie UND Modell-ID im Callback
-        # Achtung: Callback Data hat ein 64 Byte Limit bei Telegram! Wir müssen tricksen oder kurze IDs nutzen.
-        # Hier nutzen wir den Key aus dem Dict, um es kurz zu halten.
-        callback_str = f"setmodel|{category}|{name}"
+        # Trick: Wir nutzen den Namen als ID im Callback, um das 64-Byte Limit zu umgehen
+        callback_str = f"set|{category}|{name}"
         markup.add(types.InlineKeyboardButton(f"{name} ({PRICES[category]} 💰)", callback_data=callback_str))
     markup.add(types.InlineKeyboardButton("🔙 Zurück", callback_data="menu_main"))
     return markup
@@ -109,53 +106,56 @@ def model_menu_keyboard(category):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.chat.id
-    user_states[user_id] = {} # Reset State
+    user_states[user_id] = {} 
     bot.send_message(
         user_id, 
-        f"👋 Willkommen im AI-Multi-Tool Bot!\nDu hast {get_credits(user_id)} Credits.\nWähle eine Funktion:", 
+        f"👋 <b>AI Bot Menü</b>\nGuthaben: {get_credits(user_id)} Credits", 
+        parse_mode="HTML",
         reply_markup=main_menu_keyboard()
     )
 
-# --- CALLBACK QUERY HANDLER (Menü Klicks) ---
+# --- CALLBACK QUERY HANDLER ---
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     user_id = call.message.chat.id
     data = call.data
 
     if data == "menu_main":
-        user_states[user_id] = {} # Reset
+        user_states[user_id] = {} 
         bot.edit_message_text("Hauptmenü:", user_id, call.message.message_id, reply_markup=main_menu_keyboard())
 
     elif data == "menu_balance":
-        bot.answer_callback_query(call.id, f"Dein Guthaben: {get_credits(user_id)} Coins")
+        bot.answer_callback_query(call.id, f"Guthaben: {get_credits(user_id)} Credits", show_alert=True)
 
     elif data.startswith("menu_"):
-        # User hat eine Kategorie gewählt (z.B. menu_image)
         category = data.split("_")[1]
         bot.edit_message_text(f"Wähle ein Modell für {category.upper()}:", user_id, call.message.message_id, reply_markup=model_menu_keyboard(category))
 
-    elif data.startswith("setmodel|"):
-        # User hat ein Modell ausgewählt
-        _, category, model_name = data.split("|")
-        model_id = MODELS[category][model_name]
-        
-        # State speichern
-        user_states[user_id] = {
-            "mode": category,
-            "model_id": model_id,
-            "model_name": model_name,
-            "step": "waiting_for_input"
-        }
+    elif data.startswith("set|"):
+        # Format: set|category|ModellName
+        try:
+            _, category, model_name = data.split("|")
+            model_id = MODELS[category][model_name]
+            
+            user_states[user_id] = {
+                "mode": category,
+                "model_id": model_id,
+                "model_name": model_name,
+                "step": "waiting_for_input"
+            }
 
-        # Anweisungen je nach Modus
-        if category in ["text", "code", "image", "video"]:
-            bot.send_message(user_id, f"✅ Modell: {model_name}\n✍️ Bitte gib jetzt deinen Prompt ein:")
-        elif category == "vision":
-            bot.send_message(user_id, f"✅ Modell: {model_name}\n📸 Bitte sende jetzt ein FOTO, das ich beschreiben soll.")
-        elif category == "edit":
-            bot.send_message(user_id, f"✅ Modell: {model_name}\n📸 Bitte sende das FOTO, das du bearbeiten willst.")
-        elif category == "faceswap":
-            bot.send_message(user_id, f"✅ Modell: {model_name}\n1️⃣ Bitte sende zuerst das ZIEL-FOTO (Körper/Hintergrund).")
+            msg_text = f"✅ <b>Modell: {model_name}</b> ausgewählt.\n"
+            if category == "faceswap":
+                msg_text += "1️⃣ Bitte sende jetzt das <b>ZIEL-FOTO</b> (Körper)."
+            elif category in ["vision", "edit"]:
+                msg_text += "📸 Bitte sende jetzt ein <b>FOTO</b>."
+            else:
+                msg_text += "✍️ Bitte gib jetzt deinen <b>Prompt</b> ein:"
+            
+            bot.edit_message_text(msg_text, user_id, call.message.message_id, parse_mode="HTML")
+        except Exception as e:
+            bot.answer_callback_query(call.id, "Fehler bei Auswahl")
+            print(e)
 
 # --- TEXT INPUT HANDLER ---
 @bot.message_handler(content_types=['text'])
@@ -171,15 +171,14 @@ def handle_text(message):
     cost = PRICES[mode]
 
     if not check_balance(user_id, cost):
-        bot.reply_to(message, "❌ Nicht genug Credits! /start")
+        bot.reply_to(message, f"❌ Nicht genug Credits! Du brauchst {cost}, hast aber nur {get_credits(user_id)}.")
         return
 
-    # A. Text & Code Generierung
+    # A. Text & Code
     if mode in ["text", "code"]:
-        processing_msg = bot.reply_to(message, "🤔 Denke nach...")
+        processing_msg = bot.reply_to(message, "🤔 ...")
         try:
-            output = replicate.run(state["model_id"], input={"prompt": message.text, "max_tokens": 512})
-            # Llama gibt oft eine Liste oder einen Generator zurück, wir müssen es zusammenbauen
+            output = replicate.run(state["model_id"], input={"prompt": message.text, "max_tokens": 1024})
             full_response = "".join(output)
             bot.reply_to(message, full_response)
             deduct_credits(user_id, cost)
@@ -188,17 +187,21 @@ def handle_text(message):
         finally:
             bot.delete_message(user_id, processing_msg.message_id)
 
-    # B. Bild & Video Generierung (Prompt Verarbeitung)
+    # B. Bild & Video
     elif mode in ["image", "video"]:
-        processing_msg = bot.reply_to(message, "🎨 Generiere Medien... (kann dauern)")
+        status_text = "🎨 Male Bild..." if mode == "image" else "🎬 Drehe Video (ca. 1-2 Min)..."
+        processing_msg = bot.reply_to(message, status_text)
+        bot.send_chat_action(user_id, 'upload_video' if mode == 'video' else 'upload_photo')
+        
         try:
-            # Replicate Input Parameter variieren je nach Modell leicht
+            # Inputs anpassen
             inputs = {"prompt": message.text}
-            if mode == "image": inputs["aspect_ratio"] = "1:1" # Standard für Flux
+            if mode == "image": 
+                inputs["aspect_ratio"] = "1:1"
+                inputs["output_format"] = "jpg"
             
+            # API Call
             output = replicate.run(state["model_id"], input=inputs)
-            
-            # Ausgabe verarbeiten
             media_url = output[0] if isinstance(output, list) else output
             
             if mode == "image":
@@ -206,27 +209,24 @@ def handle_text(message):
             else:
                 bot.send_video(user_id, media_url, caption=f"🎬 {message.text}")
             
-            deduct_credits(user_id, cost)
+            rest = deduct_credits(user_id, cost)
+            bot.send_message(user_id, f"💰 Guthaben: {rest} Credits")
+            
         except Exception as e:
-            bot.reply_to(message, f"Fehler: {e}")
+            bot.reply_to(message, f"❌ Fehler: {e}")
         finally:
             bot.delete_message(user_id, processing_msg.message_id)
             
-    # C. Edit Mode (Schritt 2: Prompt nach Bild)
+    # C. Edit Mode (Schritt 2)
     elif mode == "edit" and state.get("step") == "waiting_for_edit_prompt":
-        # Wir haben das Bild schon im State, jetzt kommt der Prompt
-        image_url = state["temp_image_url"] # URL vom Telegram Server
+        image_url = state["temp_image_url"]
         prompt = message.text
-        
-        processing_msg = bot.reply_to(message, "✏️ Bearbeite Bild...")
+        processing_msg = bot.reply_to(message, "✏️ Bearbeite...")
         try:
-            output = replicate.run(
-                state["model_id"],
-                input={"image": image_url, "prompt": prompt}
-            )
+            output = replicate.run(state["model_id"], input={"image": image_url, "prompt": prompt})
             bot.send_photo(user_id, output[0], caption=f"✨ {prompt}")
             deduct_credits(user_id, cost)
-            user_states[user_id] = {} # Reset
+            user_states[user_id] = {} 
         except Exception as e:
             bot.reply_to(message, f"Fehler: {e}")
 
@@ -241,58 +241,44 @@ def handle_photo(message):
         return
 
     mode = state["mode"]
-    
-    # Datei-Info von Telegram holen
     file_info = bot.get_file(message.photo[-1].file_id)
     file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_info.file_path}"
     
-    # A. Vision (Bild beschreiben)
     if mode == "vision":
-        bot.reply_to(message, "👁️ Analysiere Bild...")
+        bot.reply_to(message, "👁️ Analysiere...")
         try:
-            output = replicate.run(
-                state["model_id"],
-                input={"image": file_url, "prompt": "Describe this image in detail."}
-            )
+            output = replicate.run(state["model_id"], input={"image": file_url, "prompt": "Describe this image."})
             full_response = "".join(output)
             bot.reply_to(message, full_response)
             deduct_credits(user_id, PRICES["vision"])
         except Exception as e:
             bot.reply_to(message, f"Fehler: {e}")
 
-    # B. Edit (Bild bearbeiten - Schritt 1)
     elif mode == "edit":
-        # Bild URL speichern, jetzt nach Prompt fragen
         state["temp_image_url"] = file_url
         state["step"] = "waiting_for_edit_prompt"
-        bot.reply_to(message, "📸 Bild erhalten! Was soll ich ändern? (z.B. 'Make it look like a painting' oder 'Turn the cat into a dog')")
+        bot.reply_to(message, "📸 Bild da! Was soll ich ändern? (z.B. 'Make it winter')")
 
-    # C. Face Swap (Schritt 1 & 2)
     elif mode == "faceswap":
         if state["step"] == "waiting_for_input":
-            # Das war Bild 1 (Target)
             state["target_image_url"] = file_url
             state["step"] = "waiting_for_source_face"
-            bot.reply_to(message, "1️⃣ Zielbild gespeichert.\n2️⃣ Sende jetzt das Foto mit dem GESICHT, das wir einfügen sollen.")
+            bot.reply_to(message, "1️⃣ Ziel gespeichert.\n2️⃣ Sende jetzt das <b>GESICHT</b>.", parse_mode="HTML")
         
         elif state["step"] == "waiting_for_source_face":
-            # Das war Bild 2 (Source)
-            source_url = file_url
-            target_url = state["target_image_url"]
-            
-            bot.reply_to(message, "🎭 Tausche Gesichter (InsightFace)...")
+            bot.reply_to(message, "🎭 Tausche Gesichter...")
             try:
                 output = replicate.run(
                     state["model_id"],
-                    input={"swap_image": source_url, "target_image": target_url}
+                    input={"swap_image": file_url, "target_image": state["target_image_url"]}
                 )
-                bot.send_photo(user_id, output, caption="🎭 Face Swap Result")
+                bot.send_photo(user_id, output, caption="🎭 Resultat")
                 deduct_credits(user_id, PRICES["faceswap"])
-                user_states[user_id] = {} # Reset
+                user_states[user_id] = {} 
             except Exception as e:
                 bot.reply_to(message, f"Fehler: {e}")
 
-# --- SERVER KEEP-ALIVE ---
+# --- SERVER ---
 @app.route('/')
 def home():
     return "🤖 ULTRA BOT ONLINE"
