@@ -1,0 +1,6 @@
+venv
+/*.env
+/src/__pycache__/*.pyc
+*.pyc
+/doc/~$Models_Options_Costs.xlsx
+/doc/Models_Options_Costs.xlsx

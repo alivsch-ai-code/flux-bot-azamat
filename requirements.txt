@@ -1,5 +1,11 @@
+# Telegram Bot Bibliothek
 pyTelegramBotAPI
-replicate
+
+# Webserver für Healthchecks (damit Render nicht einschläft)
 flask
-gunicorn
-requests
+
+# Schnittstelle zu den KI-Modellen
+replicate
+
+# Zum Laden von Umgebungsvariablen (.env)
+python-dotenv
