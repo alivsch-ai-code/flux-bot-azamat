@@ -85,6 +85,8 @@ MODEL_ADAPTERS = {
     "black-forest-labs/flux-1.1-pro": prepare_flux_base_input,
     "nightmareai/real-esrgan": prepare_upscale_esrgan_input,
     "google/gemini-2.5-flash-image": prepare_gemini_input,
+    "google/nano-banana": prepare_gemini_input,
+    "google/nano-banana-pro": prepare_gemini_input,
     "minimax/video-01": prepare_minimax_input,
 }
 

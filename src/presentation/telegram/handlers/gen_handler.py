@@ -9,9 +9,6 @@ from src.presentation.telegram import keyboards
 from src.utils.gimmicks import get_random_tip
 
 # --- KONFIGURATION DER MODELLE ---
-# Diese Listen steuern, wie sich der Bot bei bestimmten Modellen verhält.
-
-# Modelle, die zwingend ein Bild benötigen (Bot fragt nach Upload)
 MODELS_NEEDING_IMAGE = [
     "instant-id", "flux-kontext", "face-swap", 
     "ultimate-headshot-pipeline", "premium-headshot-pipeline", 
@@ -19,36 +16,30 @@ MODELS_NEEDING_IMAGE = [
     "gemini-2.5", "qwen-image"
 ]
 
-# Modelle, die KEINEN Prompt brauchen (starten sofort nach Bild-Upload)
 MODELS_NO_PROMPT = [
     "upscale-esrgan", "upscale-face", "google-upscaler"
 ]
 
-# Modelle, deren Ergebnis als Dokument gesendet wird (um Kompression zu vermeiden)
 MODELS_FORCE_DOCUMENT = [
     "upscale-esrgan", "upscale-face", "google-upscaler"
 ]
 
-# Modelle, bei denen ein Bild optional ist (Video-Generatoren etc.)
-MODELS_OPTIONAL_IMAGE = ["minimax-video", "wan-2.5"]
+MODELS_OPTIONAL_IMAGE = ["minimax-video", "wan-2.5","nano-banana","nano-banana-pro"]
 
-# Speicher für laufende Prompt-Optimierungen
 pending_prompts = {}
 
 # --- HILFSFUNKTIONEN ---
 
 def get_user_lang(message):
-    """Ermittelt die Sprache des Nutzers (de/en/ru/kk)."""
     try:
         user_lang = message.from_user.language_code
         if user_lang:
             lang_code = user_lang[:2].lower()
             if lang_code in ["de", "ru", "kk"]: return lang_code
     except: pass
-    return "en" # Standard
+    return "en" 
 
 def is_video_file(path_or_url: str) -> bool:
-    """Prüft anhand der Endung, ob es ein Video ist."""
     if not path_or_url: return False
     valid_exts = ('.mp4', '.mov', '.avi', '.webm', '.mkv')
     return path_or_url.lower().strip().endswith(valid_exts)
@@ -60,7 +51,7 @@ def cleanup_previous_interaction(bot, user_id, current_msg_id=None):
     """
     ctx = get_context(user_id)
     
-    # 1. User-Input weg (Muss sein für Sauberkeit)
+    # 1. User-Input weg
     if current_msg_id:
         try: bot.delete_message(user_id, current_msg_id)
         except: pass 
@@ -73,7 +64,6 @@ def cleanup_previous_interaction(bot, user_id, current_msg_id=None):
             try: bot.delete_message(user_id, msg_id)
             except: pass
         del ctx["cleanup_ids"]
-        # Context speichern
         set_context(user_id, ctx)
 
 def smart_update_status(bot, user_id, text, ctx, markup=None):
@@ -94,7 +84,6 @@ def smart_update_status(bot, user_id, text, ctx, markup=None):
             )
             return msg_id 
         except Exception:
-            # Nachricht konnte nicht editiert werden (z.B. weil es vorher ein Bild war)
             pass
             
     # Neu senden (Fallback)
@@ -111,15 +100,12 @@ def smart_update_status(bot, user_id, text, ctx, markup=None):
 
 def register(bot: TeleBot, generation_service, model_registry: dict, db):
 
-    # --- DYNAMISCHES MAPPING ERSTELLEN ---
+    # --- BUTTON MAPPING ---
     BUTTON_TO_KEY_MAP = {}
-    
-    # 1. Standard-Modelle aus der Registry
     for key, model in model_registry.items():
         btn_text = f"{model.name} ({model.cost} ⭐️)"
         BUTTON_TO_KEY_MAP[btn_text] = key
         
-    # 2. SPEZIALFALL: "Pro Bewerbungsfoto" Button
     special_key = None
     if "premium-headshot-pipeline" in model_registry: special_key = "premium-headshot-pipeline"
     elif "ultimate-headshot-pipeline" in model_registry: special_key = "ultimate-headshot-pipeline"
@@ -146,22 +132,21 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
         user_credits = db.get_user_credits(user_id)
         if user_credits < model.cost:
             msg_text = get_text("err_no_credits", lang).format(cost=model.cost, balance=user_credits)
-            new_id = smart_update_status(bot, user_id, msg_text, ctx)
+            smart_update_status(bot, user_id, msg_text, ctx)
             
-            # Aufräumen
             if image_path and os.path.exists(image_path):
                 try: os.remove(image_path)
                 except: pass
             
             clear_context(user_id)
             time.sleep(3)
-            # Menü zeigen
             menu_msg = bot.send_message(user_id, get_text("msg_main_menu", lang), reply_markup=keyboards.get_persistent_main_menu(model_registry, lang))
             set_context(user_id, {"last_bot_msg_id": menu_msg.message_id})
             return
 
-        # 2. Status senden (via Edit)
-        tip = get_random_tip(lang)
+        # 2. Status senden (Generiere...) + Tipp
+        # HIER: Wir holen den Tipp in der richtigen Sprache!
+        tip = get_random_tip(lang) 
         status_text = get_text("status_generating", lang).format(model_name=model.name, tip=tip)
         
         current_msg_id = smart_update_status(bot, user_id, status_text, ctx)
@@ -169,6 +154,14 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
             ctx["last_bot_msg_id"] = current_msg_id
             set_context(user_id, ctx)
         
+        # --- NEU: Chat Action (zeigt "lädt Foto hoch..." oben an) ---
+        try:
+            action = 'upload_video' if model.type == 'video' else 'upload_photo'
+            bot.send_chat_action(user_id, action)
+        except Exception:
+            pass
+        # ------------------------------------------------------------
+
         time.sleep(1.0) 
 
         try:
@@ -181,7 +174,7 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
             )
             
             if success:
-                # Alte Statusnachricht löschen, da jetzt das Ergebnis (Bild/Album) kommt
+                # Alte Statusnachricht löschen, da jetzt das Ergebnis kommt
                 if current_msg_id:
                     try: bot.delete_message(user_id, current_msg_id)
                     except: pass
@@ -189,8 +182,8 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
                 new_balance = db.get_user_credits(user_id)
                 display_prompt = prompt if prompt not in ["Upscaling..."] else "High Resolution Upscale"
                 
-                # --- FALL A: ALBUM ---
-                if isinstance(result, list):
+                # --- ERGEBNIS SENDEN ---
+                if isinstance(result, list): # Album
                     media_group = []
                     caption_base = get_text("success_album_caption", lang).format(
                         prompt=display_prompt, cost=model.cost, balance=new_balance
@@ -199,14 +192,12 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
                     for i, url in enumerate(result):
                         cap = caption_base if i == 0 else ""
                         media_group.append(types.InputMediaPhoto(url, caption=cap, parse_mode="HTML"))
-                    
                     try:
                         bot.send_media_group(user_id, media_group)
                     except Exception:
                         for url in result: bot.send_photo(user_id, url)
 
-                # --- FALL B: EINZELDATEI ---
-                else:
+                else: # Einzeldatei
                     caption_text = get_text("success_caption", lang).format(
                         prompt=display_prompt[:60], cost=model.cost, balance=new_balance
                     )
@@ -223,7 +214,7 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
                             except ApiTelegramException:
                                 bot.send_document(user_id, result, caption=caption_text, parse_mode="HTML")
                 
-                # 4. Hauptmenü wieder anzeigen
+                # Menü wieder anzeigen
                 time.sleep(0.5)
                 menu_msg = bot.send_message(
                     user_id, 
@@ -260,12 +251,10 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
         prompt = message.text
         lang = get_user_lang(message)
         
-        # Pipelines überspringen Optimierung
         if ctx["model_key"] in ["premium-headshot-pipeline", "ultimate-headshot-pipeline"]:
              run_generation(user_id, ctx["model_key"], prompt, ctx.get("image_path"), lang)
              return
 
-        # Status update (Edit)
         loading_text = get_text("optimizing_msg", lang)
         msg_id = smart_update_status(bot, user_id, loading_text, ctx)
         
@@ -308,7 +297,7 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
             run_generation(user_id, ctx["model_key"], prompt, ctx.get("image_path"), lang)
 
 
-    # --- HANDLER: MODELL AUSWAHL (SINGLE MESSAGE LOGIK) ---
+    # --- HANDLER: MODELL AUSWAHL (SINGLE MESSAGE) ---
     @bot.message_handler(func=lambda msg: msg.text in KNOWN_BUTTONS)
     def handle_model_selection(message):
         user_id = message.chat.id
@@ -326,27 +315,26 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
         internal_key = BUTTON_TO_KEY_MAP.get(btn_text)
         model = model_registry.get(internal_key)
         
-        # Vorab-Check für Disclaimer
         has_examples = (hasattr(model, "example_input_image") and model.example_input_image) or \
                        (hasattr(model, "example_output_image") and model.example_output_image)
 
-        # --- SCHRITT 1: TEXT ZUSAMMENBAUEN ---
+        # --- TEXT ZUSAMMENBAUEN ---
         full_text = ""
 
-        # A) Beschreibung & Prompt
+        # A) Beschreibung
         if hasattr(model, "description") and model.description:
             full_text += get_text("info_model_desc", lang).format(desc=model.description)
             if hasattr(model, "example_prompt") and model.example_prompt:
                 full_text += "\n\n" + get_text("info_example_prompt", lang).format(prompt=model.example_prompt)
 
-        # B) Disclaimer (JETZT HIER OBEN!)
+        # B) Disclaimer (Oben)
         if has_examples:
             full_text += f"\n\n{get_text('info_examples_disclaimer', lang)}"
 
         # C) Trennlinie
         full_text += "\n\n" + ("➖" * 12) + "\n\n"
 
-        # D) Preis & Anleitung (CTA)
+        # D) Preis & Anleitung
         needs_image = internal_key in MODELS_NEEDING_IMAGE
         optional_image = internal_key in MODELS_OPTIONAL_IMAGE
         
@@ -362,17 +350,16 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
 
         full_text += cta_text
 
-        # --- SCHRITT 2: MEDIEN PRÜFEN ---
+        # --- MEDIEN ---
         media_file = None
         if hasattr(model, "example_output_image") and model.example_output_image:
             media_file = model.example_output_image
         elif hasattr(model, "example_input_image") and model.example_input_image:
             media_file = model.example_input_image
 
-        # --- SCHRITT 3: SENDEN / EDITIEREN ---
         new_msg_id = None
 
-        # FALL A: Bild vorhanden -> Altes löschen, Bild senden
+        # FALL A: Bild vorhanden
         if media_file:
             if ctx and "last_bot_msg_id" in ctx:
                 try: bot.delete_message(user_id, ctx["last_bot_msg_id"])
@@ -391,12 +378,11 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
                     )
                 new_msg_id = msg.message_id
             except Exception as e:
-                # Fallback: Nur Text
                 print(f"Image Send Error: {e}")
                 msg = bot.send_message(user_id, full_text, parse_mode="HTML", reply_markup=keyboards.get_back_menu(lang))
                 new_msg_id = msg.message_id
 
-        # FALL B: Nur Text -> Editieren (verhindert Flackern)
+        # FALL B: Nur Text (Editieren)
         else:
             if ctx and "last_bot_msg_id" in ctx:
                 try:
@@ -417,14 +403,13 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
                 msg = bot.send_message(user_id, full_text, parse_mode="HTML", reply_markup=keyboards.get_back_menu(lang))
                 new_msg_id = msg.message_id
 
-        # --- SCHRITT 4: CONTEXT SPEICHERN ---
         set_context(user_id, {
             "model_key": internal_key,
             "step": "waiting_for_image" if (needs_image or optional_image) else "waiting_for_prompt",
             "image_path": None,
             "can_skip_image": optional_image,
             "last_bot_msg_id": new_msg_id, 
-            "cleanup_ids": [] # Leer, da alles in einer Nachricht
+            "cleanup_ids": []
         })
 
 
@@ -437,7 +422,7 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
         
         if not ctx or "waiting" not in str(ctx.get("step")): return
 
-        # Smart Update: Text ändern, Buttons entfernen
+        # Status Update
         loading_text = get_text("status_downloading_img", lang)
         msg_id = smart_update_status(bot, user_id, loading_text, ctx, markup=None)
         
@@ -451,16 +436,13 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
             ctx["image_path"] = abs_path
             if msg_id: ctx["last_bot_msg_id"] = msg_id 
 
-            # Direkt weiter (Upscaling)
             if ctx.get("model_key") in MODELS_NO_PROMPT:
                 run_generation(user_id, ctx["model_key"], "Upscaling...", abs_path, lang)
                 return
 
-            # Weiter zu Prompt
             ctx["step"] = "waiting_for_prompt"
             prompt_text = get_text("prompt_req_standard", lang)
             
-            # Status auf "Bitte Prompt eingeben" updaten
             smart_update_status(bot, user_id, prompt_text, ctx, markup=keyboards.get_back_menu(lang))
             set_context(user_id, ctx)
             
@@ -488,7 +470,6 @@ def register(bot: TeleBot, generation_service, model_registry: dict, db):
             bot.send_message(user_id, get_text("err_img_missing", get_user_lang(message)))
             return
 
-        # Aufforderungstext lassen wir stehen, wird gleich überschrieben durch "Optimizing..."
         process_prompt_logic(message, ctx)
 
     # --- HANDLER: CALLBACKS ---
