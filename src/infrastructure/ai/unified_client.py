@@ -1,6 +1,6 @@
 from src.domain.interfaces import AIProvider
 from src.domain.entities import AIModel, GenerationResult
-from src.infrastructure.ai.replicate_client import ReplicateClient
+from src.infrastructure.ai.replicate.clients import ReplicateClient
 from src.infrastructure.ai.sonauto_client import SonautoClient
 
 class UnifiedAIClient(AIProvider):

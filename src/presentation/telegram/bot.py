@@ -1,23 +1,22 @@
 from telebot import TeleBot
 # Importiere die Registrierungs-Funktionen der Handler
-from src.presentation.telegram.handlers import menu_handler, gen_handler
+from src.presentation.telegram.handlers import menu_handler, gen_handler, payment_handler
 
-def setup_bot(bot: TeleBot, generation_service, model_registry: dict):
+def setup_bot(bot: TeleBot, generation_service, model_registry: dict, db):
     """
     Diese Funktion wird von main.py aufgerufen.
     Sie registriert alle Logik am Bot-Objekt.
-    
-    :param bot: Die TeleBot Instanz
-    :param generation_service: Die Business-Logik (Application Layer)
-    :param model_registry: Dict aller verfügbaren AIModels (Config)
     """
     
-    # 1. Menü Handler registrieren
-    menu_handler.register(bot, generation_service, model_registry)
+    # 1. Menü Handler (Muss zuerst kommen für Navigation)
+    menu_handler.register(bot, generation_service, model_registry, db)
     
-    # 2. Generierungs Handler registrieren
-    gen_handler.register(bot, generation_service, model_registry)
+    # 2. Payment Handler (MUSS VOR gen_handler KOMMEN!)
+    # Damit der Klick auf "Shop" nicht als Prompt missverstanden wird.
+    payment_handler.register(bot, db)
     
-    print("✅ Telegram Handler erfolgreich registriert.")
+    # 3. Generierungs Handler (Enthält den "Catch-All" für Prompts)
+    # Dieser muss als Letztes kommen, damit er nur Texte nimmt, die keine Befehle sind.
+    gen_handler.register(bot, generation_service, model_registry, db)
     
-    # Hier könnten noch Error-Handler oder Middlewares registriert werden
+    print("✅ Telegram Handler erfolgreich registriert (Reihenfolge: Menu -> Payment -> Gen).")

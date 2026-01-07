@@ -1,22 +1,30 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional, Any
 
 @dataclass
 class User:
-    id: int
-    credits: int
+    id: int 
+    username: str
+    credits: int = 50
 
 @dataclass
 class AIModel:
     key: str
-    replicate_id: str  # Kann leer sein bei Sonauto
+    replicate_id: str
     name: str
     cost: int
-    type: str
-    provider: str = "replicate"  # <--- NEU! Standard ist Replicate
+    type: List[str] 
+    
+    # NEU: Provider Feld (Wichtig für Unterscheidung Replicate vs. Andere)
+    provider: str = "replicate" 
+    
+    description: str = ""
+    example_prompt: Optional[str] = None
+    example_input_image: Optional[str] = None
+    example_output_image: Optional[str] = None
 
 @dataclass
 class GenerationResult:
     success: bool
-    data: Optional[str] = None
+    data: Any = None 
     error: Optional[str] = None

@@ -9,3 +9,5 @@ replicate
 
 # Zum Laden von Umgebungsvariablen (.env)
 python-dotenv
+
+Pillow

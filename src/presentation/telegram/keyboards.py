@@ -1,62 +1,72 @@
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton
+from telebot import types
 from src.utils.strings import get_text
 
-# --- 1. HAUPTMENÜ ---
-def get_persistent_main_menu(lang="en"):    
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add(
-        KeyboardButton(get_text("menu_image_studio", lang)), 
-        KeyboardButton(get_text("menu_video_studio", lang)),
-        KeyboardButton(get_text("menu_audio_studio", lang)), 
-        KeyboardButton(get_text("menu_wallet", lang))
-    )
+def get_persistent_main_menu(model_registry: dict, lang: str = "de"):
+    """
+    Erstellt das Hauptmenü dynamisch basierend auf den geladenen Modellen und der Sprache.
+    """
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+
+    # 1. SPECIAL BUTTON: Pro Bewerbungsfoto
+    # Wir holen den Basistext (z.B. "Pro Bewerbungsfoto" oder "Pro Headshot")
+    base_text = get_text("btn_pro_headshot", lang) 
+    special_btn_text = f"{base_text} (?? ⭐️)" # Fallback
+    
+    # Priorität 1: Premium Pipeline
+    if "premium-headshot-pipeline" in model_registry:
+        cost = model_registry["premium-headshot-pipeline"].cost
+        special_btn_text = f"{base_text} ({cost} ⭐️)"
+    # Priorität 2: Ultimate Pipeline
+    elif "ultimate-headshot-pipeline" in model_registry:
+        cost = model_registry["ultimate-headshot-pipeline"].cost
+        special_btn_text = f"{base_text} ({cost} ⭐️)"
+    # Priorität 3: Altes Instant-ID
+    elif "instant-id" in model_registry:
+        cost = model_registry["instant-id"].cost
+        special_btn_text = f"{base_text} ({cost} ⭐️)"
+
+    btn_special = types.KeyboardButton(special_btn_text)
+    
+    # 2. SUBMENÜS (Navigations-Buttons mit Übersetzung)
+    btn_img = types.KeyboardButton(get_text("menu_image_studio", lang))
+    btn_vid = types.KeyboardButton(get_text("menu_video_studio", lang))
+    btn_tools = types.KeyboardButton(get_text("menu_tools_edit", lang))
+    
+    markup.add(btn_special)             
+    markup.add(btn_img, btn_vid)        
+    markup.add(btn_tools)               
+
     return markup
 
-# --- 2. IMAGE STUDIO ---
-def get_image_studio_menu(lang="en"):
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add(
-        KeyboardButton(get_text("menu_text2image", lang)),   
-        KeyboardButton(get_text("menu_editimage", lang))       
-    )
-    markup.add(KeyboardButton(get_text("btn_back", lang)))
+def _create_dynamic_menu(model_registry: dict, filter_types: list, lang: str, row_width=2):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=row_width)
+    buttons = []
+    
+    for key, model in model_registry.items():
+        if any(t in model.type for t in filter_types):
+            # Pipeline Modelle oft ausblenden in Submenüs
+            if "pipeline" in model.type and len(filter_types) == 1 and "image" in filter_types:
+                 continue 
+            
+            # Button Text formatieren
+            btn_text = f"{model.name} ({model.cost} ⭐️)"
+            buttons.append(types.KeyboardButton(btn_text))
+            
+    markup.add(*buttons)
+    markup.add(types.KeyboardButton(get_text("btn_back", lang)))
     return markup
 
-# --- 3. MODELL-AUSWAHL: TEXT TO IMAGE ---
-# Modell-Namen bleiben international gleich (Markennamen)
-def get_text2img_models_menu(lang="en"):
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add(KeyboardButton("💎 Flux 2 Pro"), KeyboardButton("💎 Imagen 4 Ultra"))
-    markup.add(KeyboardButton("🚀 Flux 1.1 Pro"), KeyboardButton("✨ Imagen 4"))
-    markup.add(KeyboardButton("⚡ Flux Schnell"), KeyboardButton("⚡ Imagen 4 Fast"))
-    markup.add(KeyboardButton("🍌 Nano Banana Pro"), KeyboardButton("🎨 Ideogram v3"))
-    markup.add(KeyboardButton(get_text("btn_back", lang)))
-    return markup
+def get_image_studio_menu(model_registry: dict, lang: str = "de"):
+    return _create_dynamic_menu(model_registry, filter_types=["image"], lang=lang, row_width=2)
 
-# --- 4. MODELL-AUSWAHL: EDIT IMAGE ---
-def get_editimg_models_menu(lang="en"):
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add(
-        KeyboardButton("🤖 Gemini 2.5 Flash"),
-        KeyboardButton("🛠️ Qwen Image Edit")
-    )
-    markup.add(KeyboardButton(get_text("btn_back", lang)))
-    return markup
+def get_video_studio_menu(model_registry: dict, lang: str = "de"):
+    return _create_dynamic_menu(model_registry, filter_types=["video"], lang=lang, row_width=1)
 
-# --- 5. VIDEO STUDIO ---
-def get_video_studio_menu(lang="en"):
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add(
-        KeyboardButton("🎥 Sora 2"),
-        KeyboardButton("🎞️ Wan 2.5"),
-        KeyboardButton("📹 Veo 3.1")
-    )
-    markup.add(KeyboardButton(get_text("btn_back", lang)))
-    return markup
+def get_edit_menu(model_registry: dict, lang: str = "de"):
+    return _create_dynamic_menu(model_registry, filter_types=["edit", "upscale", "analysis"], lang=lang, row_width=2)
 
-# --- 6. AUDIO STUDIO ---
-def get_audio_studio_menu(lang="en"):
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
-    markup.add(KeyboardButton("🎵 Sonauto AI"))
-    markup.add(KeyboardButton(get_text("btn_back", lang)))
+# --- NEU: Einfaches Menü nur mit "Zurück" ---
+def get_back_menu(lang: str = "de"):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+    markup.add(types.KeyboardButton(get_text("btn_back", lang)))
     return markup

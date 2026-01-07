@@ -1,100 +1,529 @@
-from telebot import TeleBot
+import time
+import os
+from telebot import TeleBot, types
+from telebot.apihelper import ApiTelegramException
 from src.utils.strings import get_text
+from src.presentation.telegram.handlers.common import set_context, get_context, clear_context
+from src.infrastructure.ai.replicate.prompt_engineer import optimize_prompt_via_llm
 from src.presentation.telegram import keyboards
+from src.utils.gimmicks import get_random_tip
 
-# Helper, um Sprache zu holen (Code Duplikation vermeiden wir hier simpel durch erneute Definition oder Import)
+# --- KONFIGURATION DER MODELLE ---
+# Diese Listen steuern, wie sich der Bot bei bestimmten Modellen verhält.
+
+# Modelle, die zwingend ein Bild benötigen (Bot fragt nach Upload)
+MODELS_NEEDING_IMAGE = [
+    "instant-id", "flux-kontext", "face-swap", 
+    "ultimate-headshot-pipeline", "premium-headshot-pipeline", 
+    "upscale-esrgan", "upscale-face", "google-upscaler", 
+    "gemini-2.5", "qwen-image"
+]
+
+# Modelle, die KEINEN Prompt brauchen (starten sofort nach Bild-Upload)
+MODELS_NO_PROMPT = [
+    "upscale-esrgan", "upscale-face", "google-upscaler"
+]
+
+# Modelle, deren Ergebnis als Dokument gesendet wird (um Kompression zu vermeiden)
+MODELS_FORCE_DOCUMENT = [
+    "upscale-esrgan", "upscale-face", "google-upscaler"
+]
+
+# Modelle, bei denen ein Bild optional ist (Video-Generatoren etc.)
+MODELS_OPTIONAL_IMAGE = ["minimax-video", "wan-2.5"]
+
+# Speicher für laufende Prompt-Optimierungen
+pending_prompts = {}
+
+# --- HILFSFUNKTIONEN ---
+
 def get_user_lang(message):
-    user_lang = message.from_user.language_code
-    if user_lang and user_lang[:2].lower() == "de":
-        return "de"
-    return "en"
+    """Ermittelt die Sprache des Nutzers (de/en/ru/kk)."""
+    try:
+        user_lang = message.from_user.language_code
+        if user_lang:
+            lang_code = user_lang[:2].lower()
+            if lang_code in ["de", "ru", "kk"]: return lang_code
+    except: pass
+    return "en" # Standard
 
-def register(bot: TeleBot, generation_service, model_registry: dict):
+def is_video_file(path_or_url: str) -> bool:
+    """Prüft anhand der Endung, ob es ein Video ist."""
+    if not path_or_url: return False
+    valid_exts = ('.mp4', '.mov', '.avi', '.webm', '.mkv')
+    return path_or_url.lower().strip().endswith(valid_exts)
 
-    # Mapping: Button Text -> Config Key
-    MODEL_MAPPING = {
-        "💎 Flux 2 Pro": "flux-2-pro",
-        "🚀 Flux 1.1 Pro": "flux-1.1-pro",
-        "⚡ Flux Schnell": "flux-schnell",
-        "💎 Imagen 4 Ultra": "imagen-4-ultra",
-        "✨ Imagen 4": "imagen-4",
-        "⚡ Imagen 4 Fast": "imagen-4-fast",
-        "🎨 Ideogram v3": "ideogram-v3",
-        "🍌 Nano Banana Pro": "nano-banana-pro",
-        "🤖 Gemini 2.5 Flash": "gemini-2.5",
-        "🛠️ Qwen Image Edit": "qwen-image",
-        "🎥 Sora 2": "sora-2",
-        "🎞️ Wan 2.5": "wan-2.5",
-        "📹 Veo 3.1": "veo-3.1",
-        "🎵 Sonauto AI": "sonauto"
-    }
+def cleanup_previous_interaction(bot, user_id, current_msg_id=None):
+    """
+    Räumt auf: Löscht User-Input und alte 'Listen' (Bilder), 
+    behält aber die Haupt-Status-Nachricht ggf. für Edits bei.
+    """
+    ctx = get_context(user_id)
     
-    KNOWN_BUTTONS = list(MODEL_MAPPING.keys())
+    # 1. User-Input weg (Muss sein für Sauberkeit)
+    if current_msg_id:
+        try: bot.delete_message(user_id, current_msg_id)
+        except: pass 
 
-    # --- SCHRITT A: Modell Auswahl ---
-    @bot.message_handler(func=lambda msg: msg.text in KNOWN_BUTTONS)
-    def handle_model_selection(message):
-        lang = get_user_lang(message)
-        model_name = message.text
-        user_id = message.chat.id
+    if not ctx: return
+
+    # 2. Zusatz-Nachrichten (falls noch welche da sind)
+    if "cleanup_ids" in ctx:
+        for msg_id in ctx["cleanup_ids"]:
+            try: bot.delete_message(user_id, msg_id)
+            except: pass
+        del ctx["cleanup_ids"]
+        # Context speichern
+        set_context(user_id, ctx)
+
+def smart_update_status(bot, user_id, text, ctx, markup=None):
+    """
+    Versucht die letzte Bot-Nachricht zu BEARBEITEN statt neu zu senden.
+    Gibt die message_id zurück.
+    """
+    msg_id = ctx.get("last_bot_msg_id")
+    
+    if msg_id:
+        try:
+            bot.edit_message_text(
+                chat_id=user_id,
+                message_id=msg_id,
+                text=text,
+                reply_markup=markup,
+                parse_mode="HTML"
+            )
+            return msg_id 
+        except Exception:
+            # Nachricht konnte nicht editiert werden (z.B. weil es vorher ein Bild war)
+            pass
+            
+    # Neu senden (Fallback)
+    try:
+        if msg_id: 
+            try: bot.delete_message(user_id, msg_id)
+            except: pass
+            
+        msg = bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+        return msg.message_id
+    except Exception as e:
+        print(f"Status Error: {e}")
+        return None
+
+def register(bot: TeleBot, generation_service, model_registry: dict, db):
+
+    # --- DYNAMISCHES MAPPING ERSTELLEN ---
+    BUTTON_TO_KEY_MAP = {}
+    
+    # 1. Standard-Modelle aus der Registry
+    for key, model in model_registry.items():
+        btn_text = f"{model.name} ({model.cost} ⭐️)"
+        BUTTON_TO_KEY_MAP[btn_text] = key
         
-        internal_key = MODEL_MAPPING.get(model_name)
-        model = model_registry.get(internal_key)
-        
+    # 2. SPEZIALFALL: "Pro Bewerbungsfoto" Button
+    special_key = None
+    if "premium-headshot-pipeline" in model_registry: special_key = "premium-headshot-pipeline"
+    elif "ultimate-headshot-pipeline" in model_registry: special_key = "ultimate-headshot-pipeline"
+    elif "instant-id" in model_registry: special_key = "instant-id"
+
+    if special_key:
+        model = model_registry[special_key]
+        for lang_code in ["de", "en", "ru", "kk"]:
+            base_text = get_text("btn_pro_headshot", lang_code)
+            btn_text = f"{base_text} ({model.cost} ⭐️)"
+            BUTTON_TO_KEY_MAP[btn_text] = special_key
+
+    KNOWN_BUTTONS = list(BUTTON_TO_KEY_MAP.keys())
+
+    # --- GENERIERUNGSLOGIK ---
+    def run_generation(user_id, model_key, prompt, image_path, lang="de"):
+        ctx = get_context(user_id)
+        model = model_registry.get(model_key)
         if not model:
-            bot.send_message(user_id, "❌ Error: Model config missing.")
+            bot.send_message(user_id, get_text("err_model_not_found", lang).format(model_key=model_key))
             return
 
-        price_euro = model.cost / 100
-        
-        # Text aus strings.py formatieren
-        info_text = get_text("msg_selected", lang).format(
-            model=model_name, 
-            price=f"{price_euro:.2f}"
-        )
-        
-        msg = bot.send_message(
-            user_id, 
-            info_text,
-            parse_mode="HTML"
-        )
+        # 1. Guthaben prüfen
+        user_credits = db.get_user_credits(user_id)
+        if user_credits < model.cost:
+            msg_text = get_text("err_no_credits", lang).format(cost=model.cost, balance=user_credits)
+            new_id = smart_update_status(bot, user_id, msg_text, ctx)
+            
+            # Aufräumen
+            if image_path and os.path.exists(image_path):
+                try: os.remove(image_path)
+                except: pass
+            
+            clear_context(user_id)
+            time.sleep(3)
+            # Menü zeigen
+            menu_msg = bot.send_message(user_id, get_text("msg_main_menu", lang), reply_markup=keyboards.get_persistent_main_menu(model_registry, lang))
+            set_context(user_id, {"last_bot_msg_id": menu_msg.message_id})
+            return
 
-        bot.register_next_step_handler(
-            msg, handle_prompt_input, bot, generation_service, model_registry, internal_key
-        )
+        # 2. Status senden (via Edit)
+        tip = get_random_tip(lang)
+        status_text = get_text("status_generating", lang).format(model_name=model.name, tip=tip)
+        
+        current_msg_id = smart_update_status(bot, user_id, status_text, ctx)
+        if current_msg_id:
+            ctx["last_bot_msg_id"] = current_msg_id
+            set_context(user_id, ctx)
+        
+        time.sleep(1.0) 
 
-    # --- SCHRITT B: Generierung ---
-    def handle_prompt_input(message, bot, service, registry, model_key):
-        lang = get_user_lang(message)
+        try:
+            # 3. Service Aufruf
+            success, result = generation_service.process_request(
+                user_id=user_id, 
+                model=model, 
+                prompt=prompt, 
+                image_url=image_path
+            )
+            
+            if success:
+                # Alte Statusnachricht löschen, da jetzt das Ergebnis (Bild/Album) kommt
+                if current_msg_id:
+                    try: bot.delete_message(user_id, current_msg_id)
+                    except: pass
+
+                new_balance = db.get_user_credits(user_id)
+                display_prompt = prompt if prompt not in ["Upscaling..."] else "High Resolution Upscale"
+                
+                # --- FALL A: ALBUM ---
+                if isinstance(result, list):
+                    media_group = []
+                    caption_base = get_text("success_album_caption", lang).format(
+                        prompt=display_prompt, cost=model.cost, balance=new_balance
+                    )
+                    
+                    for i, url in enumerate(result):
+                        cap = caption_base if i == 0 else ""
+                        media_group.append(types.InputMediaPhoto(url, caption=cap, parse_mode="HTML"))
+                    
+                    try:
+                        bot.send_media_group(user_id, media_group)
+                    except Exception:
+                        for url in result: bot.send_photo(user_id, url)
+
+                # --- FALL B: EINZELDATEI ---
+                else:
+                    caption_text = get_text("success_caption", lang).format(
+                        prompt=display_prompt[:60], cost=model.cost, balance=new_balance
+                    )
+                    
+                    if model.type == "video":
+                         bot.send_video(user_id, result, caption=caption_text, parse_mode="HTML")
+                    else:
+                        if model_key in MODELS_FORCE_DOCUMENT:
+                            doc_caption = caption_text + get_text("success_uncompressed", lang)
+                            bot.send_document(user_id, result, caption=doc_caption, parse_mode="HTML")
+                        else:
+                            try:
+                                bot.send_photo(user_id, result, caption=caption_text, parse_mode="HTML")
+                            except ApiTelegramException:
+                                bot.send_document(user_id, result, caption=caption_text, parse_mode="HTML")
+                
+                # 4. Hauptmenü wieder anzeigen
+                time.sleep(0.5)
+                menu_msg = bot.send_message(
+                    user_id, 
+                    get_text("msg_next_step", lang), 
+                    reply_markup=keyboards.get_persistent_main_menu(model_registry, lang),
+                    parse_mode="HTML"
+                )
+                set_context(user_id, {"last_bot_msg_id": menu_msg.message_id})
+
+            else:
+                # Fehlerfall
+                err_text = get_text("err_gen_failed", lang).format(result=result)
+                smart_update_status(bot, user_id, err_text, ctx)
+                
+                time.sleep(2)
+                menu_msg = bot.send_message(user_id, "Menü:", reply_markup=keyboards.get_persistent_main_menu(model_registry, lang))
+                set_context(user_id, {"last_bot_msg_id": menu_msg.message_id})
+
+        except Exception as e:
+            err_text = get_text("err_critical", lang).format(error=e)
+            smart_update_status(bot, user_id, err_text, ctx)
+        
+        finally:
+            if image_path and os.path.exists(image_path):
+                try: os.remove(image_path)
+                except: pass
+            if user_id in pending_prompts:
+                del pending_prompts[user_id]
+
+
+    # --- PROMPT OPTIMIERUNG LOGIK ---
+    def process_prompt_logic(message, ctx):
         user_id = message.chat.id
         prompt = message.text
-
-        # Abbruch Check (Multilingual)
-        back_btns = [get_text("btn_back", "en"), get_text("btn_back", "de")]
-        if prompt in KNOWN_BUTTONS or prompt in back_btns:
-            bot.send_message(user_id, get_text("err_aborted", lang))
-            return
-
-        if not prompt:
-            bot.send_message(user_id, get_text("err_no_text", lang))
-            return
-
-        # Status Nachricht
-        status_text = get_text("msg_generating", lang).format(model=model_key)
-        status_msg = bot.send_message(user_id, status_text)
+        lang = get_user_lang(message)
         
-        model = registry.get(model_key)
+        # Pipelines überspringen Optimierung
+        if ctx["model_key"] in ["premium-headshot-pipeline", "ultimate-headshot-pipeline"]:
+             run_generation(user_id, ctx["model_key"], prompt, ctx.get("image_path"), lang)
+             return
+
+        # Status update (Edit)
+        loading_text = get_text("optimizing_msg", lang)
+        msg_id = smart_update_status(bot, user_id, loading_text, ctx)
         
-        success, result = service.process_request(user_id, model, prompt)
-        
-        if success:
-            if model.type == "video":
-                 bot.send_video(user_id, result, caption=f"🎬 {prompt}")
-            elif model.type == "audio":
-                 bot.send_audio(user_id, result, caption=f"🎵 {prompt}")
-            else:
-                 bot.send_photo(user_id, result, caption=f"✨ {prompt}")
+        if msg_id:
+            ctx["last_bot_msg_id"] = msg_id
+            set_context(user_id, ctx)
+
+        try:
+            optimized_prompt = optimize_prompt_via_llm(prompt)
+            pending_prompts[user_id] = {
+                "original": prompt,
+                "optimized": optimized_prompt,
+                "model_key": ctx.get("model_key"),
+                "image_path": ctx.get("image_path"),
+                "lang": lang 
+            }
+            markup = types.InlineKeyboardMarkup(row_width=1)
+            markup.add(
+                types.InlineKeyboardButton(get_text("btn_accept", lang), callback_data="prompt_accept"),
+                types.InlineKeyboardButton(get_text("btn_edit", lang), callback_data="prompt_edit"),
+                types.InlineKeyboardButton(get_text("btn_reject", lang), callback_data="prompt_reject")
+            )
             
-            bot.delete_message(user_id, status_msg.message_id)
+            result_text = get_text("opt_result_msg", lang).format(original=prompt, optimized=optimized_prompt)
+            
+            if msg_id:
+                bot.edit_message_text(
+                    chat_id=user_id,
+                    message_id=msg_id,
+                    text=result_text,
+                    reply_markup=markup,
+                    parse_mode="HTML"
+                )
+            else:
+                 new_msg = bot.send_message(user_id, result_text, reply_markup=markup, parse_mode="HTML")
+                 ctx["last_bot_msg_id"] = new_msg.message_id
+                 set_context(user_id, ctx)
+
+        except Exception:
+            run_generation(user_id, ctx["model_key"], prompt, ctx.get("image_path"), lang)
+
+
+    # --- HANDLER: MODELL AUSWAHL (SINGLE MESSAGE LOGIK) ---
+    @bot.message_handler(func=lambda msg: msg.text in KNOWN_BUTTONS)
+    def handle_model_selection(message):
+        user_id = message.chat.id
+        lang = get_user_lang(message)
+        btn_text = message.text 
+        ctx = get_context(user_id)
+
+        # 1. User Klick löschen
+        try: bot.delete_message(user_id, message.message_id)
+        except: pass
+
+        db.add_user_if_not_exists(user_id, message.from_user.username)
+        if user_id in pending_prompts: del pending_prompts[user_id]
+
+        internal_key = BUTTON_TO_KEY_MAP.get(btn_text)
+        model = model_registry.get(internal_key)
+        
+        # Vorab-Check für Disclaimer
+        has_examples = (hasattr(model, "example_input_image") and model.example_input_image) or \
+                       (hasattr(model, "example_output_image") and model.example_output_image)
+
+        # --- SCHRITT 1: TEXT ZUSAMMENBAUEN ---
+        full_text = ""
+
+        # A) Beschreibung & Prompt
+        if hasattr(model, "description") and model.description:
+            full_text += get_text("info_model_desc", lang).format(desc=model.description)
+            if hasattr(model, "example_prompt") and model.example_prompt:
+                full_text += "\n\n" + get_text("info_example_prompt", lang).format(prompt=model.example_prompt)
+
+        # B) Disclaimer (JETZT HIER OBEN!)
+        if has_examples:
+            full_text += f"\n\n{get_text('info_examples_disclaimer', lang)}"
+
+        # C) Trennlinie
+        full_text += "\n\n" + ("➖" * 12) + "\n\n"
+
+        # D) Preis & Anleitung (CTA)
+        needs_image = internal_key in MODELS_NEEDING_IMAGE
+        optional_image = internal_key in MODELS_OPTIONAL_IMAGE
+        
+        cta_text = ""
+        if internal_key in ["premium-headshot-pipeline", "ultimate-headshot-pipeline"]:
+             cta_text = get_text("info_premium_pipeline", lang).format(model_name=model.name, cost=model.cost)
+        elif needs_image: 
+            cta_text = get_text("info_needs_image", lang).format(model_name=model.name, cost=model.cost)
+        elif optional_image: 
+            cta_text = get_text("info_optional_image", lang).format(model_name=model.name, cost=model.cost)
+        else: 
+            cta_text = get_text("info_text_only", lang).format(model_name=model.name, cost=model.cost)
+
+        full_text += cta_text
+
+        # --- SCHRITT 2: MEDIEN PRÜFEN ---
+        media_file = None
+        if hasattr(model, "example_output_image") and model.example_output_image:
+            media_file = model.example_output_image
+        elif hasattr(model, "example_input_image") and model.example_input_image:
+            media_file = model.example_input_image
+
+        # --- SCHRITT 3: SENDEN / EDITIEREN ---
+        new_msg_id = None
+
+        # FALL A: Bild vorhanden -> Altes löschen, Bild senden
+        if media_file:
+            if ctx and "last_bot_msg_id" in ctx:
+                try: bot.delete_message(user_id, ctx["last_bot_msg_id"])
+                except: pass
+            
+            try:
+                if is_video_file(media_file):
+                    msg = bot.send_video(
+                        user_id, media_file, caption=full_text, 
+                        parse_mode="HTML", reply_markup=keyboards.get_back_menu(lang)
+                    )
+                else:
+                    msg = bot.send_photo(
+                        user_id, media_file, caption=full_text, 
+                        parse_mode="HTML", reply_markup=keyboards.get_back_menu(lang)
+                    )
+                new_msg_id = msg.message_id
+            except Exception as e:
+                # Fallback: Nur Text
+                print(f"Image Send Error: {e}")
+                msg = bot.send_message(user_id, full_text, parse_mode="HTML", reply_markup=keyboards.get_back_menu(lang))
+                new_msg_id = msg.message_id
+
+        # FALL B: Nur Text -> Editieren (verhindert Flackern)
         else:
-            bot.edit_message_text(f"❌ Error: {result}", user_id, status_msg.message_id)
+            if ctx and "last_bot_msg_id" in ctx:
+                try:
+                    bot.edit_message_text(
+                        chat_id=user_id,
+                        message_id=ctx["last_bot_msg_id"],
+                        text=full_text,
+                        parse_mode="HTML",
+                        reply_markup=keyboards.get_back_menu(lang)
+                    )
+                    new_msg_id = ctx["last_bot_msg_id"] 
+                except Exception:
+                    try: bot.delete_message(user_id, ctx["last_bot_msg_id"])
+                    except: pass
+                    msg = bot.send_message(user_id, full_text, parse_mode="HTML", reply_markup=keyboards.get_back_menu(lang))
+                    new_msg_id = msg.message_id
+            else:
+                msg = bot.send_message(user_id, full_text, parse_mode="HTML", reply_markup=keyboards.get_back_menu(lang))
+                new_msg_id = msg.message_id
+
+        # --- SCHRITT 4: CONTEXT SPEICHERN ---
+        set_context(user_id, {
+            "model_key": internal_key,
+            "step": "waiting_for_image" if (needs_image or optional_image) else "waiting_for_prompt",
+            "image_path": None,
+            "can_skip_image": optional_image,
+            "last_bot_msg_id": new_msg_id, 
+            "cleanup_ids": [] # Leer, da alles in einer Nachricht
+        })
+
+
+    # --- HANDLER: BILD UPLOAD ---
+    @bot.message_handler(content_types=['photo'])
+    def handle_image_upload(message):
+        user_id = message.chat.id
+        lang = get_user_lang(message)
+        ctx = get_context(user_id)
+        
+        if not ctx or "waiting" not in str(ctx.get("step")): return
+
+        # Smart Update: Text ändern, Buttons entfernen
+        loading_text = get_text("status_downloading_img", lang)
+        msg_id = smart_update_status(bot, user_id, loading_text, ctx, markup=None)
+        
+        try:
+            file_info = bot.get_file(message.photo[-1].file_id)
+            downloaded_file = bot.download_file(file_info.file_path)
+            if not os.path.exists("temp"): os.makedirs("temp")
+            abs_path = os.path.abspath(f"temp/{user_id}_input.jpg")
+            with open(abs_path, 'wb') as new_file: new_file.write(downloaded_file)
+
+            ctx["image_path"] = abs_path
+            if msg_id: ctx["last_bot_msg_id"] = msg_id 
+
+            # Direkt weiter (Upscaling)
+            if ctx.get("model_key") in MODELS_NO_PROMPT:
+                run_generation(user_id, ctx["model_key"], "Upscaling...", abs_path, lang)
+                return
+
+            # Weiter zu Prompt
+            ctx["step"] = "waiting_for_prompt"
+            prompt_text = get_text("prompt_req_standard", lang)
+            
+            # Status auf "Bitte Prompt eingeben" updaten
+            smart_update_status(bot, user_id, prompt_text, ctx, markup=keyboards.get_back_menu(lang))
+            set_context(user_id, ctx)
+            
+        except Exception as e:
+            bot.reply_to(message, f"❌ Error: {e}")
+            clear_context(user_id)
+
+    # --- HANDLER: PROMPT INPUT ---
+    @bot.message_handler(func=lambda m: True) 
+    def handle_prompt_input_step(message):
+        user_id = message.chat.id
+        prompt = message.text
+        
+        back_btns = [get_text("btn_back", code) for code in ["en", "de", "ru", "kk"]]
+        if prompt in back_btns or (prompt and prompt.startswith("/")): return
+
+        if prompt in KNOWN_BUTTONS:
+            handle_model_selection(message)
+            return
+            
+        ctx = get_context(user_id)
+        if not ctx or not ctx.get("model_key"): return 
+        
+        if ctx.get("step") == "waiting_for_image" and not ctx.get("can_skip_image"):
+            bot.send_message(user_id, get_text("err_img_missing", get_user_lang(message)))
+            return
+
+        # Aufforderungstext lassen wir stehen, wird gleich überschrieben durch "Optimizing..."
+        process_prompt_logic(message, ctx)
+
+    # --- HANDLER: CALLBACKS ---
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('prompt_'))
+    def handle_prompt_decision(call):
+        user_id = call.message.chat.id
+        data = pending_prompts.get(user_id)
+        lang = data.get('lang', 'de') if data else 'de'
+
+        if not data:
+            bot.answer_callback_query(call.id, get_text("session_expired", lang))
+            return
+
+        action = call.data.split('_')[1]
+
+        if action == "accept":
+            bot.answer_callback_query(call.id, "✅")
+            bot.edit_message_reply_markup(user_id, call.message.message_id, reply_markup=None)
+            run_generation(user_id, data['model_key'], data['optimized'], data['image_path'], lang)
+            
+        elif action == "reject":
+            bot.answer_callback_query(call.id, "❌")
+            bot.edit_message_reply_markup(user_id, call.message.message_id, reply_markup=None)
+            run_generation(user_id, data['model_key'], data['original'], data['image_path'], lang)
+            
+        elif action == "edit":
+            bot.answer_callback_query(call.id, "✏️")
+            msg_text = get_text("msg_copy_edit", lang).format(optimized=data['optimized'])
+            msg = bot.send_message(user_id, msg_text, parse_mode="HTML")
+            
+            def edit_step(m):
+                try: bot.delete_message(user_id, m.message_id)
+                except: pass
+                try: bot.delete_message(user_id, msg.message_id)
+                except: pass
+                run_generation(user_id, data['model_key'], m.text, data['image_path'], lang)
+                
+            bot.register_next_step_handler(msg, edit_step)
