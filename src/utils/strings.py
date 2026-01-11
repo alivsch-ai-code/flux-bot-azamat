@@ -80,7 +80,12 @@ STRINGS = {
         "ru": "🛠️ Инструменты",
         "kk": "🛠️ Құралдар"
     },
-
+    "menu_image_description": {
+        "en": "🖼️ Describe Image",
+        "de": "🖼️ Bildbeschreibung",
+        "ru": "🖼️ Описание изображения",
+        "kk": "🖼️ Сурет сипаттамасы"
+    },
     # --- ADMIN MESSAGES ---
     "admin_cheat_success": {
         "en": "🫡 Cheat Mode activated: +10,000 Credits added!",
@@ -314,6 +319,38 @@ STRINGS = {
         "ru": "🎨 Пример результата",
         "kk": "🎨 Мысал нәтиже"
     },
+    # Füge dies in dein STRINGS Dictionary in strings.py ein:
+
+    # --- REFERRAL / SHARE ---
+    "btn_free_credits": {
+        "en": "🎁 Free Credits",
+        "de": "🎁 Gratis Credits",
+        "ru": "🎁 Бесплатные кредиты",
+        "kk": "🎁 Тегін кредиттер"
+    },
+    "share_menu_title": {
+        "en": "<b>🎁 Invite Friends & Earn Credits!</b>\n\nShare your personal link. For every new user who joins via your link, you get <b>{amount} Credits</b>!\n\nYour Link:\n<code>{ref_link}</code>",
+        "de": "<b>🎁 Freunde werben & Credits verdienen!</b>\n\nTeile deinen persönlichen Link. Für jeden neuen Nutzer, der über deinen Link kommt, erhältst du <b>{amount} Credits</b>!\n\nDein Link:\n<code>{ref_link}</code>",
+        "ru": "<b>🎁 Пригласи друзей и получи кредиты!</b>\n\nПоделись ссылкой. За каждого нового пользователя ты получишь <b>{amount} кредитов</b>!\n\nТвоя ссылка:\n<code>{ref_link}</code>",
+        "kk": "<b>🎁 Достарды шақырып, кредит жина!</b>\n\nСілтемеңізді бөлісіңіз. Сілтеме арқылы қосылған әр жаңа қолданушы үшін <b>{amount} кредит</b> аласыз!\n\nСілтемеңіз:\n<code>{ref_link}</code>"
+    },
+    "share_text_template": {
+        "en": "Check out this AI Bot! 🚀 Create amazing images and videos: {ref_link}",
+        "de": "Schau dir diesen AI Bot an! 🚀 Erstelle krasse Bilder und Videos: {ref_link}",
+        "ru": "Попробуй этот ИИ-бот! 🚀 Создавай крутые фото и видео: {ref_link}",
+        "kk": "Мына AI ботты көр! 🚀 Керемет суреттер мен видеолар жаса: {ref_link}"
+    },
+    "ref_success_referrer": {
+        "en": "🎉 <b>New Referral!</b>\nA new user joined via your link.\n<b>+{amount} Credits</b> added!",
+        "de": "🎉 <b>Erfolgreich geworben!</b>\nEin neuer Nutzer ist deinem Link gefolgt.\n<b>+{amount} Credits</b> gutgeschrieben!",
+        "ru": "🎉 <b>Новый рефералл!</b>\nПользователь перешел по твоей ссылке.\n<b>+{amount} кредитов</b> начислено!",
+        "kk": "🎉 <b>Жаңа шақыру!</b>\nЖаңа қолданушы сілтемеңіз арқылы қосылды.\n<b>+{amount} кредит</b> қосылды!"
+    },
+    "btn_share_vk": {"en": "VKontakte", "de": "VKontakte", "ru": "ВКонтакте", "kk": "VKontakte"},
+    "btn_share_x": {"en": "X (Twitter)", "de": "X (Twitter)", "ru": "X (Twitter)", "kk": "X (Twitter)"},
+    "btn_share_fb": {"en": "Facebook", "de": "Facebook", "ru": "Facebook", "kk": "Facebook"},
+    "btn_share_ok": {"en": "Odnoklassniki", "de": "Odnoklassniki", "ru": "Odnoklassniki", "kk": "Odnoklassniki"},
+    "btn_share_tg": {"en": "Telegram", "de": "Telegram", "ru": "Telegram", "kk": "Telegram"},
 }
 
 def get_text(key, lang="en"):

@@ -73,6 +73,47 @@ def prepare_gemini_input(prompt: str, image_url: str = None):
         elif os.path.exists(image_url): inputs['image_input'] = [open(image_url, "rb")]
     return inputs
 
+def prepare_gemini_flash(prompt: str, image_url: str = None):
+    # Basis-Inputs gemäß deinem JSON-Beispiel
+    inputs = {
+        "top_p": 0.95,
+        "images": [], # Initialisiere als leere Liste
+        "prompt": prompt,
+        "videos": [],  # Auch videos scheinen laut JSON erwartet zu werden
+        "temperature": 1,
+        "dynamic_thinking": False,
+        "max_output_tokens": 65535,
+    }
+
+    if image_url:
+        if image_url.startswith("http"):
+            # Fügt die URL der Liste hinzu
+            inputs['images'] = [image_url]
+        elif os.path.exists(image_url):
+            # Fügt das geöffnete Datei-Objekt der Liste hinzu
+            inputs['images'] = [open(image_url, "rb")]
+            
+    return inputs
+
+def prepare_gemini_flash_image(prompt: str, image_url: str = None):
+    # Basis-Inputs gemäß deinem JSON-Beispiel
+    inputs = {
+        "prompt": prompt,
+        "image_input": [], # Initialisiere als leere Liste
+        "aspect_ration": "match_input_image",
+        "output_format": "jpg"
+    }
+
+    if image_url:
+        if image_url.startswith("http"):
+            # Fügt die URL der Liste hinzu
+            inputs['image_input'] = [image_url]
+        elif os.path.exists(image_url):
+            # Fügt das geöffnete Datei-Objekt der Liste hinzu
+            inputs['image_input'] = [open(image_url, "rb")]
+            
+    return inputs
+
 def prepare_minimax_input(prompt: str, image_url: str = None):
     inputs = {"prompt": prompt, "prompt_optimizer": True}
     if image_url:
@@ -84,7 +125,8 @@ def prepare_minimax_input(prompt: str, image_url: str = None):
 MODEL_ADAPTERS = {
     "black-forest-labs/flux-1.1-pro": prepare_flux_base_input,
     "nightmareai/real-esrgan": prepare_upscale_esrgan_input,
-    "google/gemini-2.5-flash-image": prepare_gemini_input,
+    "google/gemini-2.5-flash-image": prepare_gemini_flash_image,
+    "google/gemini-2.5-flash": prepare_gemini_flash,
     "google/nano-banana": prepare_gemini_input,
     "google/nano-banana-pro": prepare_gemini_input,
     "minimax/video-01": prepare_minimax_input,

@@ -27,6 +27,7 @@ class ReplicateClient(AIProvider):
                 try:
                     output = self.client.run(model.replicate_id, input=inputs)
                     # Erfolg!
+                    print("Erfolg")
                     break 
                     
                 except ReplicateError as e:
@@ -50,6 +51,7 @@ class ReplicateClient(AIProvider):
             result_data = output[0] if isinstance(output, list) else output
             if model.type == "text" and isinstance(output, list):
                 result_data = "".join(output)
+
                 
             return GenerationResult(success=True, data=result_data)
             

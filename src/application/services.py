@@ -19,7 +19,8 @@ class GenerationService:
             return False, "Zu wenig Guthaben! Bitte aufladen."
 
         # 2. Input Validation (Phase 1) - Einfacher Check
-        if image_url and os.path.exists(image_url):
+        print(model.type)
+        if image_url and os.path.exists(image_url) and model.type != ["image_analysis"]:
             try:
                 with Image.open(image_url) as img:
                     width, height = img.size

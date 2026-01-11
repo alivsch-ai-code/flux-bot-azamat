@@ -1,8 +1,12 @@
+# menu_handler.py
 import os
 from telebot import TeleBot
 from src.presentation.telegram import keyboards
 from src.utils.strings import get_text
 from src.presentation.telegram.handlers.common import get_context, clear_context, set_context
+
+# --- KONFIGURATION ---
+REFERRAL_REWARD = 50 # Wie viele Credits bekommt der Werber?
 
 # --- HILFSFUNKTIONEN ---
 
@@ -29,11 +33,10 @@ def matches_any_lang(text, key):
 def cleanup_context_messages(bot, user_id, ctx):
     """
     Löscht ALLE Nachrichten, die im Context gespeichert sind.
-    Das entfernt 'Geister-Nachrichten' wie Beschreibungen oder Bilder.
     """
     if not ctx: return
 
-    # 1. Die Liste der Zusatz-Nachrichten löschen (Bilder, Beschreibungen)
+    # 1. Die Liste der Zusatz-Nachrichten löschen (Bilder, Beschreibungen, Share-Menüs)
     if "cleanup_ids" in ctx:
         for msg_id in ctx["cleanup_ids"]:
             try:
@@ -51,12 +54,11 @@ def cleanup_context_messages(bot, user_id, ctx):
 def send_menu_and_cleanup(bot, message, text_key, markup_func, model_registry, lang):
     """
     Navigiert zu einem neuen Menü und räumt ALLES Alte auf.
-    Versucht erst zu editieren (für Ruhe im Chat), falls das nicht geht -> Löschen & Neu.
     """
     user_id = message.chat.id
     ctx = get_context(user_id)
     
-    # 1. User-Input (Klick) löschen -> Hält den Chat sauber
+    # 1. User-Input (Klick) löschen
     try:
         bot.delete_message(user_id, message.message_id)
     except Exception:
@@ -69,16 +71,11 @@ def send_menu_and_cleanup(bot, message, text_key, markup_func, model_registry, l
     except TypeError:
         markup = markup_func(lang)
 
-    # 2. SPEZIALFALL: Wenn wir Zusatz-Nachrichten (cleanup_ids) haben (z.B. Beschreibungen),
-    # können wir nicht einfach 'editieren', weil die Beschreibungen sonst stehen bleiben.
-    # Wir müssen also erst aufräumen und dann das Menü neu senden oder editieren.
-    
-    # Wir löschen erst die "Bubbles" (Beschreibungen, Bilder)
+    # 2. Zusatz-Nachrichten löschen (z.B. Share-Buttons vom vorherigen Screen)
     if ctx and "cleanup_ids" in ctx:
         for msg_id in ctx["cleanup_ids"]:
             try: bot.delete_message(user_id, msg_id)
             except: pass
-        # Liste aus Context entfernen, da erledigt
         del ctx["cleanup_ids"]
         set_context(user_id, ctx)
 
@@ -95,11 +92,10 @@ def send_menu_and_cleanup(bot, message, text_key, markup_func, model_registry, l
             )
             return # Erfolg!
         except Exception:
-            # Fallback: Wenn Editieren fehlschlägt (z.B. Nachricht zu alt), alte löschen
             try: bot.delete_message(user_id, ctx["last_bot_msg_id"])
             except: pass
 
-    # 4. Fallback: Neu senden (wenn kein alter Context da war oder Editieren schiefging)
+    # 4. Fallback: Neu senden
     new_msg = bot.send_message(user_id, msg_text, reply_markup=markup, parse_mode='HTML')
 
     # Neuen State speichern
@@ -110,14 +106,46 @@ def send_menu_and_cleanup(bot, message, text_key, markup_func, model_registry, l
 
 def register(bot: TeleBot, generation_service, model_registry, db): 
     
-    # --- START & RESET ---
+    # --- START & RESET & REFERRAL CHECK ---
     @bot.message_handler(commands=['start'])
     def send_welcome(message):
         lang = get_user_lang(message)
-        db.add_user_if_not_exists(message.chat.id, message.from_user.username)
+        user_id = message.chat.id
+        args = message.text.split()
         
-        # WICHTIG: Erst aufräumen, DANN Context löschen!
-        # Sonst weiß der Bot nicht mehr, welche Nachrichten er löschen muss.
+        # 1. Ist der User wirklich neu?
+        # WICHTIG: Deine DB-Klasse braucht 'user_exists(user_id)'
+        # Wenn 'add_user_if_not_exists' true zurückgibt, wenn neu, kannst du auch das nutzen.
+        is_new_user = not db.user_exists(user_id) if hasattr(db, 'user_exists') else True
+
+        # User in DB anlegen
+        db.add_user_if_not_exists(user_id, message.from_user.username)
+        
+        # 2. Referral Logik: Wenn neu UND Argument vorhanden (z.B. /start 12345)
+        if is_new_user and len(args) > 1:
+            try:
+                referrer_id = int(args[1])
+                # Check: Man kann sich nicht selbst werben
+                if referrer_id != user_id:
+                    # Prüfen ob Werber existiert
+                    referrer_exists = db.user_exists(referrer_id) if hasattr(db, 'user_exists') else True
+                    
+                    if referrer_exists:
+                        # A. Credits an den Werber
+                        db.update_credits(referrer_id, REFERRAL_REWARD, "referral_bonus")
+                        
+                        # B. Benachrichtigung an den Werber
+                        try:
+                            # Wir senden auf Englisch oder Fallback DE, da wir Sprache des Werbers hier nicht wissen
+                            msg_ref = get_text("ref_success_referrer", "de") 
+                            msg_ref_fmt = msg_ref.format(amount=REFERRAL_REWARD)
+                            bot.send_message(referrer_id, msg_ref_fmt, parse_mode="HTML")
+                        except Exception as e:
+                            print(f"Could not notify referrer: {e}")
+            except ValueError:
+                pass # Argument war keine ID
+        
+        # --- Standard Start Prozedur (Aufräumen & Hauptmenü) ---
         old_ctx = get_context(message.chat.id)
         if old_ctx:
             cleanup_context_messages(bot, message.chat.id, old_ctx)
@@ -168,10 +196,10 @@ def register(bot: TeleBot, generation_service, model_registry, db):
         try: bot.delete_message(user_id, message.message_id)
         except: pass
 
-        # 2. Alles Alte aufräumen (Beschreibungen, Bilder, altes Menü)
+        # 2. Alles Alte aufräumen
         cleanup_context_messages(bot, user_id, ctx)
         
-        # 3. Context leeren (da wir im Hauptmenü neu starten)
+        # 3. Context leeren
         clear_context(user_id)
 
         # 4. Hauptmenü senden
@@ -183,10 +211,48 @@ def register(bot: TeleBot, generation_service, model_registry, db):
         
         set_context(user_id, {"last_bot_msg_id": msg.message_id})
 
+    # --- NEW: REFERRAL MENU HANDLER ---
+    @bot.message_handler(func=lambda msg: matches_any_lang(msg.text, "btn_free_credits"))
+    def show_referral_menu(message):
+        lang = get_user_lang(message)
+        user_id = message.chat.id
+        
+        # 1. Haupt-Nachricht auf "Wähle Optionen" oder ähnliches setzen (und alten Content cleanen)
+        # Wir nutzen einfach "msg_next_step" oder einen ähnlichen Titel, damit das "Zurück" Menü erscheint
+        send_menu_and_cleanup(bot, message, "msg_next_step", keyboards.get_back_menu, model_registry, lang)
+        
+        # 2. Link generieren
+        try:
+            bot_username = bot.get_me().username
+        except:
+            bot_username = "DeinBotName" # Fallback
+            
+        ref_link = f"https://t.me/{bot_username}?start={user_id}"
+        
+        # 3. Share Text und Buttons vorbereiten
+        share_text_raw = get_text("share_text_template", lang).format(ref_link=ref_link)
+        menu_text = get_text("share_menu_title", lang).format(amount=REFERRAL_REWARD, ref_link=ref_link)
+        
+        share_markup = keyboards.get_share_menu(ref_link, share_text_raw, lang)
+        
+        # 4. Buttons senden (Zusätzlich zum 'Zurück' Menü oben)
+        sent_msg = bot.send_message(user_id, menu_text, reply_markup=share_markup, parse_mode="HTML")
+        
+        # 5. Damit der "Zurück" Button auch DIESE Nachricht löscht:
+        ctx = get_context(user_id)
+        if ctx:
+            if "cleanup_ids" not in ctx: ctx["cleanup_ids"] = []
+            ctx["cleanup_ids"].append(sent_msg.message_id)
+            set_context(user_id, ctx)
+
     # --- SUBMENÜ NAVIGATION ---
     @bot.message_handler(func=lambda msg: matches_any_lang(msg.text, "menu_image_studio"))
     def nav_image(message):
         send_menu_and_cleanup(bot, message, "msg_select_model", keyboards.get_image_studio_menu, model_registry, get_user_lang(message))
+
+    @bot.message_handler(func=lambda msg: matches_any_lang(msg.text, "menu_image_description"))
+    def nav_desc(message):
+        send_menu_and_cleanup(bot, message, "msg_select_model", keyboards.get_image_description_menu, model_registry, get_user_lang(message))
 
     @bot.message_handler(func=lambda msg: matches_any_lang(msg.text, "menu_video_studio"))
     def nav_video(message):

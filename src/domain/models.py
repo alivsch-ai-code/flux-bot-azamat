@@ -77,7 +77,7 @@ AI_MODELS = {
         name="🤖 Gemini 2.5 Flash Image",
         description="Bildanalyse.",
         cost=3, 
-        type=["image"] # Gehört zu Tools
+        type=["image_analysis"] # Gehört zu Tools
     ),
 
     "face-swap": AIModel(
@@ -95,7 +95,7 @@ AI_MODELS = {
         name="🤖 Gemini 2.5 Flash",
         description="Bildanalyse.",
         cost=3, 
-        type=["image"] # Gehört zu Tools
+        type=["image_analysis"] # Gehört zu Tools
     ),
 
     # -------------------------------------------------------------------------
