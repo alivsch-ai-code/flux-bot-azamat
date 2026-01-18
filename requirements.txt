@@ -1,13 +1,14 @@
 # Telegram Bot Bibliothek
 pyTelegramBotAPI
-
 # Webserver für Healthchecks (damit Render nicht einschläft)
 flask
-
 # Schnittstelle zu den KI-Modellen
 replicate
-
 # Zum Laden von Umgebungsvariablen (.env)
 python-dotenv
-
 Pillow
+python-dotenv
+psycopg2-binary
+jwt
+openai
+ruff

@@ -1,22 +1,24 @@
-from telebot import TeleBot
-# Importiere die Registrierungs-Funktionen der Handler
+from telebot import TeleBot, types
 from src.presentation.telegram.handlers import menu_handler, gen_handler, payment_handler
+# NEU
+from src.application.daily_services import DailyService 
 
 def setup_bot(bot: TeleBot, generation_service, model_registry: dict, db):
-    """
-    Diese Funktion wird von main.py aufgerufen.
-    Sie registriert alle Logik am Bot-Objekt.
-    """
     
-    # 1. Menü Handler (Muss zuerst kommen für Navigation)
+    try:
+        bot.set_my_commands([
+            types.BotCommand("start", "🚀 Start / Menu"),
+            types.BotCommand("shop", "💎 Credits"),
+            types.BotCommand("help", "🆘 Help")
+        ])
+    except: pass
+
     menu_handler.register(bot, generation_service, model_registry, db)
-    
-    # 2. Payment Handler (MUSS VOR gen_handler KOMMEN!)
-    # Damit der Klick auf "Shop" nicht als Prompt missverstanden wird.
     payment_handler.register(bot, db)
-    
-    # 3. Generierungs Handler (Enthält den "Catch-All" für Prompts)
-    # Dieser muss als Letztes kommen, damit er nur Texte nimmt, die keine Befehle sind.
     gen_handler.register(bot, generation_service, model_registry, db)
     
-    print("✅ Telegram Handler erfolgreich registriert (Reihenfolge: Menu -> Payment -> Gen).")
+    # NEU: Daily Service starten
+    daily = DailyService(bot, db)
+    daily.start()
+    
+    print("✅ Telegram Handler & Services registriert.")

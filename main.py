@@ -1,18 +1,21 @@
 import threading
 import time
 import telebot
+import os
 from flask import Flask
+# WICHTIG: Für lokale .env Dateien
+from dotenv import load_dotenv 
+
+# 1. GANZ OBEN: Umgebungsvariablen laden (.env Datei lesen)
+# Das muss passieren, BEVOR irgendetwas anderes passiert!
+load_dotenv()
 
 # --- 1. KONFIGURATION & MODELLE ---
 from src.config.settings import config
 # HINWEIS: Stelle sicher, dass AI_MODELS hier die aktualisierte Liste (mit Credits) ist.
-# Falls du meine models.py übernommen hast, liegt sie evtl. unter src.domain.models:
 from src.domain.models import AI_MODELS 
-# (Falls du deine alte config/models.py nutzt, lass den Import so wie er war, 
-# aber update die Datei mit den Credit-Preisen!)
 
 # --- 2. INFRASTRUKTUR (WERKZEUGE) ---
-from src.infrastructure.db.memory_repo import InMemoryUserRepo
 from src.infrastructure.ai.unified_client import UnifiedAIClient
 # NEU: Datenbank Manager importieren
 from src.infrastructure.database import DatabaseManager 
@@ -38,23 +41,16 @@ def run_web_server():
 def main():
     print("🚀 Initialisiere Bot System...")
 
-    # SCHRITT A: Datenbank initialisieren (NEU & WICHTIG)
-    # Erstellt automatisch 'azamat_ai.db' im Hauptordner
-    db = DatabaseManager("azamat_ai.db")
-    print("📂 Datenbank verbunden.")
+    # SCHRITT A: Datenbank verbinden
+    # WICHTIG: Variable muss 'db' heißen (nicht 'b')
+    # Die Klasse sucht automatisch nach 'DATABASE_URL' in den Umgebungsvariablen.
+    db = DatabaseManager() 
+    print("📂 Datenbank verbunden (PostgreSQL via Neon/Render).")
 
-    # Alte In-Memory Repo (kannst du für den GenerationService erstmal lassen,
-    # falls der Service zwingend ein 'repo' Argument braucht)
-    user_repository = InMemoryUserRepo()
-
-    ai_provider = UnifiedAIClient(
-        replicate_key=config.REPLICATE_API_TOKEN, 
-        sonauto_key=config.SONAUTO_API_KEY
-    )
-
+    ai_provider = UnifiedAIClient(config)
     # SCHRITT B: Service Layer erstellen
     generation_service = GenerationService(
-        repo=user_repository, 
+        repo=db, 
         ai=ai_provider
     )
     print("✅ Service Layer initialisiert.")
@@ -66,8 +62,8 @@ def main():
         print(f"❌ Fehler beim Erstellen des Bots: {e}")
         return
 
-    # SCHRITT D: Bot mit Logik verkabeln (HIER WAR DER FEHLER)
-    # Wir übergeben jetzt zusätzlich die 'db' Instanz!
+    # SCHRITT D: Bot mit Logik verkabeln
+    # Wir übergeben jetzt die 'db' Instanz
     setup_bot(bot, generation_service, AI_MODELS, db)
     print("✅ Telegram Handler registriert.")
 

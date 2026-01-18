@@ -15,14 +15,30 @@ class Settings:
         # 1. PFLICHTFELDER (Bot stürzt ab, wenn diese fehlen)
         self.TELEGRAM_TOKEN = self._get_required("TELEGRAM_TOKEN")
         self.REPLICATE_API_TOKEN = self._get_required("REPLICATE_API_TOKEN")
-        
-        # 2. NEU: SONAUTO KEY (Optional / Warnung)
-        # Wir nutzen hier NICHT _get_required, damit der Bot auch ohne Musik-Key startet.
+        # --- NEUE PROVIDER (Optional, damit der Bot nicht crasht, wenn einer fehlt) ---
         self.SONAUTO_API_KEY = os.getenv("SONAUTO_API_KEY")
+        self.KLING_API_KEY = os.getenv("KLING_API_KEY")       # Neu: Für Video
+        self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")     # Neu: Für DALL-E 3 / GPT
+        self.GROK_API_KEY = os.getenv("GROK_API_KEY")         # Neu: Für xAI
+        self.DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY") # Neu: Für DeepSeek
         
+        if not self.TELEGRAM_TOKEN:
+            print("⚠️ WARNUNG: TELEGRAM_TOKEN fehlt. _")
+        if not self.REPLICATE_API_TOKEN:
+            print("⚠️ WARNUNG: REPLICATE_API_TOKEN fehlt. _")
         if not self.SONAUTO_API_KEY:
-            print("⚠️ WARNUNG: SONAUTO_API_KEY fehlt. Musik-Funktionen werden deaktiviert.")
+            print("⚠️ WARNUNG: SONAUTO_API_KEY fehlt. _")
+        if not self.KLING_API_KEY:
+            print("⚠️ WARNUNG: KLING_API_KEY fehlt. _")
+        if not self.OPENAI_API_KEY:
+            print("⚠️ WARNUNG: OPENAI_API_KEY fehlt. _")
+        if not self.GROK_API_KEY:
+            print("⚠️ WARNUNG: GROK_API_KEY fehlt. _")
+        if not self.DEEPSEEK_API_KEY:
+            print("⚠️ WARNUNG: DEEPSEEK_API_KEY fehlt. _")
 
+
+        
         # 3. Optionale Einstellungen mit Standardwerten
         self.PORT = int(os.getenv("PORT", 5000))
         self.APP_ENV = os.getenv("APP_ENV", "development") # 'production' oder 'development'

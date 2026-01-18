@@ -13,6 +13,7 @@ class GenerationService:
         self.ai = ai
 
     def process_request(self, user_id: int, model: AIModel, prompt: str, image_url: str = None):
+        print("DEBUg: process_request() gestartet")
         # 1. User & Credits Check
         user = self.repo.get_user(user_id)
         if user.credits < model.cost:
@@ -34,6 +35,7 @@ class GenerationService:
         try:
             # --- FALL A: PREMIUM PIPELINE (4 Bilder) ---
             if model.key == "premium-headshot-pipeline":
+                print("⏳ Premium Pipeline wird gestartet...")
                 success, result_list = self._run_premium_pipeline(prompt, image_url)
                 if not success: return False, result_list # Fehlermeldung
                 
@@ -105,13 +107,14 @@ class GenerationService:
 
                 # SCHRITT B: Face Swap
                 # Hier war der Fehler: Variable hieß base_image_url, muss aber base_url heißen!
-                output_swap = replicate.run(
-                    swap_model.replicate_id,
-                    input={
-                        "target_image": base_url, # <--- FIX: Hier stand vorher base_image_url
-                        "swap_image": open(user_image_path, "rb")
-                    }
-                )
+                with open(user_image_path, "rb") as swap_image_file:
+                    output_swap = replicate.run(
+                        swap_model.replicate_id,
+                        input={
+                            "target_image": base_url, # <--- FIX: Hier stand vorher base_image_url
+                            "swap_image": swap_image_file
+                        }
+                    )
                 
                 # URL Extrahieren
                 if isinstance(output_swap, list) and len(output_swap) > 0: swap_url = output_swap[0]
@@ -158,10 +161,11 @@ class GenerationService:
 
         # 2. Swap
         try:
-            output = replicate.run(
-                swap_model.replicate_id,
-                input={"target_image": base_url, "swap_image": open(user_image_path, "rb")}
-            )
+            with open(user_image_path, "rb") as swap_image_file:
+                output = replicate.run(
+                    swap_model.replicate_id,
+                    input={"target_image": base_url, "swap_image": swap_image_file}
+                )
             final_url = output[0] if isinstance(output, list) else str(output)
             return True, final_url
         except Exception as e:

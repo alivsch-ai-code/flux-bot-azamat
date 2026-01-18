@@ -19,6 +19,7 @@ class AIModel:
     provider: str = "replicate" 
     
     description: str = ""
+    original_dollar_per_run: Optional[float] = 0.0
     example_prompt: Optional[str] = None
     example_input_image: Optional[str] = None
     example_output_image: Optional[str] = None
