@@ -7,17 +7,15 @@ from flask import Flask
 from dotenv import load_dotenv 
 
 # 1. GANZ OBEN: Umgebungsvariablen laden (.env Datei lesen)
-# Das muss passieren, BEVOR irgendetwas anderes passiert!
 load_dotenv()
 
-# --- 1. KONFIGURATION & MODELLE ---
+# --- 1. KONFIGURATION ---
 from src.config.settings import config
-# HINWEIS: Stelle sicher, dass AI_MODELS hier die aktualisierte Liste (mit Credits) ist.
-from src.domain.models import AI_MODELS 
+# WICHTIG: Der Import von AI_MODELS wurde ENTFERNT, da wir jetzt die Datenbank nutzen.
+# Die alte models.py verursacht sonst Abstürze.
 
 # --- 2. INFRASTRUKTUR (WERKZEUGE) ---
 from src.infrastructure.ai.unified_client import UnifiedAIClient
-# NEU: Datenbank Manager importieren
 from src.infrastructure.database import DatabaseManager 
 
 # --- 3. APPLICATION (LOGIK) ---
@@ -42,13 +40,14 @@ def main():
     print("🚀 Initialisiere Bot System...")
 
     # SCHRITT A: Datenbank verbinden
-    # WICHTIG: Variable muss 'db' heißen (nicht 'b')
-    # Die Klasse sucht automatisch nach 'DATABASE_URL' in den Umgebungsvariablen.
+    # Die Klasse DatabaseManager initialisiert beim ersten Start automatisch
+    # die Tabellen und lädt die Standard-Modelle in deine Neon-DB.
     db = DatabaseManager() 
-    print("📂 Datenbank verbunden (PostgreSQL via Neon/Render).")
+    print("📂 Datenbank verbunden (PostgreSQL via Neon).")
 
-    ai_provider = UnifiedAIClient(config)
     # SCHRITT B: Service Layer erstellen
+    ai_provider = UnifiedAIClient(config)
+    
     generation_service = GenerationService(
         repo=db, 
         ai=ai_provider
@@ -63,8 +62,9 @@ def main():
         return
 
     # SCHRITT D: Bot mit Logik verkabeln
-    # Wir übergeben jetzt die 'db' Instanz
-    setup_bot(bot, generation_service, AI_MODELS, db)
+    # ÄNDERUNG: Wir übergeben ein leeres Dictionary {}, da setup_bot
+    # die Modelle jetzt direkt aus der 'db' lädt.
+    setup_bot(bot, generation_service, {}, db)
     print("✅ Telegram Handler registriert.")
 
     # SCHRITT E: Webserver starten

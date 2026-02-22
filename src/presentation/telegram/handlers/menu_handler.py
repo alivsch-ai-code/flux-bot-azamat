@@ -9,16 +9,16 @@ REFERRAL_REWARD = 50
 def register(bot: TeleBot, generation_service, model_registry, db): 
     
     def get_lang(user_id):
-        # Holt die Spracheinstellung des Nutzers aus der Datenbank
         return db.get_user_settings(user_id)["lang"]
 
-    # 1. START
+    # 1. START COMMAND
     @bot.message_handler(commands=['start'])
     def send_welcome(message):
         user_id = message.chat.id
         db.add_user_if_not_exists(user_id, message.from_user.username)
         lang = get_lang(user_id)
         
+        # hier wird geprüft wie der user das letzte mal verlassen hat 
         old_ctx = get_context(user_id)
         if old_ctx and "last_bot_msg_id" in old_ctx:
             try: bot.delete_message(user_id, old_ctx["last_bot_msg_id"])
@@ -31,26 +31,45 @@ def register(bot: TeleBot, generation_service, model_registry, db):
                 ref_id = int(args[1])
                 if ref_id != user_id:
                     db.update_credits(ref_id, REFERRAL_REWARD, "referral")
-                    # Erfolg für den Werber übersetzen
                     bot.send_message(ref_id, get_text("ref_success_referrer", get_lang(ref_id)).format(amount=REFERRAL_REWARD))
              except: pass
+        else:
+            # Empfehle uns lieber user
+            no_referral_text = get_text("no_referral", lang)
+            bot.send_message(user_id, no_referral_text, parse_mode='HTML')
+        
+        # Transparenz
+        transparency_text = get_text("transparency_msg", lang)
+        bot.send_message(user_id, transparency_text, parse_mode='HTML')
+
 
         welcome_text = get_text("welcome", lang)
-        bot.send_message(user_id, welcome_text, reply_markup=keyboards.get_main_menu_inline(lang), parse_mode='HTML')
+        
+        # Modelle laden & Menü bauen
+        all_models = db.get_all_models()
+        markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+        
+        bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
 
-    # 2. NAVIGATION
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('nav_'))
+    # 2. NAVIGATION (Static Menus)
+    # WICHTIG: Wir ignorieren hier 'nav_path_', damit gen_handler diese übernehmen kann!
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('nav_') and not call.data.startswith('nav_path_'))
     def handle_navigation(call):
         user_id = call.message.chat.id
         lang = get_lang(user_id)
-        target = call.data.split('_')[1]
+        
+        try:
+            target = call.data.split('_')[1]
+        except IndexError:
+            return # Falls Format falsch ist
         
         new_text = ""
         new_markup = None
         
         if target == "main":
             new_text = get_text("welcome", lang)
-            new_markup = keyboards.get_main_menu_inline(lang)
+            all_models = db.get_all_models()
+            new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
             clear_context(user_id)
             
         elif target == "settings":
@@ -59,27 +78,11 @@ def register(bot: TeleBot, generation_service, model_registry, db):
             new_markup = keyboards.get_settings_menu(settings, lang)
 
         elif target == "lang":
-            # Statischer Text durch string-key ersetzt
-            new_text = get_text("msg_choose_lang", lang) # Füge dies in strings.py hinzu
+            new_text = "🌐 <b>Select Language / Sprache wählen:</b>"
             new_markup = keyboards.get_language_menu(lang)
-
-        elif target == "image":
-            new_text = get_text("msg_select_model", lang)
-            new_markup = keyboards.get_image_studio_menu(model_registry, lang)
-        elif target == "video":
-            new_text = get_text("msg_select_model", lang)
-            new_markup = keyboards.get_video_studio_menu(model_registry, lang)
-        elif target == "audio":
-            # Titel übersetzt
-            new_text = f"🎙️ <b>{get_text('menu_audio_studio', lang)}</b>\n" + get_text("msg_select_model", lang)
-            new_markup = keyboards.get_audio_studio_menu(lang)
-        elif target == "tools":
-            new_text = get_text("msg_select_tool", lang)
-            new_markup = keyboards.get_edit_menu(model_registry, lang)
             
         elif target == "profile":
             creds = db.get_user_credits(user_id)
-            # Komplett dynamisch via strings.py
             new_text = get_text("profile_text", lang).format(
                 name=call.from_user.first_name,
                 creds=creds,
@@ -90,25 +93,28 @@ def register(bot: TeleBot, generation_service, model_registry, db):
         elif target == "referral":
             bot_name = bot.get_me().username
             link = f"https://t.me/{bot_name}?start={user_id}"
-            new_text = get_text("share_menu_title", lang).format(amount=REFERRAL_REWARD, ref_link=link)
+            new_text = get_text("share_menu_title", lang).format(ref_link=link)
             share_text = get_text("share_text_template", lang).format(ref_link=link)
             new_markup = keyboards.get_share_menu(link, share_text, lang)
 
         elif target == "support":
-             # Support Text übersetzt
              new_text = get_text("support_text", lang)
              new_markup = keyboards.get_back_menu(lang, target="nav_main")
 
-        try:
-            bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode='HTML')
-        except:
-            bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode='HTML')
+        # Nachricht aktualisieren
+        if new_text and new_markup:
+            try:
+                bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode='HTML')
+            except:
+                # Falls Nachricht zu alt oder Fehler
+                bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode='HTML')
+        
         try:
             bot.answer_callback_query(call.id)
         except Exception:
             pass
 
-    # 3. SETTINGS AKTIONEN
+    # 3. SETTINGS ACTIONS
     @bot.callback_query_handler(func=lambda c: c.data == "toggle_opt")
     def handle_toggle_opt(call):
         user_id = call.message.chat.id
@@ -123,11 +129,8 @@ def register(bot: TeleBot, generation_service, model_registry, db):
             call.message.message_id, 
             reply_markup=keyboards.get_settings_menu(new_settings, lang)
         )
-        # Toast-Bestätigung übersetzt
-        try:
-            bot.answer_callback_query(call.id, get_text("status_saved", lang))
-        except Exception:
-            pass
+        try: bot.answer_callback_query(call.id)
+        except: pass
 
     @bot.callback_query_handler(func=lambda c: c.data == "toggle_daily")
     def handle_toggle_daily(call):
@@ -143,12 +146,9 @@ def register(bot: TeleBot, generation_service, model_registry, db):
             call.message.message_id, 
             reply_markup=keyboards.get_settings_menu(new_settings, lang)
         )
-        # Status-Meldung via strings.py
         status_key = "daily_news_on" if new_val else "daily_news_off"
-        try:
-            bot.answer_callback_query(call.id, get_text(status_key, lang))
-        except Exception:
-            pass
+        try: bot.answer_callback_query(call.id, get_text(status_key, lang))
+        except: pass
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith("set_lang_"))
     def handle_set_lang(call):
@@ -158,10 +158,8 @@ def register(bot: TeleBot, generation_service, model_registry, db):
         
         settings = db.get_user_settings(user_id)
         
-        try:
-            bot.answer_callback_query(call.id, get_text("lang_selected", new_lang))
-        except Exception:
-            pass
+        try: bot.answer_callback_query(call.id, get_text("lang_selected", new_lang))
+        except: pass
         
         bot.edit_message_text(
             get_text("settings_title", new_lang),
@@ -179,5 +177,4 @@ def register(bot: TeleBot, generation_service, model_registry, db):
         if m.from_user.id == ADMIN_ID:
             db.update_credits(m.chat.id, 10000)
             lang = get_lang(m.chat.id)
-            # Admin Bestätigung übersetzt
             bot.reply_to(m, get_text("admin_cheat_success", lang))

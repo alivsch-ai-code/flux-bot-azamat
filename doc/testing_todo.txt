@@ -1,0 +1,11 @@
+- richtiges output format für video, bild und upscale
+- richtige kosten
+- iteration über jedes modell mit Input und korrektem Output
+- kosten kalkulation
+
+ToDo: 
+- Datenbank anlegen für Benutzer
+- Löschen der Benutzer 
+
+Bewerbungsfoto: 
+- Modell erstellen und dann Faceswap
