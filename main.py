@@ -51,18 +51,26 @@ def get_status_text() -> str:
     )
 
 
-def start_log_status_loop(main_bot: telebot.TeleBot) -> None:
+def start_log_status_loop() -> None:
     """
     Startet im Hauptprozess einen Hintergrund-Thread, der periodisch
-    RAM/CPU an einen Admin schickt. Nutzt den bestehenden Bot/Token.
+    RAM/CPU an einen Admin schickt. Nutzt einen separaten Log-Bot-Token.
     """
-    admin_id = os.getenv("ADMIN_ID")
-    interval = int(os.getenv("LOG_INTERVAL_SECONDS", "3600"))
-    if not admin_id:
-        logger.warning("ADMIN_ID nicht gesetzt – Status-Log wird deaktiviert.")
+    log_bot_token = os.getenv("LOG_BOT_ALOSCHA")
+    if not log_bot_token:
+        logger.info("LOG_BOT_ALOSCHA nicht gesetzt – Status-Log deaktiviert.")
         return
 
-    admin_id = int(admin_id)
+    # Empfänger: eigener Admin, sonst fallback auf ADMIN_ID
+    admin_id_raw = os.getenv("LOG_ADMIN_ID") or os.getenv("ADMIN_ID")
+    if not admin_id_raw:
+        logger.warning("LOG_ADMIN_ID/ADMIN_ID nicht gesetzt – Status-Log deaktiviert.")
+        return
+
+    # alle 2 Minuten default
+    interval = int(os.getenv("LOG_INTERVAL_SECONDS", "120"))
+    admin_id = int(admin_id_raw)
+    log_bot = telebot.TeleBot(log_bot_token)
 
     def _loop():
         # kleine Startverzögerung, damit der Bot ready ist
@@ -70,7 +78,8 @@ def start_log_status_loop(main_bot: telebot.TeleBot) -> None:
         while True:
             try:
                 text = get_status_text()
-                main_bot.send_message(admin_id, text, parse_mode="HTML")
+                # Wichtig: nur send_message (kein polling) -> kein 409-Konflikt
+                log_bot.send_message(admin_id, text, parse_mode="HTML")
             except Exception as e:
                 logger.warning("Konnte Status-Log nicht senden: %s", e)
             time.sleep(interval)
@@ -110,8 +119,8 @@ def main():
     server_thread = threading.Thread(target=run_web_server, daemon=True)
     server_thread.start()
 
-    # SCHRITT F: Status-Log-Loop im Hauptprozess starten
-    start_log_status_loop(bot)
+    # SCHRITT F: Status-Log-Loop im Hauptprozess starten (separater Log-Bot)
+    start_log_status_loop()
 
     # SCHRITT G: Bot starten (mit Retry bei Timeout/Netzwerk)
     logger.info("Bot ist bereit (Umgebung: %s)", config.APP_ENV)
