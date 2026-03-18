@@ -2,6 +2,7 @@ import psycopg2
 import threading
 import os
 import json
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 from src.domain.entities import User, AIModel
@@ -139,6 +140,17 @@ class DatabaseManager:
         """
 
     def get_all_models(self) -> list[AIModel]:
+        """
+        Holt alle aktiven Modelle.
+        Ergebnis wird für 60 Sekunden gecacht, um Neon zu entlasten.
+        """
+        # einfacher Cache ohne Lock – Lesen aus Attributen ist threadsafe genug,
+        # DB-Zugriff selbst ist per self.lock geschützt.
+        cache = getattr(self, "_models_cache", None)
+        ts = getattr(self, "_models_cache_ts", 0)
+        if cache is not None and (time.time() - ts) < 60:
+            return cache
+
         with self.lock:
             conn = self._get_connection()
             c = conn.cursor()
@@ -146,7 +158,11 @@ class DatabaseManager:
             c.execute(query)
             rows = c.fetchall()
             conn.close()
-            return [self._map_row(r) for r in rows]
+            models = [self._map_row(r) for r in rows]
+
+        self._models_cache = models
+        self._models_cache_ts = time.time()
+        return models
 
     def get_model_by_key(self, key: str) -> AIModel:
         with self.lock:

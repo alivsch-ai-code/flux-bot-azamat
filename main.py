@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 # --- 2. INFRASTRUKTUR (WERKZEUGE) ---
 from src.infrastructure.ai.unified_client import UnifiedAIClient
 from src.infrastructure.database import DatabaseManager 
+from src.infrastructure.metrics import get_stats
+from src.utils.temp_cleanup import cleanup_temp_folder
 
 # --- 3. APPLICATION (LOGIK) ---
 from src.application.services import GenerationService
@@ -44,11 +46,25 @@ def get_status_text() -> str:
     process = psutil.Process(os.getpid())
     ram_mb = process.memory_info().rss / 1024 / 1024
     cpu_usage = psutil.cpu_percent(interval=1)
-    return (
-        "🖥 <b>Systemstatus (Render)</b>\n\n"
-        f"RAM-Verbrauch: <b>{ram_mb:.1f} MB</b>\n"
-        f"CPU-Auslastung: <b>{cpu_usage:.1f}%</b>"
-    )
+
+    # Metriken auswerten (Durchschnittszeiten in ms)
+    stats = get_stats()
+    lines = [
+        "🖥 <b>Systemstatus (Render)</b>",
+        "",
+        f"RAM-Verbrauch: <b>{ram_mb:.1f} MB</b>",
+        f"CPU-Auslastung: <b>{cpu_usage:.1f}%</b>",
+    ]
+    if stats:
+        lines.append("")
+        lines.append("<b>Timings:</b>")
+        for name, data in stats.items():
+            count = data.get("count", 0) or 1
+            avg_ms = (data.get("total", 0.0) / count) * 1000
+            last_ms = data.get("last", 0.0) * 1000
+            lines.append(f"- {name}: avg {avg_ms:.1f} ms (last {last_ms:.1f} ms, n={int(data.get('count',0))})")
+
+    return "\n".join(lines)
 
 
 def start_log_status_loop() -> None:
@@ -77,6 +93,8 @@ def start_log_status_loop() -> None:
         time.sleep(10)
         while True:
             try:
+                # Temp-Ordner gelegentlich aufräumen (Dateien älter als 1 Stunde)
+                cleanup_temp_folder(max_age_seconds=3600)
                 text = get_status_text()
                 # Wichtig: nur send_message (kein polling) -> kein 409-Konflikt
                 log_bot.send_message(admin_id, text, parse_mode="HTML")

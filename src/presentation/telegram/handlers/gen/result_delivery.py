@@ -10,10 +10,12 @@ Nutzt detect_media_from_bytes für Typ-Erkennung, download_url_to_bytes für URL
 
 import logging
 import os
+import time
 import uuid
 
 from telebot import types
 
+from src.infrastructure.metrics import record_timing
 from src.presentation.telegram.handlers.common import set_context
 from src.presentation.telegram.handlers.gen.download import download_url_to_bytes
 from src.utils.media_utils import detect_media_from_bytes
@@ -95,6 +97,7 @@ def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, pro
     """
     Parst das API-Ergebnis und liefert es aus. Berücksichtigt Chat-Modus vs. Medien-Modus.
     """
+    t0 = time.perf_counter()
     raw = result[0] if isinstance(result, list) and result else result
     res_bytes, res = _parse_raw_result(raw)
 
@@ -121,6 +124,7 @@ def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, pro
                 set_context(user_id, new_ctx)
             except Exception:
                 pass
+        record_timing("gen.result_delivery.parse_and_deliver", time.perf_counter() - t0)
         return
 
     caption = get_text("success_caption", lang).format(prompt=(prompt or "")[:50], cost=cost)
@@ -159,3 +163,5 @@ def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, pro
                 bot.send_message(user_id, safe_msg(could_not_send=True))
         else:
             bot.send_message(user_id, safe_msg(could_not_send=True))
+
+    record_timing("gen.result_delivery.parse_and_deliver", time.perf_counter() - t0)
