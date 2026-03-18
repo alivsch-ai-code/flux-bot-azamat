@@ -1,23 +1,17 @@
+import logging
+import sys
 import threading
 import time
 import telebot
-import os
 from flask import Flask
-# WICHTIG: Für lokale .env Dateien
-from dotenv import load_dotenv 
 
-# 1. GANZ OBEN: Umgebungsvariablen laden (.env Datei lesen)
-# Das muss passieren, BEVOR irgendetwas anderes passiert!
-load_dotenv()
-
-# --- 1. KONFIGURATION & MODELLE ---
+# --- 1. KONFIGURATION (lädt .env via settings) ---
 from src.config.settings import config
-# HINWEIS: Stelle sicher, dass AI_MODELS hier die aktualisierte Liste (mit Credits) ist.
-from src.domain.models import AI_MODELS 
+
+logger = logging.getLogger(__name__)
 
 # --- 2. INFRASTRUKTUR (WERKZEUGE) ---
 from src.infrastructure.ai.unified_client import UnifiedAIClient
-# NEU: Datenbank Manager importieren
 from src.infrastructure.database import DatabaseManager 
 
 # --- 3. APPLICATION (LOGIK) ---
@@ -34,51 +28,54 @@ def health_check():
     return "🤖 System Status: ONLINE", 200
 
 def run_web_server():
-    print(f"🌍 Starte Webserver auf Port {config.PORT}...")
+    logger.info("Starte Webserver auf Port %s...", config.PORT)
     app.run(host='0.0.0.0', port=config.PORT, use_reloader=False)
 
 # --- HAUPTPROGRAMM ---
 def main():
-    print("🚀 Initialisiere Bot System...")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    logger.info("Initialisiere Bot System...")
 
     # SCHRITT A: Datenbank verbinden
-    # WICHTIG: Variable muss 'db' heißen (nicht 'b')
-    # Die Klasse sucht automatisch nach 'DATABASE_URL' in den Umgebungsvariablen.
-    db = DatabaseManager() 
-    print("📂 Datenbank verbunden (PostgreSQL via Neon/Render).")
+    db = DatabaseManager()
+    logger.info("Datenbank verbunden (PostgreSQL via Neon).")
 
-    ai_provider = UnifiedAIClient(config)
     # SCHRITT B: Service Layer erstellen
-    generation_service = GenerationService(
-        repo=db, 
-        ai=ai_provider
-    )
-    print("✅ Service Layer initialisiert.")
+    ai_provider = UnifiedAIClient(config)
+    generation_service = GenerationService(repo=db, ai=ai_provider)
+    logger.info("Service Layer initialisiert.")
 
     # SCHRITT C: Telegram Bot vorbereiten
     try:
         bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
     except Exception as e:
-        print(f"❌ Fehler beim Erstellen des Bots: {e}")
-        return
+        logger.critical("Fehler beim Erstellen des Bots: %s", e)
+        sys.exit(1)
 
-    # SCHRITT D: Bot mit Logik verkabeln
-    # Wir übergeben jetzt die 'db' Instanz
-    setup_bot(bot, generation_service, AI_MODELS, db)
-    print("✅ Telegram Handler registriert.")
+    # SCHRITT D: Bot mit Logik verkabeln (Modelle aus db)
+    setup_bot(bot, generation_service, db)
+    logger.info("Telegram Handler registriert.")
 
     # SCHRITT E: Webserver starten
     server_thread = threading.Thread(target=run_web_server, daemon=True)
     server_thread.start()
 
-    # SCHRITT F: Bot starten
-    print(f"🤖 Bot ist bereit und hört zu! (Umgebung: {config.APP_ENV})")
-    
-    try:
-        bot.infinity_polling(timeout=10, long_polling_timeout=5)
-    except Exception as e:
-        print(f"❌ KRITISCHER ABSTURZ: {e}")
-        time.sleep(5)
+    # SCHRITT F: Bot starten (mit Retry bei Timeout/Netzwerk)
+    logger.info("Bot ist bereit (Umgebung: %s)", config.APP_ENV)
+    while True:
+        try:
+            bot.infinity_polling(timeout=60, long_polling_timeout=30)
+        except Exception as e:
+            if "timed out" in str(e).lower() or "timeout" in str(e).lower():
+                logger.warning("Telegram Polling Timeout – starte in 5s neu: %s", e)
+                time.sleep(5)
+            else:
+                logger.critical("Kritischer Absturz: %s", e)
+                sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

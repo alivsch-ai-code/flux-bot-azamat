@@ -1,31 +1,25 @@
 import psycopg2
 import threading
 import os
+import json
 from datetime import datetime
-# NEU: Damit werden Variablen aus der .env Datei geladen
 from dotenv import load_dotenv
+from src.domain.entities import User, AIModel
 
-from src.domain.entities import User
-
-# Lädt Umgebungsvariablen aus .env (nur lokal relevant, auf Render passiert nichts)
 load_dotenv()
 
 class DatabaseManager:
     def __init__(self):
-        # Holt URL aus .env (lokal) oder Render Environment (server)
         self.db_url = os.getenv("DATABASE_URL")
-        
-        if not self.db_url:
-            print("⚠️ ACHTUNG: DATABASE_URL nicht gefunden! Stelle sicher, dass sie in der .env steht.")
-            
         self.lock = threading.Lock()
-        # Wir rufen init nur auf, wenn wir eine URL haben, sonst kracht es
+        
         if self.db_url:
             self._init_db()
             self._migrate_db()
+        else:
+            print("⚠️ DATABASE_URL fehlt in .env")
 
     def _get_connection(self):
-        """Erstellt eine neue Verbindung zur Datenbank."""
         return psycopg2.connect(self.db_url, sslmode='require')
 
     def _init_db(self):
@@ -34,6 +28,7 @@ class DatabaseManager:
                 conn = self._get_connection()
                 c = conn.cursor()
                 
+                # Users Tabelle
                 c.execute('''
                     CREATE TABLE IF NOT EXISTS users (
                         user_id BIGINT PRIMARY KEY,
@@ -41,60 +36,203 @@ class DatabaseManager:
                         credits INTEGER DEFAULT 150,
                         language TEXT DEFAULT 'de',
                         auto_opt INTEGER DEFAULT 1,
-                        daily_msg INTEGER DEFAULT 1
+                        daily_msg INTEGER DEFAULT 1,
+                        last_model_key TEXT,
+                        is_chat_mode INTEGER DEFAULT 0
                     )
                 ''')
                 
+                # AI Models Tabelle (Full Schema)
                 c.execute('''
-                    CREATE TABLE IF NOT EXISTS transactions (
-                        id SERIAL PRIMARY KEY,
-                        user_id BIGINT,
-                        amount INTEGER,
-                        reason TEXT,
-                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    CREATE TABLE IF NOT EXISTS ai_models (
+                        key TEXT PRIMARY KEY,
+                        replicate_id TEXT,
+                        name TEXT,
+                        description TEXT,
+                        
+                        -- PREISE
+                        base_cost_usd FLOAT DEFAULT 0.0,
+                        internal_cost INTEGER DEFAULT 10,
+                        custom_price INTEGER,
+                        
+                        -- METADATA
+                        provider TEXT,
+                        model_type TEXT, 
+                        menu_path TEXT DEFAULT 'root',
+                        is_active INTEGER DEFAULT 1,
+                        is_commercial INTEGER DEFAULT 1,
+                        manual_override INTEGER DEFAULT 0,
+                        
+                        -- JSON DATEN
+                        input_schema JSONB,
+                        output_schema JSONB,
+                        example_data JSONB,
+                        
+                        last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 ''')
                 
+                # Transactions & Daily Posts
+                c.execute('''CREATE TABLE IF NOT EXISTS transactions (id SERIAL PRIMARY KEY, user_id BIGINT, amount INTEGER, reason TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+                c.execute('''CREATE TABLE IF NOT EXISTS daily_posts (id SERIAL PRIMARY KEY, date_to_send TEXT UNIQUE, message_text TEXT, image_path TEXT, sent_status INTEGER DEFAULT 0)''')
+
+                # Generation Errors (Fehlermeldungen mit User/Modell; werden nach 7 Tagen gelöscht)
                 c.execute('''
-                    CREATE TABLE IF NOT EXISTS daily_posts (
+                    CREATE TABLE IF NOT EXISTS generation_errors (
                         id SERIAL PRIMARY KEY,
-                        date_to_send TEXT UNIQUE, 
-                        message_text TEXT,
-                        image_path TEXT,
-                        sent_status INTEGER DEFAULT 0
+                        user_id BIGINT NOT NULL,
+                        model_key TEXT,
+                        error_message TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 ''')
+                
                 conn.commit()
                 conn.close()
             except Exception as e:
                 print(f"❌ DB Init Error: {e}")
 
     def _migrate_db(self):
+        """Fügt neue Spalten hinzu, falls sie in alten Tabellen fehlen."""
         with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
             try:
-                conn = self._get_connection()
-                c = conn.cursor()
-                
-                try:
-                    c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT DEFAULT 'de'")
-                except: conn.rollback()
-                else: conn.commit()
+                # 1. Migration für AI_MODELS
+                model_cols = [
+                    ("base_cost_usd", "FLOAT DEFAULT 0.0"),
+                    ("internal_cost", "INTEGER DEFAULT 10"),
+                    ("custom_price", "INTEGER"),
+                    ("is_commercial", "INTEGER DEFAULT 1"),
+                    ("manual_override", "INTEGER DEFAULT 0"),
+                    ("input_schema", "JSONB"),
+                    ("output_schema", "JSONB"),
+                    ("example_data", "JSONB"),
+                    ("last_checked", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+                ]
+                for col, dtype in model_cols:
+                    c.execute(f"ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS {col} {dtype}")
 
-                try:
-                    c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_opt INTEGER DEFAULT 1")
-                except: conn.rollback()
-                else: conn.commit()
-                
-                try:
-                    c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_msg INTEGER DEFAULT 1")
-                except: conn.rollback()
-                else: conn.commit()
-                
-                conn.close()
+                # 2. Migration für USERS (WICHTIG für Chat Mode!)
+                user_cols = [
+                    ("last_model_key", "TEXT"),
+                    ("is_chat_mode", "INTEGER DEFAULT 0")
+                ]
+                for col, dtype in user_cols:
+                    c.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {dtype}")
+
+                conn.commit()
             except Exception as e:
-                print(f"Migration Error: {e}")
+                print(f"⚠️ Migration Warning: {e}")
+                conn.rollback()
+            finally:
+                conn.close()
 
-    # --- USER SETTINGS ---
+    # --- Explizite Spaltenauswahl ---
+    def _get_model_columns(self):
+        return """
+            key, replicate_id, name, description, 
+            base_cost_usd, internal_cost, custom_price, 
+            provider, model_type, menu_path, is_active, 
+            is_commercial, manual_override, 
+            input_schema, output_schema, example_data
+        """
+
+    def get_all_models(self) -> list[AIModel]:
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            query = f"SELECT {self._get_model_columns()} FROM ai_models WHERE is_active = 1 ORDER BY menu_path, name"
+            c.execute(query)
+            rows = c.fetchall()
+            conn.close()
+            return [self._map_row(r) for r in rows]
+
+    def get_model_by_key(self, key: str) -> AIModel:
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            query = f"SELECT {self._get_model_columns()} FROM ai_models WHERE key = %s"
+            c.execute(query, (key,))
+            r = c.fetchone()
+            conn.close()
+            return self._map_row(r) if r else None
+
+    def get_fallback_model(self, original_model: AIModel) -> AIModel:
+        """Sucht Ersatzmodell."""
+        main_type = original_model.type[0] if original_model.type else ""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            query = f"""
+                SELECT {self._get_model_columns()} FROM ai_models 
+                WHERE model_type LIKE %s 
+                AND internal_cost <= %s 
+                AND key != %s 
+                AND is_active = 1
+                LIMIT 1
+            """
+            c.execute(query, (f"%{main_type}%", original_model.internal_cost + 5, original_model.key))
+            r = c.fetchone()
+            conn.close()
+            return self._map_row(r) if r else None
+
+    def _map_row(self, r):
+        # Hilfsfunktion, um sicherzustellen, dass Schemas DICTs sind (egal ob JSONB oder Text)
+        def ensure_dict(val):
+            if isinstance(val, dict):
+                return val
+            if isinstance(val, str):
+                try:
+                    return json.loads(val)
+                except json.JSONDecodeError:
+                    return {}
+            return {}
+
+        # 0:key, 1:rep_id, 2:name, 3:desc, 4:base_usd, 5:int_cost, 6:cust_price, 
+        # 7:prov, 8:type, 9:path, 10:active, 11:comm, 12:override, 13:input, 14:output, 15:example
+        
+        return AIModel(
+            key=r[0], 
+            replicate_id=r[1], 
+            name=r[2], 
+            description=r[3] or "",
+            base_cost_usd=r[4] or 0.0,
+            internal_cost=r[5] or 10,
+            custom_price=r[6],
+            provider=r[7], 
+            type=r[8].split(',') if r[8] else [],
+            menu_path=r[9], 
+            is_active=bool(r[10]),
+            is_commercial=bool(r[11]),
+            manual_override=bool(r[12]),
+            # Hier nutzen wir die sichere Konvertierung
+            input_schema=ensure_dict(r[13]),
+            output_schema=ensure_dict(r[14]),
+            example_data=ensure_dict(r[15])
+        )
+
+    # --- USER & SETTINGS METHODS ---
+    def get_user_credits(self, user_id):
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("SELECT credits FROM users WHERE user_id = %s", (user_id,))
+            res = c.fetchone()
+            conn.close()
+            return res[0] if res else 0
+            
+    def update_credits(self, user_id, amount, reason="usage"):
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            # User anlegen falls nicht existiert (mit Default 150 Credits)
+            c.execute("INSERT INTO users (user_id, username) VALUES (%s, 'Unknown') ON CONFLICT (user_id) DO NOTHING", (user_id,))
+            c.execute("UPDATE users SET credits = credits + %s WHERE user_id = %s", (amount, user_id))
+            c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, amount, reason))
+            conn.commit()
+            conn.close()
+
     def get_user_settings(self, user_id):
         with self.lock:
             conn = self._get_connection()
@@ -103,25 +241,76 @@ class DatabaseManager:
             result = c.fetchone()
             conn.close()
             if result:
-                return {
-                    "lang": result[0], 
-                    "auto_opt": bool(result[1]), 
-                    "daily_msg": bool(result[2])
-                }
+                lang = result[0] if result[0] and result[0].strip() else 'de'
+                return {"lang": lang, "auto_opt": bool(result[1]), "daily_msg": bool(result[2])}
             return {"lang": "de", "auto_opt": True, "daily_msg": True}
+
+    def add_user_if_not_exists(self, user_id, username):
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("INSERT INTO users (user_id, username) VALUES (%s, %s) ON CONFLICT (user_id) DO NOTHING", (user_id, username))
+            conn.commit()
+            conn.close()
 
     def update_setting(self, user_id, column, value):
         with self.lock:
             conn = self._get_connection()
             c = conn.cursor()
-            if column not in ["language", "auto_opt", "daily_msg"]: return
+            if column in ["language", "auto_opt", "daily_msg"]:
+                c.execute(f"UPDATE users SET {column} = %s WHERE user_id = %s", (value, user_id))
+                conn.commit()
+            conn.close()
             
-            query = f"UPDATE users SET {column} = %s WHERE user_id = %s"
-            c.execute(query, (value, user_id))
+    def set_user_chat_mode(self, user_id, model_key, active=True):
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            is_active = 1 if active else 0
+            if model_key:
+                c.execute("UPDATE users SET is_chat_mode = %s, last_model_key = %s WHERE user_id = %s", (is_active, model_key, user_id))
+            else:
+                c.execute("UPDATE users SET is_chat_mode = %s WHERE user_id = %s", (is_active, user_id))
             conn.commit()
             conn.close()
 
-    # --- DAILY MESSAGES ---
+    def get_user_chat_state(self, user_id):
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            try:
+                c.execute("SELECT is_chat_mode, last_model_key FROM users WHERE user_id = %s", (user_id,))
+                res = c.fetchone()
+                conn.close()
+                if res:
+                    return {"is_chat": bool(res[0]), "model_key": res[1]}
+            except Exception:
+                conn.rollback()
+                conn.close()
+            return {"is_chat": False, "model_key": None}
+            
+    def user_exists(self, user_id):
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
+            exists = c.fetchone() is not None
+            conn.close()
+            return exists
+
+    def get_user(self, user_id: int) -> User:
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("SELECT user_id, username, credits FROM users WHERE user_id = %s", (user_id,))
+            res = c.fetchone()
+            conn.close()
+            if res:
+                return User(id=res[0], username=res[1], credits=res[2])
+            else:
+                return User(id=user_id, username="Guest", credits=0)
+
+    # --- DAILY SERVICE ---
     def get_due_daily_post(self):
         today = datetime.now().strftime("%Y-%m-%d")
         with self.lock:
@@ -148,52 +337,105 @@ class DatabaseManager:
             results = c.fetchall()
             conn.close()
             return [r[0] for r in results]
-            
-    # --- STANDARD METHODEN ---
-    def user_exists(self, user_id):
-        with self.lock:
-            conn = self._get_connection()
-            c = conn.cursor()
-            c.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
-            res = c.fetchone()
-            conn.close()
-            return res is not None
 
-    def add_user_if_not_exists(self, user_id, username):
+    # --- GENERATION ERRORS (Logging + 7-Tage-Cleanup) ---
+    def insert_generation_error(self, user_id: int, model_key: str, error_message: str):
+        """Speichert Fehlermeldung zu einem fehlgeschlagenen Generierungsversuch."""
+        with self.lock:
+            try:
+                conn = self._get_connection()
+                c = conn.cursor()
+                c.execute(
+                    "INSERT INTO generation_errors (user_id, model_key, error_message) VALUES (%s, %s, %s)",
+                    (user_id, model_key or "", (error_message or "")[:2000])
+                )
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f"⚠️ Fehler beim Speichern von generation_error: {e}")
+
+    def cleanup_old_generation_errors(self):
+        """Löscht Einträge älter als 7 Tage."""
+        with self.lock:
+            try:
+                conn = self._get_connection()
+                c = conn.cursor()
+                c.execute("DELETE FROM generation_errors WHERE created_at < NOW() - INTERVAL '7 days'")
+                deleted = c.rowcount
+                conn.commit()
+                conn.close()
+                if deleted:
+                    print(f"🧹 generation_errors: {deleted} Einträge älter als 7 Tage gelöscht.")
+            except Exception as e:
+                print(f"⚠️ generation_errors Cleanup: {e}")
+
+    # --- CHAT SESSIONS (eine Zeile pro User+Modell) ---
+
+    def _ensure_chat_sessions_table(self, cursor) -> None:
+        """Stellt sicher, dass die Tabelle chat_sessions existiert (idempotent)."""
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                user_id    BIGINT NOT NULL,
+                model_key  TEXT   NOT NULL,
+                history    TEXT   NOT NULL,
+                updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+                PRIMARY KEY (user_id, model_key)
+            );
+            """
+        )
+
+    def get_chat_session(self, user_id: int, model_key: str) -> list[dict]:
+        """Gibt History als Liste von {role, content} zurück."""
         with self.lock:
             conn = self._get_connection()
             c = conn.cursor()
-            c.execute("INSERT INTO users (user_id, username) VALUES (%s, %s) ON CONFLICT (user_id) DO NOTHING", (user_id, username))
+            self._ensure_chat_sessions_table(c)
+            conn.commit()
+            c.execute(
+                "SELECT history FROM chat_sessions WHERE user_id = %s AND model_key = %s",
+                (user_id, model_key),
+            )
+            row = c.fetchone()
+            conn.close()
+        if not row or not row[0]:
+            return []
+        try:
+            return json.loads(row[0])
+        except Exception:
+            return []
+
+    def save_chat_session(self, user_id: int, model_key: str, messages: list[dict]) -> None:
+        """Speichert History als JSON (UPSERT)."""
+        payload = json.dumps(messages, ensure_ascii=False)
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            self._ensure_chat_sessions_table(c)
+            c.execute(
+                """
+                INSERT INTO chat_sessions (user_id, model_key, history, updated_at)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (user_id, model_key)
+                DO UPDATE SET history = EXCLUDED.history, updated_at = NOW()
+                """,
+                (user_id, model_key, payload),
+            )
             conn.commit()
             conn.close()
 
-    def get_user_credits(self, user_id):
+    def clear_chat_session(self, user_id: int, model_key: str | None = None) -> None:
+        """Löscht den Chat-Verlauf eines Users (optional nur für ein Modell)."""
         with self.lock:
             conn = self._get_connection()
             c = conn.cursor()
-            c.execute("SELECT credits FROM users WHERE user_id = %s", (user_id,))
-            res = c.fetchone()
-            conn.close()
-            return res[0] if res else 0
-
-    def update_credits(self, user_id, amount, reason="usage"):
-        with self.lock:
-            conn = self._get_connection()
-            c = conn.cursor()
-            c.execute("INSERT INTO users (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_id,))
-            c.execute("UPDATE users SET credits = credits + %s WHERE user_id = %s", (amount, user_id))
-            c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, amount, reason))
-            conn.commit()
-            conn.close()
-            
-    def get_user(self, user_id: int) -> User:
-        with self.lock:
-            conn = self._get_connection()
-            c = conn.cursor()
-            c.execute("SELECT user_id, username, credits FROM users WHERE user_id = %s", (user_id,))
-            res = c.fetchone()
-            conn.close()
-            if res:
-                return User(id=res[0], username=res[1], credits=res[2])
+            self._ensure_chat_sessions_table(c)
+            if model_key:
+                c.execute(
+                    "DELETE FROM chat_sessions WHERE user_id = %s AND model_key = %s",
+                    (user_id, model_key),
+                )
             else:
-                return User(id=user_id, username="Guest", credits=150)
+                c.execute("DELETE FROM chat_sessions WHERE user_id = %s", (user_id,))
+            conn.commit()
+            conn.close()

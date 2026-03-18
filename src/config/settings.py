@@ -1,62 +1,53 @@
 # src/config/settings.py
+import logging
 import os
 from dotenv import load_dotenv
 
-# Lädt Variablen aus einer lokalen .env Datei
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+OPTIONAL_API_KEYS = [
+    "SONAUTO_API_KEY",
+    "KLING_API_KEY",
+    "OPENAI_API_KEY",
+    "GROK_API_KEY",
+    "DEEPSEEK_API_KEY",
+]
+
 
 class Settings:
     """
     Zentraler Ort für alle Umgebungsvariablen.
-    Validiert beim Start, ob alles Wichtige da ist.
+    Validiert beim Start, ob Pflichtfelder gesetzt sind.
     """
-    
-    def __init__(self):
-        # 1. PFLICHTFELDER (Bot stürzt ab, wenn diese fehlen)
+
+    def __init__(self) -> None:
+        # Pflichtfelder (Bot startet nicht, wenn diese fehlen)
         self.TELEGRAM_TOKEN = self._get_required("TELEGRAM_TOKEN")
         self.REPLICATE_API_TOKEN = self._get_required("REPLICATE_API_TOKEN")
-        # --- NEUE PROVIDER (Optional, damit der Bot nicht crasht, wenn einer fehlt) ---
-        self.SONAUTO_API_KEY = os.getenv("SONAUTO_API_KEY")
-        self.KLING_API_KEY = os.getenv("KLING_API_KEY")       # Neu: Für Video
-        self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")     # Neu: Für DALL-E 3 / GPT
-        self.GROK_API_KEY = os.getenv("GROK_API_KEY")         # Neu: Für xAI
-        self.DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY") # Neu: Für DeepSeek
-        
-        if not self.TELEGRAM_TOKEN:
-            print("⚠️ WARNUNG: TELEGRAM_TOKEN fehlt. _")
-        if not self.REPLICATE_API_TOKEN:
-            print("⚠️ WARNUNG: REPLICATE_API_TOKEN fehlt. _")
-        if not self.SONAUTO_API_KEY:
-            print("⚠️ WARNUNG: SONAUTO_API_KEY fehlt. _")
-        if not self.KLING_API_KEY:
-            print("⚠️ WARNUNG: KLING_API_KEY fehlt. _")
-        if not self.OPENAI_API_KEY:
-            print("⚠️ WARNUNG: OPENAI_API_KEY fehlt. _")
-        if not self.GROK_API_KEY:
-            print("⚠️ WARNUNG: GROK_API_KEY fehlt. _")
-        if not self.DEEPSEEK_API_KEY:
-            print("⚠️ WARNUNG: DEEPSEEK_API_KEY fehlt. _")
 
+        # Optionale Provider-API-Keys
+        for key in OPTIONAL_API_KEYS:
+            setattr(self, key, os.getenv(key))
+            if not getattr(self, key):
+                logger.warning("Umgebungsvariable '%s' fehlt (optional)", key)
 
-        
-        # 3. Optionale Einstellungen mit Standardwerten
+        # Optionale Einstellungen mit Standardwerten
         self.PORT = int(os.getenv("PORT", 5000))
-        self.APP_ENV = os.getenv("APP_ENV", "development") # 'production' oder 'development'
-        
-        # Preise und Limits
+        self.APP_ENV = os.getenv("APP_ENV", "development")
         self.START_CREDITS = 2000
 
     def _get_required(self, key: str) -> str:
-        """Holt eine Variable oder crasht, wenn sie fehlt."""
+        """Holt eine Variable oder wirft, wenn sie fehlt."""
         value = os.getenv(key)
         if not value:
-            raise ValueError(f"❌ CRITICAL ERROR: Umgebungsvariable '{key}' fehlt!")
+            raise ValueError(f"Umgebungsvariable '{key}' fehlt!")
         return value
 
-# Singleton-Instanz erstellen
+
 try:
     config = Settings()
 except ValueError as e:
-    print(e)
-    # Wir lassen es hier crashen, damit der Bot nicht kaputt startet
-    raise e
+    logger.critical("%s", e)
+    raise
