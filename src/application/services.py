@@ -5,6 +5,7 @@ from PIL import Image
 from typing import List, Optional
 
 from src.domain.entities import AIModel, GenerationResult, MediaFile
+from src.infrastructure.metrics import record_timing
 from src.infrastructure.security.validator import InputValidator
 
 class GenerationService:
@@ -19,66 +20,64 @@ class GenerationService:
         prompt: str,
         media_files: Optional[List[MediaFile]] = None,
     ):
-        # 0. Prompt-Sicherheit & Bereinigung
-        if not InputValidator.validate_safety(prompt or ""):
-            return False, "⚠️ Deine Eingabe wurde aus Sicherheitsgründen abgelehnt."
-        prompt = InputValidator.sanitize_prompt(prompt or "")
-
-        # 1. User & Credits Check
-        user_credits = self.repo.get_user_credits(user_id)
-        if user_credits < model.cost:
-            return False, "Zu wenig Guthaben! Bitte aufladen."
-
-        # Erste Bild-Datei für Pipelines (Backward-Kompatibilität)
-        first_image_path = None
-        if media_files:
-            for mf in media_files:
-                if mf.media_type.value == "image" and mf.path and os.path.exists(mf.path):
-                    first_image_path = mf.path
-                    break
-
-        # 2. Input Validation (Bildgröße Check für erste Bild-Datei)
-        if first_image_path and "image_analysis" not in (model.type or []):
-            try:
-                with Image.open(first_image_path) as img:
-                    width, height = img.size
-                    if width < 500 or height < 500:
-                        return False, "⚠️ Bildqualität zu niedrig. Bitte lade ein Bild mit mindestens 500px hoch."
-            except Exception:
-                pass
-
+        start = time.perf_counter()
         try:
+            # 0. Prompt-Sicherheit & Bereinigung
+            if not InputValidator.validate_safety(prompt or ""):
+                return False, "⚠️ Deine Eingabe wurde aus Sicherheitsgründen abgelehnt."
+            prompt = InputValidator.sanitize_prompt(prompt or "")
+
+            # 1. User & Credits Check
+            user_credits = self.repo.get_user_credits(user_id)
+            if user_credits < model.cost:
+                return False, "Zu wenig Guthaben! Bitte aufladen."
+
+            # Erste Bild-Datei für Pipelines (Backward-Kompatibilität)
+            first_image_path = None
+            if media_files:
+                for mf in media_files:
+                    if mf.media_type.value == "image" and mf.path and os.path.exists(mf.path):
+                        first_image_path = mf.path
+                        break
+
+            # 2. Input Validation (Bildgröße Check für erste Bild-Datei)
+            if first_image_path and "image_analysis" not in (model.type or []):
+                try:
+                    with Image.open(first_image_path) as img:
+                        width, height = img.size
+                        if width < 500 or height < 500:
+                            return False, "⚠️ Bildqualität zu niedrig. Bitte lade ein Bild mit mindestens 500px hoch."
+                except Exception:
+                    pass
+
+            # 3. Routing nach Modelltyp
             if model.key == "premium-headshot-pipeline":
                 success, result_list = self._run_premium_pipeline(prompt, first_image_path)
-                
-                if not success: 
-                    return False, result_list # Fehlermeldung zurückgeben
-                
-                # Abrechnung nur bei Erfolg
+                if not success:
+                    return False, result_list
                 self.repo.update_credits(user_id, -model.cost, reason="premium_pipeline")
-                return True, result_list # Gibt eine LISTE von URLs zurück!
-            
-            # --- FALL B: ULTIMATE PIPELINE (Legacy Einzelbild) ---
+                return True, result_list
+
             elif model.key == "ultimate-headshot-pipeline":
                 success, result_url = self._run_single_pipeline(prompt, first_image_path)
-                if not success: 
+                if not success:
                     return False, result_url
-                
                 self.repo.update_credits(user_id, -model.cost, reason="ultimate_pipeline")
                 return True, result_url
 
-            # --- FALL C: STANDARD MODELLE (Via Unified Client) ---
+            # --- Standard-Modelle (Unified Client) ---
             else:
                 result = self.ai.generate(model, prompt, media_files=media_files)
                 if not result.success:
                     return False, f"Fehler: {result.error}"
-                
                 self.repo.update_credits(user_id, -model.cost, reason=f"gen_{model.key}")
                 return True, result.data
 
         except Exception as e:
             print(f"CRITICAL ERROR in Service: {e}")
             return False, f"Systemfehler: {str(e)}"
+        finally:
+            record_timing("generation_service.process_request", time.perf_counter() - start)
 
     # --- PRIVATE FUNKTIONEN ---
 

@@ -9,8 +9,10 @@ Registriert:
 
 import logging
 import os
+import time
 import uuid
 
+from src.infrastructure.metrics import record_timing
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.common import get_context, set_context
 from src.presentation.telegram.handlers.gen import ctx_media_to_list
@@ -25,6 +27,7 @@ def register_media_handlers(bot, db, get_lang, run_generation) -> None:
     MAX_FILE_BYTES = 20 * 1024 * 1024  # 20 MB Limit
 
     def _save_incoming_file(user_id: int, file_id: str, default_ext: str) -> str:
+        t0 = time.perf_counter()
         file_info = bot.get_file(file_id)
         downloaded = bot.download_file(file_info.file_path)
 
@@ -38,6 +41,7 @@ def register_media_handlers(bot, db, get_lang, run_generation) -> None:
         path = os.path.join("temp", f"user_{user_id}_{uuid.uuid4().hex[:8]}{ext}")
         with open(path, "wb") as f:
             f.write(downloaded)
+        record_timing("gen.media.save_incoming_file", time.perf_counter() - t0)
         return path
 
     def _handle_unsolicited_media(msg, file_id: str, media_type: str, default_ext: str):
@@ -80,6 +84,7 @@ def register_media_handlers(bot, db, get_lang, run_generation) -> None:
     def process_media_upload(msg, file_id: str, media_type: str, default_ext: str):
         user_id = msg.chat.id
         ctx = get_context(user_id)
+        t0 = time.perf_counter()
         if not ctx or ctx.get("step") not in ("waiting_for_media", "waiting_for_image"):
             _handle_unsolicited_media(msg, file_id, media_type, default_ext)
             return
@@ -112,6 +117,8 @@ def register_media_handlers(bot, db, get_lang, run_generation) -> None:
         except Exception as e:
             logger.exception("Media upload failed: %s", e)
             bot.send_message(msg.chat.id, "❌ Upload-Fehler. Bitte versuchen Sie es erneut.")
+        finally:
+            record_timing("gen.media.process_media_upload", time.perf_counter() - t0)
 
     @bot.message_handler(content_types=["photo"])
     def on_photo(msg):
