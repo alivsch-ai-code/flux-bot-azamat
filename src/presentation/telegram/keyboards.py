@@ -1,12 +1,17 @@
-from telebot import types
-from src.utils.strings import get_text
 from urllib.parse import quote
 
-def btn(text, callback_data):
+from telebot import types
+
+from src.utils.strings import get_text
+
+
+def btn(text: str, callback_data: str) -> types.InlineKeyboardButton:
     return types.InlineKeyboardButton(text=text, callback_data=callback_data)
 
 # --- DYNAMISCHES MENÜ SYSTEM ---
-def get_dynamic_model_menu(models: list, lang: str = "de", current_path: str = "root"):
+def get_dynamic_model_menu(
+    models: list, lang: str = "de", current_path: str = "root"
+) -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup(row_width=2)
     
     sub_categories = set()
@@ -22,9 +27,8 @@ def get_dynamic_model_menu(models: list, lang: str = "de", current_path: str = "
             
         # Fall B: Im Root ohne Prefix
         elif current_path == "root" and "/" not in m.menu_path and m.menu_path != "root":
-             # Das ist ein Ordner im Root (z.B. "video")
-             sub_categories.add(m.menu_path)
-             continue
+            sub_categories.add(m.menu_path)
+            continue
 
         # Fall C: Unterordner Logik (z.B. "video/kling" wenn wir in "video" sind)
         elif m.menu_path.startswith(current_path + "/"):
@@ -48,8 +52,8 @@ def get_dynamic_model_menu(models: list, lang: str = "de", current_path: str = "
     folder_buttons = []
     for cat in sorted(sub_categories):
         display_name = get_text(f"menu_{cat}", lang)
-        # Fallback Name wenn keine Übersetzung
-        if display_name.startswith("menu_"): display_name = cat.capitalize()
+        if display_name.startswith("menu_"):
+            display_name = cat.capitalize()
         
         target_path = cat if current_path == "root" else f"{current_path}/{cat}"
         folder_buttons.append(btn(f"📁 {display_name}", f"nav_path_{target_path}"))
@@ -70,10 +74,9 @@ def get_dynamic_model_menu(models: list, lang: str = "de", current_path: str = "
             parent = "root"
         markup.add(btn(get_text("btn_back", lang), f"nav_path_{parent}"))
     else:
-        # Root Menü
         markup.add(
             btn(get_text("menu_profile", lang), "nav_profile"),
-            btn(get_text("menu_settings", lang), "nav_settings")
+            btn(get_text("menu_settings", lang), "nav_settings"),
         )
         markup.add(btn(get_text("menu_shop", lang), "cmd_shop"))
         markup.add(btn(get_text("menu_referral", lang), "nav_referral"))
@@ -81,22 +84,22 @@ def get_dynamic_model_menu(models: list, lang: str = "de", current_path: str = "
     return markup
 
 # --- CHAT MODE MENÜS ---
-def get_chat_mode_ask_menu(model_key, lang="de"):
+def get_chat_mode_ask_menu(model_key: str, lang: str = "de") -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         btn(get_text("btn_yes_chat", lang), f"chat_mode_yes_{model_key}"),
-        btn(get_text("btn_no_chat", lang), f"chat_mode_no_{model_key}")
+        btn(get_text("btn_no_chat", lang), f"chat_mode_no_{model_key}"),
     )
     markup.add(btn(get_text("btn_back", lang), "nav_path_text"))
     return markup
 
-def get_chat_active_menu(lang="de"):
+def get_chat_active_menu(lang: str = "de") -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup()
     markup.add(btn(get_text("btn_end_chat", lang), "stop_chat"))
     return markup
 
 # --- SETTINGS & HELPER MENUS ---
-def get_settings_menu(settings: dict, lang: str = "de"):
+def get_settings_menu(settings: dict, lang: str = "de") -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup(row_width=1)
     
     lang_label = "🇩🇪 Deutsch" if lang == "de" else ("🇬🇧 English" if lang == "en" else "🇷🇺 Русский")
@@ -111,23 +114,23 @@ def get_settings_menu(settings: dict, lang: str = "de"):
     markup.add(btn(get_text("btn_back", lang), "nav_main"))
     return markup
 
-def get_language_menu(lang: str = "de"):
+def get_language_menu(lang: str = "de") -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         btn("🇩🇪 Deutsch", "set_lang_de"),
         btn("🇬🇧 English", "set_lang_en"),
         btn("🇷🇺 Русский", "set_lang_ru"),
-        btn("🇰🇿 Қазақша", "set_lang_kk")
+        btn("🇰🇿 Қазақша", "set_lang_kk"),
     )
     markup.add(btn(get_text("btn_back", lang), "nav_settings"))
     return markup
 
-def get_back_menu(lang: str = "de", target="nav_path_root"):
+def get_back_menu(lang: str = "de", target: str = "nav_path_root") -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup()
     markup.add(btn(get_text("btn_back", lang), target))
     return markup
 
-def get_share_menu(link, text, lang="en"):
+def get_share_menu(link: str, text: str, lang: str = "en") -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup()
     url = f"https://t.me/share/url?url={quote(link)}&text={quote(text)}"
     markup.add(types.InlineKeyboardButton(get_text("btn_share_tg", lang), url=url))

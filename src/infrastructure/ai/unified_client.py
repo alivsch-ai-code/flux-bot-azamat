@@ -1,13 +1,68 @@
 import os
 import replicate
 import time
-from openai import OpenAI # pip install openai
-from src.domain.entities import AIModel, GenerationResult
+from typing import List, Optional
+
+from openai import OpenAI
+
 from src.config.settings import config
+from src.domain.entities import AIModel, GenerationResult, MediaFile
+from src.infrastructure.ai.dynamic_adapter import DynamicSchemaAdapter
+
+
+def _is_http_url(s: str) -> bool:
+    return isinstance(s, str) and (s.startswith("http://") or s.startswith("https://"))
+
+
+def _local_paths_to_urls(paths: List[str], client) -> List[str]:
+    """
+    Konvertiert lokale Dateipfade zu URIs für Replicate (format: uri).
+    - HTTP(S)-URLs bleiben unverändert.
+    - Kleine Dateien (<1MB): Data-URI (base64).
+    - Größere: Upload via Replicate Files API.
+    """
+    import base64
+    urls = []
+    for p in paths or []:
+        if _is_http_url(p):
+            urls.append(p)
+        elif os.path.isfile(p):
+            try:
+                with open(p, "rb") as f:
+                    content = f.read()
+                size = len(content)
+                ext = os.path.splitext(p)[1].lower() or ".jpg"
+                mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png" if ext == ".png" else "image/webp" if ext == ".webp" else "application/octet-stream"
+                if size < 1024 * 1024:
+                    b64 = base64.b64encode(content).decode("ascii")
+                    urls.append(f"data:{mime};base64,{b64}")
+                else:
+                    fn = os.path.basename(p) or "image.jpg"
+                    resp = client.files.create(content=content, filename=fn, type=mime)
+                    url = getattr(resp, "url", None)
+                    if not url and hasattr(resp, "urls") and isinstance(resp.urls, dict):
+                        url = resp.urls.get("get")
+                    urls.append(url if url else p)
+            except Exception:
+                urls.append(p)
+        else:
+            urls.append(p)
+    return urls
+
+
+def _first_image_path(media_files: Optional[List[MediaFile]]) -> Optional[str]:
+    if not media_files:
+        return None
+    for mf in media_files:
+        if mf.media_type.value == "image" and mf.path and os.path.exists(mf.path):
+            return mf.path
+    return None
+
 
 class UnifiedAIClient:
     def __init__(self, config):
         self.config = config
+        self.schema_adapter = DynamicSchemaAdapter()
         # OpenAI Client initialisieren (falls Key vorhanden)
         self.openai_client = None
         if config.OPENAI_API_KEY:
@@ -21,7 +76,12 @@ class UnifiedAIClient:
                 base_url="https://api.x.ai/v1"
             )
 
-    def generate(self, model: AIModel, prompt: str, image_url: str = None) -> GenerationResult:
+    def generate(
+        self,
+        model: AIModel,
+        prompt: str,
+        media_files: Optional[List[MediaFile]] = None,
+    ) -> GenerationResult:
         """
         Verteilt die Anfrage an den richtigen Provider (Replicate, OpenAI, Kling etc.)
         """
@@ -30,15 +90,15 @@ class UnifiedAIClient:
         try:
             # --- 1. REPLICATE ---
             if model.provider == "replicate":
-                return self._run_replicate(model, prompt, image_url)
-            
-            # --- 2. OPENAI (GPT & DALL-E) ---
+                return self._run_replicate(model, prompt, media_files)
+
             elif model.provider == "openai":
-                return self._run_openai(model, prompt, image_url)
+                img_path = _first_image_path(media_files)
+                return self._run_openai(model, prompt, img_path)
             
-            # --- 3. KLING AI (Video) ---
             elif model.provider == "kling":
-                return self._run_kling(model, prompt, image_url)
+                img_path = _first_image_path(media_files)
+                return self._run_kling(model, prompt, img_path)
 
             # --- 4. GROK (xAI) ---
             elif model.provider == "grok":
@@ -58,37 +118,60 @@ class UnifiedAIClient:
 
     # --- PROVIDER IMPLEMENTIERUNGEN ---
 
-    def _run_replicate(self, model, prompt, image_url):
-        input_data = {"prompt": prompt}
-        
-        # Bild-Input Logik
-        if image_url:
-            # Manche Modelle nennen es 'image', andere 'input_image'
-            if "image_to_image" in model.type or "upscale" in model.type:
-                input_data["image"] = image_url
-            else:
-                input_data["image"] = image_url
-        
-        # Parameter je nach Modell-Typ anpassen
-        if "flux" in model.key:
+    def _run_replicate(self, model, prompt, media_files):
+        file_paths = [mf.path for mf in (media_files or []) if mf.path] if media_files else []
+        file_urls = file_paths
+        if file_paths and any(not _is_http_url(p) for p in file_paths):
+            client = replicate.Client(api_token=self.config.REPLICATE_API_TOKEN)
+            file_urls = _local_paths_to_urls(file_paths, client)
+        if model.input_schema and isinstance(model.input_schema, dict):
+            input_data = self.schema_adapter.build_input_payload(
+                model_schema=model.input_schema,
+                user_prompt=prompt,
+                file_urls=file_urls if file_urls else None,
+            )
+        else:
+            input_data = {"prompt": prompt}
+            if file_urls:
+                input_data["image"] = file_urls[0]
+        if "flux" in model.key and "aspect_ratio" not in input_data:
             input_data["aspect_ratio"] = "16:9"
             input_data["safety_tolerance"] = 5
-        
-        if "minimax" in model.key:
-             input_data["prompt_optimizer"] = True
-
-        print(f"   🚀 Sende an Replicate: {model.replicate_id}")
+        if "minimax" in (model.key or ""):
+            input_data["prompt_optimizer"] = True
         output = replicate.run(model.replicate_id, input=input_data)
-        
-        # Ergebnis normalisieren (Replicate gibt oft Listen zurück)
-        if isinstance(output, list) and len(output) > 0:
-            return GenerationResult(success=True, data=output[0])
-        elif isinstance(output, str): # Stream URL oder Text
-             return GenerationResult(success=True, data=output)
-        # Manche Modelle geben Generatoren zurück
-        elif hasattr(output, '__iter__'): 
-            return GenerationResult(success=True, data="".join([str(x) for x in output]))
-            
+
+        # FileOutput/Objekte mit .url erhalten – URL und read() für result_delivery verfügbar.
+        # Text-Modelle liefern dagegen oft Listen/Iteratoren von Strings → komplett zusammenfügen.
+        if hasattr(output, "url"):
+            return GenerationResult(success=True, data=output)
+
+        # Listen-Ausgabe
+        if isinstance(output, list):
+            if not output:
+                return GenerationResult(success=True, data="")
+            first = output[0]
+            # Bilder/Media: erste URL / FileOutput
+            if hasattr(first, "url"):
+                return GenerationResult(success=True, data=first)
+            # Text: alle Teile zusammenfügen
+            return GenerationResult(success=True, data="".join(str(x) for x in output))
+
+        # Reiner String
+        if isinstance(output, str):
+            return GenerationResult(success=True, data=output)
+
+        # Generator / Iterator (z.B. Streaming-Text)
+        if hasattr(output, "__iter__") and not isinstance(output, (str, bytes)):
+            try:
+                collected = list(output)
+                if collected and hasattr(collected[0], "url"):
+                    return GenerationResult(success=True, data=collected[0])
+                return GenerationResult(success=True, data="".join(str(x) for x in collected))
+            except (TypeError, StopIteration):
+                pass
+
+        # Fallback: alles in String gießen
         return GenerationResult(success=True, data=str(output))
 
     def _run_openai(self, model, prompt, image_url):

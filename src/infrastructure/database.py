@@ -75,6 +75,17 @@ class DatabaseManager:
                 # Transactions & Daily Posts
                 c.execute('''CREATE TABLE IF NOT EXISTS transactions (id SERIAL PRIMARY KEY, user_id BIGINT, amount INTEGER, reason TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
                 c.execute('''CREATE TABLE IF NOT EXISTS daily_posts (id SERIAL PRIMARY KEY, date_to_send TEXT UNIQUE, message_text TEXT, image_path TEXT, sent_status INTEGER DEFAULT 0)''')
+
+                # Generation Errors (Fehlermeldungen mit User/Modell; werden nach 7 Tagen gelöscht)
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS generation_errors (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        model_key TEXT,
+                        error_message TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
                 
                 conn.commit()
                 conn.close()
@@ -243,7 +254,7 @@ class DatabaseManager:
             conn.close()
 
     def update_setting(self, user_id, column, value):
-         with self.lock:
+        with self.lock:
             conn = self._get_connection()
             c = conn.cursor()
             if column in ["language", "auto_opt", "daily_msg"]:
@@ -326,3 +337,105 @@ class DatabaseManager:
             results = c.fetchall()
             conn.close()
             return [r[0] for r in results]
+
+    # --- GENERATION ERRORS (Logging + 7-Tage-Cleanup) ---
+    def insert_generation_error(self, user_id: int, model_key: str, error_message: str):
+        """Speichert Fehlermeldung zu einem fehlgeschlagenen Generierungsversuch."""
+        with self.lock:
+            try:
+                conn = self._get_connection()
+                c = conn.cursor()
+                c.execute(
+                    "INSERT INTO generation_errors (user_id, model_key, error_message) VALUES (%s, %s, %s)",
+                    (user_id, model_key or "", (error_message or "")[:2000])
+                )
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f"⚠️ Fehler beim Speichern von generation_error: {e}")
+
+    def cleanup_old_generation_errors(self):
+        """Löscht Einträge älter als 7 Tage."""
+        with self.lock:
+            try:
+                conn = self._get_connection()
+                c = conn.cursor()
+                c.execute("DELETE FROM generation_errors WHERE created_at < NOW() - INTERVAL '7 days'")
+                deleted = c.rowcount
+                conn.commit()
+                conn.close()
+                if deleted:
+                    print(f"🧹 generation_errors: {deleted} Einträge älter als 7 Tage gelöscht.")
+            except Exception as e:
+                print(f"⚠️ generation_errors Cleanup: {e}")
+
+    # --- CHAT SESSIONS (eine Zeile pro User+Modell) ---
+
+    def _ensure_chat_sessions_table(self, cursor) -> None:
+        """Stellt sicher, dass die Tabelle chat_sessions existiert (idempotent)."""
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                user_id    BIGINT NOT NULL,
+                model_key  TEXT   NOT NULL,
+                history    TEXT   NOT NULL,
+                updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+                PRIMARY KEY (user_id, model_key)
+            );
+            """
+        )
+
+    def get_chat_session(self, user_id: int, model_key: str) -> list[dict]:
+        """Gibt History als Liste von {role, content} zurück."""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            self._ensure_chat_sessions_table(c)
+            conn.commit()
+            c.execute(
+                "SELECT history FROM chat_sessions WHERE user_id = %s AND model_key = %s",
+                (user_id, model_key),
+            )
+            row = c.fetchone()
+            conn.close()
+        if not row or not row[0]:
+            return []
+        try:
+            return json.loads(row[0])
+        except Exception:
+            return []
+
+    def save_chat_session(self, user_id: int, model_key: str, messages: list[dict]) -> None:
+        """Speichert History als JSON (UPSERT)."""
+        payload = json.dumps(messages, ensure_ascii=False)
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            self._ensure_chat_sessions_table(c)
+            c.execute(
+                """
+                INSERT INTO chat_sessions (user_id, model_key, history, updated_at)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (user_id, model_key)
+                DO UPDATE SET history = EXCLUDED.history, updated_at = NOW()
+                """,
+                (user_id, model_key, payload),
+            )
+            conn.commit()
+            conn.close()
+
+    def clear_chat_session(self, user_id: int, model_key: str | None = None) -> None:
+        """Löscht den Chat-Verlauf eines Users (optional nur für ein Modell)."""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            self._ensure_chat_sessions_table(c)
+            if model_key:
+                c.execute(
+                    "DELETE FROM chat_sessions WHERE user_id = %s AND model_key = %s",
+                    (user_id, model_key),
+                )
+            else:
+                c.execute("DELETE FROM chat_sessions WHERE user_id = %s", (user_id,))
+            conn.commit()
+            conn.close()

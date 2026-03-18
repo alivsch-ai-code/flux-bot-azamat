@@ -33,6 +33,8 @@ STRINGS = {
     "menu_kling": { "en": "⚡ Kling AI", "de": "⚡ Kling AI", "ru": "⚡ Kling AI", "kk": "⚡ Kling AI" },
     "menu_flux": { "en": "✨ Flux Models", "de": "✨ Flux Modelle", "ru": "✨ Flux", "kk": "✨ Flux" },
     "menu_pro": { "en": "💎 Professional", "de": "💎 Profi-Tools", "ru": "💎 Pro", "kk": "💎 Pro" },
+    "menu_wan": { "en": "🎬 Wan Video", "de": "🎬 Wan Video", "ru": "🎬 Wan", "kk": "🎬 Wan" },
+    "menu_hunyuan": { "en": "🎥 Hunyuan", "de": "🎥 Hunyuan", "ru": "🎥 Hunyuan", "kk": "🎥 Hunyuan" },
 
     # --- CHAT MODE ---
     "ask_chat_mode": {
@@ -83,6 +85,18 @@ STRINGS = {
     "model_example_intro": { "en": "<b>Here is our example:</b>", "de": "<b>Hier ist unser Beispiel:</b>", "ru": "<b>Вот пример:</b>", "kk": "<b>Мысал:</b>" },
     "model_req_prompt": { "en": "\n✍️ <b>Write your prompt:</b>", "de": "\n✍️ <b>Schreibe deinen Prompt:</b>", "ru": "\n✍️ <b>Напишите промт:</b>", "kk": "\n✍️ <b>Сұранысты жазыңыз:</b>" },
     "model_req_image": { "en": "\n📸 <b>Please upload an image:</b>", "de": "\n📸 <b>Bitte lade ein Bild hoch:</b>", "ru": "\n📸 <b>Загрузите фото:</b>", "kk": "\n📸 <b>Сурет жүктеңіз:</b>" },
+    "model_req_media": {
+        "en": "\n📎 <b>Upload media:</b> Images, videos or documents. Send multiple files, then write your prompt.",
+        "de": "\n📎 <b>Medien hochladen:</b> Bilder, Videos oder Dokumente. Mehrere Dateien senden, dann Prompt schreiben.",
+        "ru": "\n📎 <b>Загрузите медиа:</b> Изображения, видео или документы. Отправьте файлы, затем напишите промт.",
+        "kk": "\n📎 <b>Медиа жүктеңіз:</b> Суреттер, бейнелер немесе құжаттар. Файлдарды жіберіңіз, содан кейін сұраныс жазыңыз."
+    },
+    "media_received": {
+        "en": "✅ Received {count} file(s). Write your prompt or send more files.",
+        "de": "✅ {count} Datei(en) erhalten. Schreibe deinen Prompt oder sende weitere Dateien.",
+        "ru": "✅ Получено {count} файл(ов). Напишите промт или отправьте ещё файлы.",
+        "kk": "✅ {count} файл қабылданды. Сұраныс жазыңыз немесе қосымша жіберіңіз."
+    },
 
     # --- MAIN MENU BUTTONS ---
     "menu_profile": { "en": "👤 Profile", "de": "👤 Mein Profil", "ru": "👤 Профиль", "kk": "👤 Профиль" },
@@ -110,7 +124,31 @@ STRINGS = {
     "err_model_maintenance": { "en": "⚠️ This model is currently inactive.", "de": "⚠️ Dieses Modell ist derzeit in Wartung.", "ru": "⚠️ Модель на обслуживании.", "kk": "⚠️ Модель қызмет көрсетуде." },
     "err_no_credits": { "en": "🚫 Not enough Credits!", "de": "🚫 Nicht genug Credits!", "ru": "🚫 Недостаточно кредитов!", "kk": "🚫 Кредит жеткіліксіз!" },
     "err_gen_failed": { "en": "❌ Error: {result}", "de": "❌ Fehler: {result}", "ru": "❌ Ошибка: {result}", "kk": "❌ Қате: {result}" },
+    "media_link_too_long": {
+        "en": "✅ Result ready. The link is too long to display – the file was sent separately.",
+        "de": "✅ Ergebnis bereit. Der Link ist zu lang – die Datei wurde separat gesendet.",
+        "ru": "✅ Результат готов. Ссылка слишком длинная – файл отправлен отдельно.",
+        "kk": "✅ Нәтиже дайын. Сілтеме тым ұзын – файл бөлек жіберілді."
+    },
+    "media_send_failed": {
+        "en": "❌ Result is ready, but the file could not be sent. Please try again.",
+        "de": "❌ Das Ergebnis ist fertig, aber die Datei konnte nicht gesendet werden. Bitte versuche es erneut.",
+        "ru": "❌ Результат готов, но файл не удалось отправить. Попробуйте ещё раз.",
+        "kk": "❌ Нәтиже дайын, бірақ файл жіберілмеді. Қайталап көріңіз."
+    },
     "status_generating": { "en": "⏳ <b>Generating...</b>\n{tip}", "de": "⏳ <b>Generiere...</b>\n{tip}", "ru": "⏳ <b>Генерация...</b>\n{tip}", "kk": "⏳ <b>Жасалуда...</b>\n{tip}" },
+    "system_error_generic": {
+        "en": "❌ An unexpected error occurred. Please try again later.",
+        "de": "❌ Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es später erneut.",
+        "ru": "❌ Произошла ошибка. Попробуйте позже.",
+        "kk": "❌ Күтпеген қате орын алды. Кейінірек қайталап көріңіз."
+    },
+    "please_wait_longer": {
+        "en": "⏳ <b>Servers are busy – please wait a bit longer.</b>\n\nRetrying automatically...",
+        "de": "⏳ <b>Server sind ausgelastet – es dauert etwas länger, bitte warte.</b>\n\nWir versuchen es erneut...",
+        "ru": "⏳ <b>Серверы загружены – подождите немного дольше.</b>\n\nПовторная попытка...",
+        "kk": "⏳ <b>Серверлер жүктелген – аздап күтіңіз.</b>\n\nҚайталап көруде..."
+    },
     "success_caption": { "en": "✨ {prompt}\n💰 Cost: {cost}", "de": "✨ {prompt}\n💰 Kosten: {cost}", "ru": "✨ {prompt}\n💰 Цена: {cost}", "kk": "✨ {prompt}\n💰 Құны: {cost}" },
     "msg_next_step": { "en": "<b>What next?</b> 👇", "de": "<b>Was als nächstes?</b> 👇", "ru": "<b>Что дальше?</b> 👇", "kk": "<b>Келесі қадам?</b> 👇" },
     
@@ -143,8 +181,52 @@ STRINGS = {
         "kk": "🆘 <b>Қолдау</b>\n\nКөмек алу үшін әкімшіге хабарласыңыз."
     },
     "daily_news_on": { "en": "Daily News: ON", "de": "Daily News: AN", "ru": "Новости: ВКЛ", "kk": "Жаңалықтар: ҚОСУ" },
-    "daily_news_off": { "en": "Daily News: OFF", "de": "Daily News: AUS", "ru": "Новости: ВЫКЛ", "kk": "Жаңалықтар: ӨШІРУ" }
+    "daily_news_off": { "en": "Daily News: OFF", "de": "Daily News: AUS", "ru": "Новости: ВЫКЛ", "kk": "Жаңалықтар: ӨШІРУ" },
+
+    # --- DAILY FALLBACK (wenn keine DB-Nachricht für heute) ---
+    "daily_fallback": [
+        {
+            "en": "👋 Hello! Let's get started! Press /start to explore AI creation.",
+            "de": "👋 Hallo! Lass uns loslegen! Drück auf /start zum Loslegen.",
+            "ru": "👋 Привет! Давай начнём! Нажми /start.",
+            "kk": "👋 Сәлем! Бастайық! /start басыңыз."
+        },
+        {
+            "en": "🌟 Good day! Ready to create? Type /start to discover our AI tools.",
+            "de": "🌟 Schönen Tag! Bereit zu kreieren? Tippe /start für unsere KI-Tools.",
+            "ru": "🌟 Добрый день! Готовы творить? Введите /start.",
+            "kk": "🌟 Қайырлы күн! Жасауға дайынсыз ба? /start басыңыз."
+        },
+        {
+            "en": "✨ Hi there! Don't forget: /start opens the magic of AI creation.",
+            "de": "✨ Hey! Vergiss nicht: /start öffnet die KI-Magie.",
+            "ru": "✨ Привет! Нажми /start для ИИ-творчества.",
+            "kk": "✨ Сәлем! /start арқылы AI құбылысын ашыңыз."
+        },
+        {
+            "en": "🚀 Hello! Your AI hub is waiting. Press /start to begin!",
+            "de": "🚀 Hallo! Dein KI-Hub wartet. /start drücken!",
+            "ru": "🚀 Привет! Наш ИИ-бот ждёт. /start — и вперёд!",
+            "kk": "🚀 Сәлем! AI хаб күтеді. /start басыңыз!"
+        },
+        {
+            "en": "💡 Hey! New day, new ideas. Tap /start to create something amazing.",
+            "de": "💡 Hey! Neuer Tag, neue Ideen. /start für kreative KI.",
+            "ru": "💡 Эй! Новый день — новые идеи. /start для творчества.",
+            "kk": "💡 Сәлем! Жаңа күн, жаңа идеялар. /start басыңыз."
+        },
+    ]
 }
 
 def get_text(key, lang="en"):
     return STRINGS.get(key, {}).get(lang, STRINGS.get(key, {}).get("en", key))
+
+
+def get_random_daily_fallback(lang="de"):
+    """Zufällige Tages-Nachricht, wenn nichts in der DB steht. Pro User-Sprache."""
+    import random
+    options = STRINGS.get("daily_fallback", [])
+    if not options:
+        return get_text("daily_fallback", lang) if isinstance(STRINGS.get("daily_fallback"), dict) else "👋 Hallo! Drück /start"
+    msg = random.choice(options)
+    return msg.get(lang, msg.get("de", msg.get("en", "👋 Hallo! /start")))

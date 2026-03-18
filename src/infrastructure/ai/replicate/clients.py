@@ -1,11 +1,14 @@
 import replicate
-import time
 import random
+import time
+from typing import List, Optional
+
 from replicate.exceptions import ReplicateError
+
+from src.domain.entities import AIModel, GenerationResult, MediaFile
 from src.domain.interfaces import AIProvider
-from src.domain.entities import AIModel, GenerationResult
-# Importiere den neuen Adapter
 from src.infrastructure.ai.dynamic_adapter import DynamicSchemaAdapter
+
 
 class ReplicateClient(AIProvider):
     def __init__(self, api_key: str):
@@ -14,19 +17,14 @@ class ReplicateClient(AIProvider):
         # Adapter initialisieren
         self.adapter = DynamicSchemaAdapter()
 
-    def generate(self, model: AIModel, prompt: str, image_url: str = None, **kwargs) -> GenerationResult:
-        """
-        Generiert Content über Replicate.
-        Nutzt das Schema aus der Datenbank für die Input-Erstellung.
-        """
-        
-        # 1. Normalisierung: URLs immer als Liste
-        file_urls = []
-        if image_url:
-            if isinstance(image_url, list):
-                file_urls = image_url
-            else:
-                file_urls = [image_url]
+    def generate(
+        self,
+        model: AIModel,
+        prompt: str,
+        media_files: Optional[List[MediaFile]] = None,
+        **kwargs,
+    ) -> GenerationResult:
+        file_urls = [mf.path for mf in (media_files or []) if mf.path] if media_files else []
 
         # 2. Payload bauen via Adapter
         try:

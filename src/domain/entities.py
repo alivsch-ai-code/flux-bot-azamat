@@ -1,5 +1,28 @@
 from dataclasses import dataclass, field
-from typing import List, Optional, Any, Dict
+from enum import Enum
+from typing import List, Optional, Any, Dict, Union
+
+
+class MediaType(str, Enum):
+    """Unterstützte Medientypen für Modell-Inputs."""
+    IMAGE = "image"
+    VIDEO = "video"
+    AUDIO = "audio"
+    DOCUMENT = "document"
+
+
+@dataclass
+class MediaFile:
+    """Repräsentiert eine hochgeladene Datei (Bild, Video, Audio, Dokument)."""
+    path: str
+    media_type: MediaType
+    mime_type: Optional[str] = None
+
+    @property
+    def extension(self) -> str:
+        import os
+        return os.path.splitext(self.path)[1].lower()
+
 
 @dataclass
 class User:
@@ -56,5 +79,5 @@ class AIModel:
 @dataclass
 class GenerationResult:
     success: bool
-    data: Any = None 
+    data: Any = None  # URL(s), Text, oder Liste von URLs
     error: Optional[str] = None

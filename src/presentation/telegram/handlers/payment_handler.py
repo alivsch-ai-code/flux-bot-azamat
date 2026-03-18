@@ -1,6 +1,11 @@
+import logging
+
 from telebot import TeleBot, types
-from src.presentation.telegram.handlers.common import clear_context 
+
+from src.presentation.telegram.handlers.common import clear_context
 from src.utils.strings import get_text
+
+logger = logging.getLogger(__name__)
 
 CREDIT_PACKAGES = [
     ("S", "100 Credits", 50, 100),   
@@ -8,20 +13,24 @@ CREDIT_PACKAGES = [
     ("L", "1500 Credits", 500, 1500)
 ]
 
-def get_user_lang(message):
+def get_user_lang(msg) -> str:
+    """Holt die Sprachcode aus Message oder User (z. B. call.message oder call.from_user)."""
     try:
-        return message.from_user.language_code[:2]
-    except: return "de"
+        user = msg.from_user if hasattr(msg, "from_user") else msg
+        return (user.language_code or "de")[:2]
+    except (AttributeError, TypeError):
+        return "de"
 
-def register(bot: TeleBot, db):
+
+def register(bot: TeleBot, db) -> None:
     
     @bot.callback_query_handler(func=lambda call: call.data == "cmd_shop")
     def shop_callback(call):
         try:
             show_shop_logic(bot, call.message, db, get_user_lang(call.message))
             bot.answer_callback_query(call.id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Shop callback failed: %s", e)
 
     @bot.message_handler(commands=['buy', 'shop'])
     def shop_command(message):
@@ -47,8 +56,11 @@ def register(bot: TeleBot, db):
         )
         
         try:
-            bot.edit_message_text(text, message.chat.id, message.message_id, reply_markup=markup, parse_mode="HTML")
-        except:
+            bot.edit_message_text(
+                text, message.chat.id, message.message_id,
+                reply_markup=markup, parse_mode="HTML",
+            )
+        except Exception:
             bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode="HTML")
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('buy_'))
@@ -77,31 +89,39 @@ def register(bot: TeleBot, db):
                 start_parameter="buy_credits",
                 reply_markup=markup
             )
-            try: bot.answer_callback_query(call.id)
-            except: pass
+            try:
+                bot.answer_callback_query(call.id)
+            except Exception:
+                pass
         except Exception as e:
-            print(f"Error sending invoice: {e}")
+            logger.error("Error sending invoice: %s", e)
 
     @bot.callback_query_handler(func=lambda call: call.data == "cancel_invoice")
     def handle_cancel_invoice(call):
-        try: bot.delete_message(call.message.chat.id, call.message.message_id)
-        except: pass 
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+        except Exception:
+            pass
 
     @bot.pre_checkout_query_handler(func=lambda query: True)
     def checkout(pre_checkout_query):
         bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
 
-    @bot.message_handler(content_types=['successful_payment'])
+    @bot.message_handler(content_types=["successful_payment"])
     def got_payment(message):
         payload = message.successful_payment.invoice_payload
-        credits_amount = int(payload.split('_')[1])
+        try:
+            credits_amount = int(payload.split("_")[1])
+        except (IndexError, ValueError) as e:
+            logger.error("Invalid payment payload %r: %s", payload, e)
+            return
         user_id = message.chat.id
         
         db.update_credits(user_id, credits_amount, "purchase")
         new_balance = db.get_user_credits(user_id)
         
         bot.send_message(
-            user_id, 
-            f"✅ <b>Zahlung erfolgreich!</b>\n\n+{credits_amount} Credits gutgeschrieben.\nNeuer Stand: <b>{new_balance} Credits</b>", 
-            parse_mode="HTML"
+            user_id,
+            f"✅ <b>Zahlung erfolgreich!</b>\n\n+{credits_amount} Credits gutgeschrieben.\nNeuer Stand: <b>{new_balance} Credits</b>",
+            parse_mode="HTML",
         )

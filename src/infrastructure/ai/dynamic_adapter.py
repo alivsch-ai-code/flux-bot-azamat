@@ -20,9 +20,10 @@ class DynamicSchemaAdapter:
         
         # 2. Keywords für Dateityp-Erkennung in Schema-Keys
         self.type_keywords = {
-            "image": ["image", "img", "photo", "face", "avatar", "mask", "init_image", "target_image", "swap_image"],
-            "video": ["video", "movie", "footage", "clip", "input_video"],
-            "audio": ["audio", "sound", "music", "voice", "mp3", "wav", "speech"]
+            "image": ["image", "img", "photo", "face", "avatar", "mask", "init_image", "target_image", "swap_image", "input_image", "image_input"],
+            "video": ["video", "movie", "footage", "clip", "input_video", "video_input"],
+            "audio": ["audio", "sound", "music", "voice", "mp3", "wav", "speech", "input_audio"],
+            "document": ["document", "file", "pdf", "doc", "input_file"],
         }
 
     # =========================================================================
@@ -75,7 +76,10 @@ class DynamicSchemaAdapter:
             # Check 2: Name enthält Keywords (aber kein Integer/Boolean!)
             type_def = props.get("type", "string")
             is_string_or_undef = type_def not in ["integer", "number", "boolean"]
-            name_match = any(k in key.lower() for k in ["image", "video", "audio", "file", "path", "mask"])
+            name_match = any(
+                k in key.lower()
+                for k in ["image", "video", "audio", "file", "path", "mask", "document", "pdf"]
+            )
             
             # Ignoriere output_format
             if key in ["output_format", "format"]:
@@ -98,38 +102,57 @@ class DynamicSchemaAdapter:
         # Nach x-order sortieren (Wichtig für Face Swap: Target=0, Swap=1)
         schema_slots.sort(key=lambda x: x["order"])
 
-        # 2. User-Dateien klassifizieren
+        # 2. User-Dateien klassifizieren (inkl. Dokumente)
         user_files = []
-        for url in file_urls:
+        for path_or_url in file_urls:
             ftype = "unknown"
-            ext = os.path.splitext(url.lower())[1]
-            if ext in [".jpg", ".jpeg", ".png", ".webp", ".heic"]: ftype = "image"
-            elif ext in [".mp4", ".mov", ".webm", ".avi", ".mkv"]: ftype = "video"
-            elif ext in [".mp3", ".wav", ".m4a", ".flac", ".ogg"]: ftype = "audio"
-            user_files.append({"url": url, "type": ftype})
+            ext = os.path.splitext(str(path_or_url).lower())[1]
+            if ext in [".jpg", ".jpeg", ".png", ".webp", ".heic", ".bmp", ".gif"]:
+                ftype = "image"
+            elif ext in [".mp4", ".mov", ".webm", ".avi", ".mkv", ".m4v"]:
+                ftype = "video"
+            elif ext in [".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac"]:
+                ftype = "audio"
+            elif ext in [".pdf", ".doc", ".docx", ".txt", ".md"]:
+                ftype = "document"
+            user_files.append({"url": path_or_url, "type": ftype})
 
-        # 3. Zuweisung (Matching)
+        # 3. Zuweisung (Matching) – unterstützt Einzeldateien und Arrays
         used_files_indices = set()
 
         for slot in schema_slots:
-            best_match_index = -1
-            
-            # Strategie A: Exakter Typ-Match
-            for i, ufile in enumerate(user_files):
-                if i not in used_files_indices and ufile["type"] == slot["type"]:
-                    best_match_index = i
-                    break
-            
-            # Strategie B: Fallback
-            if best_match_index == -1 and (slot["type"] == "unknown" or len(user_files) == len(schema_slots)):
-                 for i, ufile in enumerate(user_files):
-                    if i not in used_files_indices:
+            # Prüfen ob Slot ein Array erwartet (z.B. images: [...])
+            props = properties.get(slot["key"], {})
+            is_array_slot = props.get("type") == "array"
+
+            if is_array_slot:
+                # Alle passenden Dateien sammeln
+                matching_urls = []
+                for i, ufile in enumerate(user_files):
+                    if i not in used_files_indices and (
+                        ufile["type"] == slot["type"] or slot["type"] == "unknown"
+                    ):
+                        matching_urls.append(ufile["url"])
+                        used_files_indices.add(i)
+                if matching_urls:
+                    payload[slot["key"]] = matching_urls
+            else:
+                # Einzeldatei wie bisher
+                best_match_index = -1
+                for i, ufile in enumerate(user_files):
+                    if i not in used_files_indices and ufile["type"] == slot["type"]:
                         best_match_index = i
                         break
-            
-            if best_match_index != -1:
-                payload[slot["key"]] = user_files[best_match_index]["url"]
-                used_files_indices.add(best_match_index)
+                if best_match_index == -1 and (
+                    slot["type"] == "unknown" or len(user_files) == len(schema_slots)
+                ):
+                    for i, ufile in enumerate(user_files):
+                        if i not in used_files_indices:
+                            best_match_index = i
+                            break
+                if best_match_index != -1:
+                    payload[slot["key"]] = user_files[best_match_index]["url"]
+                    used_files_indices.add(best_match_index)
 
     def _find_schema_key(self, properties, candidates):
         for cand in candidates:

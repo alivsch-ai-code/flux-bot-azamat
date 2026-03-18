@@ -1,13 +1,18 @@
+import logging
 import os
+
 from telebot import TeleBot
+
 from src.presentation.telegram import keyboards
+from src.presentation.telegram.handlers.common import clear_context, get_context
 from src.utils.strings import get_text
-from src.presentation.telegram.handlers.common import get_context, clear_context, set_context
 
-REFERRAL_REWARD = 50 
+logger = logging.getLogger(__name__)
 
-def register(bot: TeleBot, generation_service, model_registry, db): 
-    
+REFERRAL_REWARD = 50
+
+
+def register(bot: TeleBot, generation_service, db) -> None:
     def get_lang(user_id):
         return db.get_user_settings(user_id)["lang"]
 
@@ -18,21 +23,26 @@ def register(bot: TeleBot, generation_service, model_registry, db):
         db.add_user_if_not_exists(user_id, message.from_user.username)
         lang = get_lang(user_id)
         
-        # hier wird geprüft wie der user das letzte mal verlassen hat 
         old_ctx = get_context(user_id)
         if old_ctx and "last_bot_msg_id" in old_ctx:
-            try: bot.delete_message(user_id, old_ctx["last_bot_msg_id"])
-            except: pass
+            try:
+                bot.delete_message(user_id, old_ctx["last_bot_msg_id"])
+            except Exception:
+                pass
         clear_context(user_id)
-        
+
         args = message.text.split()
         if len(args) > 1 and not db.user_exists(user_id):
-             try:
+            try:
                 ref_id = int(args[1])
                 if ref_id != user_id:
                     db.update_credits(ref_id, REFERRAL_REWARD, "referral")
-                    bot.send_message(ref_id, get_text("ref_success_referrer", get_lang(ref_id)).format(amount=REFERRAL_REWARD))
-             except: pass
+                    bot.send_message(
+                        ref_id,
+                        get_text("ref_success_referrer", get_lang(ref_id)).format(amount=REFERRAL_REWARD),
+                    )
+            except (ValueError, IndexError):
+                pass
         else:
             # Empfehle uns lieber user
             no_referral_text = get_text("no_referral", lang)
@@ -101,14 +111,15 @@ def register(bot: TeleBot, generation_service, model_registry, db):
              new_text = get_text("support_text", lang)
              new_markup = keyboards.get_back_menu(lang, target="nav_main")
 
-        # Nachricht aktualisieren
         if new_text and new_markup:
             try:
-                bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode='HTML')
-            except:
-                # Falls Nachricht zu alt oder Fehler
-                bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode='HTML')
-        
+                bot.edit_message_text(
+                    new_text, user_id, call.message.message_id,
+                    reply_markup=new_markup, parse_mode="HTML",
+                )
+            except Exception:
+                bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
+
         try:
             bot.answer_callback_query(call.id)
         except Exception:
@@ -125,12 +136,14 @@ def register(bot: TeleBot, generation_service, model_registry, db):
         new_settings = db.get_user_settings(user_id)
         lang = new_settings["lang"]
         bot.edit_message_reply_markup(
-            user_id, 
-            call.message.message_id, 
-            reply_markup=keyboards.get_settings_menu(new_settings, lang)
+            user_id,
+            call.message.message_id,
+            reply_markup=keyboards.get_settings_menu(new_settings, lang),
         )
-        try: bot.answer_callback_query(call.id)
-        except: pass
+        try:
+            bot.answer_callback_query(call.id)
+        except Exception:
+            pass
 
     @bot.callback_query_handler(func=lambda c: c.data == "toggle_daily")
     def handle_toggle_daily(call):
@@ -142,13 +155,15 @@ def register(bot: TeleBot, generation_service, model_registry, db):
         new_settings = db.get_user_settings(user_id)
         lang = new_settings["lang"]
         bot.edit_message_reply_markup(
-            user_id, 
-            call.message.message_id, 
-            reply_markup=keyboards.get_settings_menu(new_settings, lang)
+            user_id,
+            call.message.message_id,
+            reply_markup=keyboards.get_settings_menu(new_settings, lang),
         )
         status_key = "daily_news_on" if new_val else "daily_news_off"
-        try: bot.answer_callback_query(call.id, get_text(status_key, lang))
-        except: pass
+        try:
+            bot.answer_callback_query(call.id, get_text(status_key, lang))
+        except Exception:
+            pass
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith("set_lang_"))
     def handle_set_lang(call):
@@ -158,23 +173,26 @@ def register(bot: TeleBot, generation_service, model_registry, db):
         
         settings = db.get_user_settings(user_id)
         
-        try: bot.answer_callback_query(call.id, get_text("lang_selected", new_lang))
-        except: pass
-        
+        try:
+            bot.answer_callback_query(call.id, get_text("lang_selected", new_lang))
+        except Exception:
+            pass
+
         bot.edit_message_text(
             get_text("settings_title", new_lang),
             user_id,
             call.message.message_id,
             reply_markup=keyboards.get_settings_menu(settings, new_lang),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
-    # Admin Cheat
-    @bot.message_handler(commands=['cheat_mode'])
+    @bot.message_handler(commands=["cheat_mode"])
     def cheat(m):
-        try: ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
-        except: ADMIN_ID = 0
-        if m.from_user.id == ADMIN_ID:
+        try:
+            admin_id = int(os.getenv("ADMIN_ID", "0"))
+        except (ValueError, TypeError):
+            admin_id = 0
+        if m.from_user.id == admin_id:
             db.update_credits(m.chat.id, 10000)
             lang = get_lang(m.chat.id)
             bot.reply_to(m, get_text("admin_cheat_success", lang))

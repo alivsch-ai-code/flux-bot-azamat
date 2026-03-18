@@ -52,7 +52,39 @@ def setup_database():
     cur.execute(f"CREATE TABLE ai_models ({schema_fields});")
     # Staging erhält zusätzlich die Approval-Spalte
     cur.execute(f"CREATE TABLE ai_models_staging ({schema_fields}, is_approved INTEGER DEFAULT 0);")
-    
+
+    # Persistenter Chat-Verlauf (optional, wird nicht gedroppt)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            model_key TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+            content TEXT NOT NULL,
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_user_model_created
+        ON chat_messages (user_id, model_key, created_at);
+        """
+    )
+
+    # Neu: Session-basierter Verlauf (eine Zeile pro User+Modell mit JSON-History)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            user_id    BIGINT NOT NULL,
+            model_key  TEXT   NOT NULL,
+            history    TEXT   NOT NULL,
+            updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+            PRIMARY KEY (user_id, model_key)
+        );
+        """
+    )
     conn.commit()
     cur.close()
     conn.close()

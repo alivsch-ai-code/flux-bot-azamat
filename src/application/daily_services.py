@@ -2,6 +2,13 @@ import time
 import threading
 from datetime import datetime
 
+from src.utils.strings import get_random_daily_fallback
+
+# Fallback nur 1× pro Tag senden, wenn keine DB-Nachricht
+_last_fallback_date = None
+_last_errors_cleanup_date = None
+
+
 class DailyService:
     def __init__(self, bot, db):
         self.bot = bot
@@ -22,23 +29,31 @@ class DailyService:
         """
         while self.running:
             try:
+                today = datetime.now().strftime("%Y-%m-%d")
                 # 1. Prüfen: Gibt es für HEUTE einen Post, der noch NICHT gesendet wurde?
                 # Die Datenbank-Methode 'get_due_daily_post' sucht nach:
                 # WHERE date_to_send = HEUTE AND sent_status = 0
                 post = self.db.get_due_daily_post() 
                 
                 if post:
-                    # Erwartet Tuple: (id, message_text, image_path)
                     post_id, text, img_path = post
                     print(f"📢 Daily Service: Neue Nachricht für heute gefunden (ID: {post_id}). Sende...")
-                    
-                    # 2. Nachricht an alle User verteilen
                     self._broadcast(text, img_path)
-                    
-                    # 3. Status in DB aktualisieren (sent_status = 1)
                     self.db.mark_post_as_sent(post_id)
                     print(f"✅ Daily Service: Nachricht {post_id} als gesendet markiert.")
-                
+                else:
+                    # Kein Post in DB → Fallback: 1× pro Tag „Hallo! Drück /start“ in User-Sprache
+                    global _last_fallback_date
+                    if _last_fallback_date != today:
+                        self._broadcast_fallback()
+                        _last_fallback_date = today
+
+                # generation_errors: Einträge älter als 7 Tage löschen (1× pro Tag)
+                global _last_errors_cleanup_date
+                if _last_errors_cleanup_date != today:
+                    self.db.cleanup_old_generation_errors()
+                    _last_errors_cleanup_date = today
+
             except Exception as e:
                 print(f"⚠️ Fehler im Daily Service Loop: {e}")
 
@@ -97,3 +112,25 @@ class DailyService:
             print(f"🏁 Broadcast beendet. Erfolgreich: {success_count}/{len(users)}")
         except Exception as e:
             print(f"⚠️ Kritischer Fehler im Broadcast: {e}")
+
+    def _broadcast_fallback(self):
+        """Sendet Fallback-Nachricht (Hallo, /start) in der Sprache jedes Users, wenn keine DB-Nachricht da ist."""
+        try:
+            users = self.db.get_subscribed_users()
+            if not users:
+                return
+            print(f"📨 Daily Fallback: Sende an {len(users)} User (kein DB-Post für heute)...")
+            success = 0
+            for user_id in users:
+                try:
+                    settings = self.db.get_user_settings(user_id)
+                    lang = settings.get("lang", "de")
+                    text = get_random_daily_fallback(lang)
+                    self.bot.send_message(user_id, text, parse_mode="HTML")
+                    success += 1
+                    time.sleep(0.05)
+                except Exception:
+                    pass
+            print(f"✅ Daily Fallback: {success}/{len(users)} erfolgreich.")
+        except Exception as e:
+            print(f"⚠️ Fehler beim Daily Fallback: {e}")

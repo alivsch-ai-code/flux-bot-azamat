@@ -2,40 +2,54 @@ import os
 import time
 import replicate
 from PIL import Image
-from src.domain.entities import AIModel, GenerationResult
+from typing import List, Optional
 
-# HINWEIS: Wir importieren KEIN statisches AI_MODELS mehr, 
-# sondern laden Hilfs-Modelle über self.repo (Datenbank).
+from src.domain.entities import AIModel, GenerationResult, MediaFile
+from src.infrastructure.security.validator import InputValidator
 
 class GenerationService:
     def __init__(self, repo, ai):
         self.repo = repo  # Das ist der DatabaseManager
         self.ai = ai      # Das ist der UnifiedAIClient
 
-    def process_request(self, user_id: int, model: AIModel, prompt: str, image_url: str = None):
-        print(f"DEBUG: process_request() gestartet für Modell: {model.key}")
-        
+    def process_request(
+        self,
+        user_id: int,
+        model: AIModel,
+        prompt: str,
+        media_files: Optional[List[MediaFile]] = None,
+    ):
+        # 0. Prompt-Sicherheit & Bereinigung
+        if not InputValidator.validate_safety(prompt or ""):
+            return False, "⚠️ Deine Eingabe wurde aus Sicherheitsgründen abgelehnt."
+        prompt = InputValidator.sanitize_prompt(prompt or "")
+
         # 1. User & Credits Check
         user_credits = self.repo.get_user_credits(user_id)
         if user_credits < model.cost:
             return False, "Zu wenig Guthaben! Bitte aufladen."
 
-        # 2. Input Validation (Bildgröße Check)
-        if image_url and os.path.exists(image_url) and "image_analysis" not in model.type:
+        # Erste Bild-Datei für Pipelines (Backward-Kompatibilität)
+        first_image_path = None
+        if media_files:
+            for mf in media_files:
+                if mf.media_type.value == "image" and mf.path and os.path.exists(mf.path):
+                    first_image_path = mf.path
+                    break
+
+        # 2. Input Validation (Bildgröße Check für erste Bild-Datei)
+        if first_image_path and "image_analysis" not in (model.type or []):
             try:
-                with Image.open(image_url) as img:
+                with Image.open(first_image_path) as img:
                     width, height = img.size
                     if width < 500 or height < 500:
                         return False, "⚠️ Bildqualität zu niedrig. Bitte lade ein Bild mit mindestens 500px hoch."
             except Exception:
-                pass # Soft Fail: Wenn Datei nicht lesbar, versuchen wir es trotzdem
+                pass
 
-        # 3. Generierung Starten
         try:
-            # --- FALL A: PREMIUM PIPELINE (4 Bilder) ---
             if model.key == "premium-headshot-pipeline":
-                print("⏳ Premium Pipeline wird gestartet...")
-                success, result_list = self._run_premium_pipeline(prompt, image_url)
+                success, result_list = self._run_premium_pipeline(prompt, first_image_path)
                 
                 if not success: 
                     return False, result_list # Fehlermeldung zurückgeben
@@ -46,7 +60,7 @@ class GenerationService:
             
             # --- FALL B: ULTIMATE PIPELINE (Legacy Einzelbild) ---
             elif model.key == "ultimate-headshot-pipeline":
-                success, result_url = self._run_single_pipeline(prompt, image_url)
+                success, result_url = self._run_single_pipeline(prompt, first_image_path)
                 if not success: 
                     return False, result_url
                 
@@ -55,7 +69,7 @@ class GenerationService:
 
             # --- FALL C: STANDARD MODELLE (Via Unified Client) ---
             else:
-                result = self.ai.generate(model, prompt, image_url)
+                result = self.ai.generate(model, prompt, media_files=media_files)
                 if not result.success:
                     return False, f"Fehler: {result.error}"
                 
@@ -73,7 +87,7 @@ class GenerationService:
         print(f"⚙️ Starte Premium Pipeline für: '{user_prompt}'")
 
         if not user_image_path or not os.path.exists(user_image_path):
-             return False, "Selfie für Face-Swap fehlt!"
+            return False, "Selfie für Face-Swap fehlt!"
 
         # WICHTIG: Modelle jetzt aus der DB holen statt aus statischem Dict
         flux_model = self.repo.get_model_by_key("flux-1.1-pro")
