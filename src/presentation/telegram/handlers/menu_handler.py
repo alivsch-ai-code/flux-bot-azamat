@@ -8,6 +8,7 @@ from src.presentation.telegram.handlers.common import clear_context, get_context
 from src.utils.strings import get_text
 
 logger = logging.getLogger(__name__)
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 REFERRAL_REWARD = 50
 
@@ -15,6 +16,34 @@ REFERRAL_REWARD = 50
 def register(bot: TeleBot, generation_service, db) -> None:
     def get_lang(user_id):
         return db.get_user_settings(user_id)["lang"]
+
+    # 0. ADMIN: Modelle aus Neon neu laden (Cache leeren)
+    @bot.message_handler(commands=['reload_models'])
+    def admin_reload_models(message):
+        user_id = message.chat.id
+        if ADMIN_ID and user_id != ADMIN_ID:
+            return
+        lang = get_lang(user_id)
+        try:
+            # Cache invalidieren
+            if hasattr(db, "_models_cache"):
+                delattr(db, "_models_cache")
+            if hasattr(db, "_models_cache_ts"):
+                delattr(db, "_models_cache_ts")
+            # einmalig neu holen (Neon-Fetch triggern)
+            models = db.get_all_models()
+            bot.send_message(
+                user_id,
+                f"✅ Modelle neu aus Neon geladen. Anzahl: {len(models)}",
+                parse_mode="HTML",
+            )
+        except Exception as e:
+            logger.exception("Admin reload_models failed: %s", e)
+            bot.send_message(
+                user_id,
+                f"❌ Fehler beim Neuladen der Modelle: {e}",
+                parse_mode="HTML",
+            )
 
     # 1. START COMMAND
     @bot.message_handler(commands=['start'])
