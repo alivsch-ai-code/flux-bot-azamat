@@ -87,6 +87,13 @@ class DatabaseManager:
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 ''')
+                # Bot-Einstellungen (global, z.B. menu_mode: commands | keyboard)
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS bot_settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL DEFAULT ''
+                    )
+                ''')
                 
                 conn.commit()
                 conn.close()
@@ -277,7 +284,29 @@ class DatabaseManager:
                 c.execute(f"UPDATE users SET {column} = %s WHERE user_id = %s", (value, user_id))
                 conn.commit()
             conn.close()
-            
+
+    def get_bot_setting(self, key: str, default: str = "") -> str:
+        """Liest einen globalen Bot-Einstellungswert (z.B. menu_mode)."""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("SELECT value FROM bot_settings WHERE key = %s", (key,))
+            res = c.fetchone()
+            conn.close()
+            return res[0] if res else default
+
+    def set_bot_setting(self, key: str, value: str) -> None:
+        """Speichert eine globale Bot-Einstellung."""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO bot_settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = %s",
+                (key, value, value)
+            )
+            conn.commit()
+            conn.close()
+
     def set_user_chat_mode(self, user_id, model_key, active=True):
         with self.lock:
             conn = self._get_connection()

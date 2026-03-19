@@ -22,8 +22,37 @@ def get_user_lang(msg) -> str:
         return "de"
 
 
+def show_shop_logic(bot: TeleBot, message, db, lang: str = "de") -> None:
+    """Zeigt den Shop (Credits kaufen). Aufrufbar aus Callback oder Tastatur-Button."""
+    clear_context(message.chat.id)
+
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    for label, desc, price, credits in CREDIT_PACKAGES:
+        btn_text = f"💎 {desc} ({price} ⭐️)"
+        markup.add(types.InlineKeyboardButton(btn_text, callback_data=f"buy_{credits}_{price}"))
+
+    back_text = get_text("btn_back", lang)
+    markup.add(types.InlineKeyboardButton(back_text, callback_data="nav_main"))
+
+    current_credits = db.get_user_credits(message.chat.id)
+
+    text = (
+        f"<b>💳 Guthaben aufladen</b>\n"
+        f"Dein aktuelles Guthaben: <b>{current_credits} Credits</b>\n\n"
+        f"Wähle ein Paket, um sicher via <b>Telegram Stars</b> aufzuladen:"
+    )
+
+    try:
+        bot.edit_message_text(
+            text, message.chat.id, message.message_id,
+            reply_markup=markup, parse_mode="HTML",
+        )
+    except Exception:
+        bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode="HTML")
+
+
 def register(bot: TeleBot, db) -> None:
-    
+
     @bot.callback_query_handler(func=lambda call: call.data == "cmd_shop")
     def shop_callback(call):
         try:
@@ -35,33 +64,6 @@ def register(bot: TeleBot, db) -> None:
     @bot.message_handler(commands=['buy', 'shop'])
     def shop_command(message):
         show_shop_logic(bot, message, db, get_user_lang(message))
-
-    def show_shop_logic(bot, message, db, lang="de"):
-        clear_context(message.chat.id)
-        
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        for label, desc, price, credits in CREDIT_PACKAGES:
-            btn_text = f"💎 {desc} ({price} ⭐️)"
-            markup.add(types.InlineKeyboardButton(btn_text, callback_data=f"buy_{credits}_{price}"))
-        
-        back_text = get_text("btn_back", lang)
-        markup.add(types.InlineKeyboardButton(back_text, callback_data="nav_main"))
-        
-        current_credits = db.get_user_credits(message.chat.id)
-        
-        text = (
-            f"<b>💳 Guthaben aufladen</b>\n"
-            f"Dein aktuelles Guthaben: <b>{current_credits} Credits</b>\n\n"
-            f"Wähle ein Paket, um sicher via <b>Telegram Stars</b> aufzuladen:"
-        )
-        
-        try:
-            bot.edit_message_text(
-                text, message.chat.id, message.message_id,
-                reply_markup=markup, parse_mode="HTML",
-            )
-        except Exception:
-            bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode="HTML")
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('buy_'))
     def send_invoice(call):

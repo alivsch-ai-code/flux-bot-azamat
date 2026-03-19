@@ -5,6 +5,7 @@ from telebot import TeleBot
 
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.common import clear_context, get_context
+from src.presentation.telegram.handlers.payment_handler import show_shop_logic
 from src.utils.strings import get_text
 
 logger = logging.getLogger(__name__)
@@ -13,9 +14,81 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 REFERRAL_REWARD = 50
 
 
+def _is_keyboard_mode(db) -> bool:
+    return db.get_bot_setting("menu_mode", "commands") == "keyboard"
+
+
 def register(bot: TeleBot, generation_service, db) -> None:
     def get_lang(user_id):
         return db.get_user_settings(user_id)["lang"]
+
+    # 0a. ADMIN: Menü-Modus umschalten (commands | keyboard)
+    @bot.message_handler(commands=['set_menu_mode'])
+    def admin_set_menu_mode(message):
+        user_id = message.chat.id
+        if ADMIN_ID and user_id != ADMIN_ID:
+            return
+        lang = get_lang(user_id)
+        parts = (message.text or "").strip().split()
+        if len(parts) < 2:
+            bot.reply_to(message, get_text("admin_menu_mode_invalid", lang))
+            return
+        mode = parts[1].lower()
+        if mode not in ("commands", "keyboard"):
+            bot.reply_to(message, get_text("admin_menu_mode_invalid", lang))
+            return
+        db.set_bot_setting("menu_mode", mode)
+        bot.reply_to(message, get_text("admin_menu_mode_set", lang).format(mode=mode))
+
+    def _should_handle_keyboard_nav(m):
+        if not _is_keyboard_mode(db) or not m.text:
+            return False
+        action = keyboards.get_keyboard_action_for_text(m.text)
+        if not action:
+            return False
+        ctx = get_context(m.chat.id)
+        if ctx and ctx.get("step") == "waiting_for_prompt":
+            return False
+        chat_state = db.get_user_chat_state(m.chat.id)
+        if chat_state and chat_state.get("is_chat"):
+            return False
+        return True
+
+    @bot.message_handler(func=_should_handle_keyboard_nav)
+    def handle_keyboard_nav(message):
+        user_id = message.chat.id
+        action = keyboards.get_keyboard_action_for_text(message.text)
+        lang = get_lang(user_id)
+        if action == "nav_main":
+            clear_context(user_id)
+            welcome_text = get_text("welcome", lang)
+            all_models = db.get_all_models()
+            markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+            bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+        elif action.startswith("nav_path_"):
+            target_path = action.replace("nav_path_", "")
+            all_models = db.get_all_models()
+            markup = keyboards.get_dynamic_model_menu(all_models, lang, target_path)
+            title_key = f"title_{target_path.replace('/', '_')}"
+            title_text = get_text(title_key, lang)
+            if title_text == title_key:
+                cat_name = target_path.split("/")[-1].capitalize()
+                display_name = get_text(f"menu_{cat_name.lower()}", lang)
+                if display_name.startswith("menu_"):
+                    display_name = cat_name
+                title_text = f"📂 <b>{display_name}</b>"
+            bot.send_message(user_id, title_text, reply_markup=markup, parse_mode='HTML')
+        elif action == "nav_profile":
+            creds = db.get_user_credits(user_id)
+            text = get_text("profile_text", lang).format(
+                name=message.from_user.first_name,
+                creds=creds,
+                user_id=user_id
+            )
+            markup = keyboards.get_back_menu(lang, target="nav_main")
+            bot.send_message(user_id, text, reply_markup=markup, parse_mode='HTML')
+        elif action == "cmd_shop":
+            show_shop_logic(bot, message, db, lang)
 
     # 0. ADMIN: Modelle aus Neon neu laden (Cache leeren)
     @bot.message_handler(commands=['reload_models'])
@@ -83,12 +156,15 @@ def register(bot: TeleBot, generation_service, db) -> None:
 
 
         welcome_text = get_text("welcome", lang)
-        
-        # Modelle laden & Menü bauen
         all_models = db.get_all_models()
-        markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
-        
-        bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+
+        if _is_keyboard_mode(db):
+            # Tastatur-Modus: Menü direkt unter dem Eingabefeld (Kategorien als Buttons)
+            markup = keyboards.get_main_reply_keyboard(lang)
+            bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+        else:
+            markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+            bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
 
     # 2. NAVIGATION (Static Menus)
     # WICHTIG: Wir ignorieren hier 'nav_path_', damit gen_handler diese übernehmen kann!
