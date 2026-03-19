@@ -142,13 +142,23 @@
     let currentPath = 'root';
 
     function sendAction(action, payload = {}) {
-      const data = JSON.stringify({ action, ...payload });
-      if (tg?.sendData) {
-        tg.sendData(data);
-      } else {
-        console.log('Would send:', data);
-        alert('Demo: ' + data);
-      }
+      const payload2 = { action, ...payload };
+      const hasInitData = tg?.initData;
+      if (hasInitData) payload2.init_data = tg.initData;
+      if (hasInitData) {
+        fetch(API_BASE + '/api/webapp_action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload2)
+        }).then(r => r.json()).then(res => {
+          if (res.ok && tg?.close) tg.close();
+        }).catch(() => {
+          if (tg?.sendData) tg.sendData(JSON.stringify({ action }));
+          else if (tg?.close) tg.close();
+        });
+      } else if (tg?.sendData) {
+        tg.sendData(JSON.stringify({ action }));
+      } else if (tg?.close) tg.close();
     }
 
     document.querySelectorAll('.card[data-action]').forEach(card => {

@@ -25,6 +25,36 @@ def _is_webapp_mode(db) -> bool:
     return db.get_bot_setting("menu_mode", "commands") == "webapp"
 
 
+def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
+    """Führt eine Web-App-Aktion aus. Nutzbar von web_app_data-Handler und API."""
+    def get_lang(uid):
+        return db.get_user_settings(uid)["lang"]
+    lang = get_lang(user_id)
+    all_models = db.get_all_models()
+    clear_context(user_id)
+    db.set_user_chat_mode(user_id, None, active=False)
+    if action == "nav_main":
+        welcome_text = get_text("welcome", lang)
+        markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+        bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="HTML")
+    elif action.startswith("nav_path_"):
+        target_path = action.replace("nav_path_", "")
+        markup = keyboards.get_dynamic_model_menu(all_models, lang, target_path)
+        title_key = f"title_{target_path.replace('/', '_')}"
+        title_text = get_text(title_key, lang)
+        if title_text == title_key:
+            cat_name = target_path.split("/")[-1].capitalize()
+            display_name = get_text(f"menu_{cat_name.lower()}", lang)
+            title_text = f"📂 <b>{display_name if not display_name.startswith('menu_') else cat_name}</b>"
+        bot.send_message(user_id, title_text, reply_markup=markup, parse_mode="HTML")
+    elif action.startswith("sel_"):
+        model_key = action.replace("sel_", "")
+        send_model_detail_view(bot, user_id, model_key, db, get_lang)
+    elif action == "cmd_shop":
+        fake = type('Msg', (), {'chat': type('C', (), {'id': user_id})()})()
+        show_shop_logic(bot, fake, db, lang)
+
+
 def register(bot: TeleBot, generation_service, db) -> None:
     def get_lang(user_id):
         return db.get_user_settings(user_id)["lang"]
@@ -170,7 +200,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
                 parse_mode="HTML",
             )
 
-    # 0c. Web App Data (Mini App sendet Aktionen)
+    # 0c. Web App Data (Mini App sendet Aktionen – funktioniert nur bei Keyboard-Button, nicht Menü-Button)
     @bot.message_handler(content_types=['web_app_data'])
     def handle_web_app_data(message):
         if not _is_webapp_mode(db):
@@ -181,33 +211,11 @@ def register(bot: TeleBot, generation_service, db) -> None:
         except (json.JSONDecodeError, TypeError, AttributeError):
             return
         user_id = message.chat.id
-        lang = get_lang(user_id)
-        all_models = db.get_all_models()
-        clear_context(user_id)
-        db.set_user_chat_mode(user_id, None, active=False)
         try:
             bot.delete_message(user_id, message.message_id)
         except Exception:
             pass
-        if action == "nav_main":
-            welcome_text = get_text("welcome", lang)
-            markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
-            bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
-        elif action.startswith("nav_path_"):
-            target_path = action.replace("nav_path_", "")
-            markup = keyboards.get_dynamic_model_menu(all_models, lang, target_path)
-            title_key = f"title_{target_path.replace('/', '_')}"
-            title_text = get_text(title_key, lang)
-            if title_text == title_key:
-                cat_name = target_path.split("/")[-1].capitalize()
-                display_name = get_text(f"menu_{cat_name.lower()}", lang)
-                title_text = f"📂 <b>{display_name if not display_name.startswith('menu_') else cat_name}</b>"
-            bot.send_message(user_id, title_text, reply_markup=markup, parse_mode='HTML')
-        elif action.startswith("sel_"):
-            model_key = action.replace("sel_", "")
-            send_model_detail_view(bot, user_id, model_key, db, get_lang)
-        elif action == "cmd_shop":
-            show_shop_logic(bot, message, db, lang)
+        process_webapp_action(bot, user_id, action, db)
 
     # 1. START COMMAND
     @bot.message_handler(commands=['start'])

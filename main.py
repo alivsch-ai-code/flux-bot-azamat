@@ -26,7 +26,8 @@ from src.presentation.telegram.bot import setup_bot
 
 # --- WEBSERVER SETUP ---
 app = Flask(__name__)
-_db_instance = None  # Wird in main() gesetzt
+_db_instance = None
+_bot_instance = None
 
 @app.route('/')
 def health_check():
@@ -42,6 +43,38 @@ def webapp():
             return f.read()
     except FileNotFoundError:
         return "<h1>Web App nicht gefunden</h1>", 404
+
+@app.route('/api/webapp_action', methods=['POST'])
+def api_webapp_action():
+    """Web App sendet Aktionen per POST (sendData funktioniert nicht bei Menü-Button)."""
+    if _db_instance is None:
+        return {"ok": False, "error": "no_db"}, 400
+    try:
+        from src.utils.telegram_init_data import validate_init_data
+        from src.presentation.telegram.handlers.menu_handler import process_webapp_action, _is_webapp_mode
+
+        data = request.get_json() or {}
+        action = data.get("action", "")
+        init_data = data.get("init_data", "")
+        if not action or not init_data:
+            return {"ok": False, "error": "missing_params"}, 400
+        if not _is_webapp_mode(_db_instance):
+            return {"ok": False, "error": "webapp_disabled"}, 400
+
+        user_id = validate_init_data(init_data, config.TELEGRAM_TOKEN)
+        if not user_id:
+            return {"ok": False, "error": "invalid_init_data"}, 403
+
+        if _bot_instance is None:
+            return {"ok": False, "error": "no_bot"}, 500
+
+        process_webapp_action(_bot_instance, user_id, action, _db_instance)
+        return {"ok": True}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("webapp_action error: %s", e)
+        return {"ok": False, "error": str(e)}, 500
+
 
 @app.route('/api/models')
 def api_models():
@@ -171,9 +204,10 @@ def main():
     setup_bot(bot, generation_service, db)
     logger.info("Telegram Handler registriert.")
 
-    # SCHRITT E: Webserver starten (db für /api/models bereitstellen)
-    global _db_instance
+    # SCHRITT E: Webserver starten (db + bot für /api)
+    global _db_instance, _bot_instance
     _db_instance = db
+    _bot_instance = bot
     server_thread = threading.Thread(target=run_web_server, daemon=True)
     server_thread.start()
 
