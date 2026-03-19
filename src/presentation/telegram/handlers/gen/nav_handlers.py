@@ -21,6 +21,41 @@ from src.utils.strings import get_text
 logger = logging.getLogger(__name__)
 
 
+def send_model_detail_view(bot: TeleBot, user_id: int, model_key: str, db, get_lang) -> bool:
+    """Sendet Modell-Detailansicht (für Tastatur-Navigation). Returns True wenn erfolgreich."""
+    model = db.get_model_by_key(model_key)
+    if not model or not model.is_active:
+        return False
+    lang = get_lang(user_id)
+    final_cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
+    preview_link = ""
+    example_block = ""
+    if model.example_data and isinstance(model.example_data, dict):
+        url = model.example_data.get("output_image") or model.example_data.get("image") or model.example_data.get("url")
+        if url and str(url).startswith("http"):
+            preview_link = f"<a href='{url}'>&#8205;</a>"
+        ex_prompt = (model.example_data.get("prompt") or model.example_data.get("example_prompt") or "").strip()
+        if ex_prompt:
+            short = ex_prompt[:300] + "..." if len(ex_prompt) > 300 else ex_prompt
+            example_block = f"\n\n📝 <b>Beispiel-Prompt:</b>\n<code>{short}</code>"
+        elif url:
+            example_block = "\n\n🖼️ <i>Dieses Modell hat ein Beispielbild oben in der Vorschau.</i>"
+
+    if model.type and "text" in model.type:
+        base = get_text("ask_chat_mode", lang).format(cost=final_cost)
+        text = f"{preview_link}{base}{example_block}"
+        markup = keyboards.get_chat_mode_ask_menu(model_key, lang)
+        bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+        return True
+
+    text = f"{preview_link}🤖 <b>{model.name}</b>\n{model.description}{example_block}\n\n💰 <b>Kosten: {final_cost} Credits</b>"
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(types.InlineKeyboardButton(f"🚀 Start ({final_cost} Credits)", callback_data=f"start_gen_{model_key}"))
+    markup.add(types.InlineKeyboardButton(get_text("btn_back", lang), callback_data=f"nav_path_{model.menu_path}"))
+    bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=False)
+    return True
+
+
 def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
     """Registriert alle Navigations- und Modell-Click-Handler."""
 
@@ -44,6 +79,11 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
         except Exception as e:
             logger.warning("Edit failed in handle_path_nav: %s", e)
             bot.send_message(user_id, title_text, reply_markup=markup, parse_mode="HTML")
+        if db.get_bot_setting("menu_mode", "commands") == "keyboard":
+            from src.presentation.telegram.handlers.common import set_context
+            set_context(user_id, {"keyboard_path": target_path})
+            path_kbd = keyboards.get_path_reply_keyboard(all_models, lang, target_path)
+            bot.send_message(user_id, "👇", reply_markup=path_kbd, parse_mode="HTML")
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith('sel_'))
     def handle_model_click(call):
@@ -161,3 +201,8 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
             bot.edit_message_text(text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
         except Exception:
             bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+        if db.get_bot_setting("menu_mode", "commands") == "keyboard":
+            from src.presentation.telegram.handlers.common import clear_context
+            clear_context(user_id)
+            path_kbd = keyboards.get_main_reply_keyboard(lang)
+            bot.send_message(user_id, "👇", reply_markup=path_kbd, parse_mode="HTML")

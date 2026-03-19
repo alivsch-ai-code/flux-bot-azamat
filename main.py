@@ -5,7 +5,7 @@ import threading
 import time
 
 import telebot
-from flask import Flask
+from flask import Flask, request
 
 # --- 1. KONFIGURATION (lädt .env via settings) ---
 from src.config.settings import config
@@ -26,10 +26,48 @@ from src.presentation.telegram.bot import setup_bot
 
 # --- WEBSERVER SETUP ---
 app = Flask(__name__)
+_db_instance = None  # Wird in main() gesetzt
 
 @app.route('/')
 def health_check():
     return "🤖 System Status: ONLINE", 200
+
+@app.route('/webapp')
+def webapp():
+    """Telegram Mini App – HTML-Menü"""
+    import os
+    path = os.path.join(os.path.dirname(__file__), "webapp", "index.html")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return "<h1>Web App nicht gefunden</h1>", 404
+
+@app.route('/api/models')
+def api_models():
+    """API für Mini App: Modelle nach Pfad"""
+    if _db_instance is None:
+        return {"models": [], "title": ""}, 200
+    path = request.args.get("path", "root")
+    try:
+        models = _db_instance.get_all_models()
+        sub_cats = set()
+        items = []
+        for m in models:
+            if m.menu_path == path:
+                cost = int(m.custom_price if m.custom_price is not None else m.internal_cost)
+                items.append({"key": m.key, "name": m.name, "final_cost": cost})
+            elif path == "root" and "/" not in m.menu_path and m.menu_path != "root":
+                sub_cats.add(m.menu_path)
+            elif m.menu_path.startswith(path + "/"):
+                sub_cats.add(m.menu_path[len(path) + 1 :].split("/")[0])
+        titles = {"image": "Bild Studio", "video": "Video Studio", "audio": "Audio Studio", "text": "Text / Chat", "tools": "Werkzeuge"}
+        title = titles.get(path.split("/")[-1], path.capitalize())
+        return {"models": items, "title": title}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("api_models error: %s", e)
+        return {"models": [], "title": ""}, 200
 
 def run_web_server():
     logger.info("Starte Webserver auf Port %s...", config.PORT)
@@ -133,7 +171,9 @@ def main():
     setup_bot(bot, generation_service, db)
     logger.info("Telegram Handler registriert.")
 
-    # SCHRITT E: Webserver starten
+    # SCHRITT E: Webserver starten (db für /api/models bereitstellen)
+    global _db_instance
+    _db_instance = db
     server_thread = threading.Thread(target=run_web_server, daemon=True)
     server_thread.start()
 

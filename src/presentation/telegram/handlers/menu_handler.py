@@ -1,10 +1,13 @@
+import json
 import logging
 import os
 
-from telebot import TeleBot
+from telebot import TeleBot, types
 
+from src.config.settings import config
 from src.presentation.telegram import keyboards
-from src.presentation.telegram.handlers.common import clear_context, get_context
+from src.presentation.telegram.handlers.common import clear_context, get_context, set_context
+from src.presentation.telegram.handlers.gen.nav_handlers import send_model_detail_view
 from src.presentation.telegram.handlers.payment_handler import show_shop_logic
 from src.utils.strings import get_text
 
@@ -18,6 +21,10 @@ def _is_keyboard_mode(db) -> bool:
     return db.get_bot_setting("menu_mode", "commands") == "keyboard"
 
 
+def _is_webapp_mode(db) -> bool:
+    return db.get_bot_setting("menu_mode", "commands") == "webapp"
+
+
 def register(bot: TeleBot, generation_service, db) -> None:
     def get_lang(user_id):
         return db.get_user_settings(user_id)["lang"]
@@ -27,57 +34,102 @@ def register(bot: TeleBot, generation_service, db) -> None:
     def admin_set_menu_mode(message):
         user_id = message.chat.id
         if ADMIN_ID and user_id != ADMIN_ID:
+            bot.reply_to(message, f"⛔ Nur für Admins. Deine ID: {user_id} – prüfe ADMIN_ID in .env")
             return
         lang = get_lang(user_id)
         parts = (message.text or "").strip().split()
         if len(parts) < 2:
-            bot.reply_to(message, get_text("admin_menu_mode_invalid", lang))
+            current = db.get_bot_setting("menu_mode", "commands")
+            bot.reply_to(message, f"📋 Aktueller Modus: <b>{current}</b>\n\n"
+                "Zum Ändern: /set_menu_mode <code>commands</code> | <code>keyboard</code> | <code>webapp</code>", parse_mode="HTML")
             return
         mode = parts[1].lower()
-        if mode not in ("commands", "keyboard"):
+        if mode not in ("commands", "keyboard", "webapp"):
             bot.reply_to(message, get_text("admin_menu_mode_invalid", lang))
             return
         db.set_bot_setting("menu_mode", mode)
-        bot.reply_to(message, get_text("admin_menu_mode_set", lang).format(mode=mode))
+        hint = ""
+        if mode == "keyboard":
+            hint = "\n\n👇 Sende /start um die Tastatur zu sehen."
+        elif mode == "webapp":
+            if config.APP_URL:
+                hint = "\n\n✅ Bot neu starten – dann öffnet das 🌐 neben dem Eingabefeld die App."
+            else:
+                hint = "\n\n⚠️ Keine HTTPS-URL. Lokal: ngrok http 5000, dann APP_URL=https://xxx.ngrok-free.app"
+        bot.reply_to(message, get_text("admin_menu_mode_set", lang).format(mode=mode) + hint)
 
     def _should_handle_keyboard_nav(m):
         if not _is_keyboard_mode(db) or not m.text:
             return False
-        action = keyboards.get_keyboard_action_for_text(m.text)
-        if not action:
-            return False
+        if keyboards.get_keyboard_action_for_text(m.text) is not None:
+            return True
         ctx = get_context(m.chat.id)
-        if ctx and ctx.get("step") == "waiting_for_prompt":
-            return False
-        chat_state = db.get_user_chat_state(m.chat.id)
-        if chat_state and chat_state.get("is_chat"):
-            return False
-        return True
+        path = ctx.get("keyboard_path")
+        if path is not None:
+            models = db.get_all_models()
+            return keyboards.get_path_keyboard_action(m.text, path, models, get_lang(m.chat.id)) is not None
+        return False
 
     @bot.message_handler(func=_should_handle_keyboard_nav)
     def handle_keyboard_nav(message):
         user_id = message.chat.id
-        action = keyboards.get_keyboard_action_for_text(message.text)
         lang = get_lang(user_id)
+        all_models = db.get_all_models()
+
+        try:
+            bot.delete_message(user_id, message.message_id)
+        except Exception:
+            pass
+
+        action = keyboards.get_keyboard_action_for_text(message.text)
+        if action is None:
+            ctx = get_context(user_id)
+            path = ctx.get("keyboard_path", "root")
+            path_result = keyboards.get_path_keyboard_action(message.text, path, all_models, lang)
+            if path_result:
+                act_type, target = path_result
+                if act_type == "nav_main":
+                    clear_context(user_id)
+                    db.set_user_chat_mode(user_id, None, active=False)
+                    welcome_text = get_text("welcome", lang)
+                    markup = keyboards.get_main_reply_keyboard(lang)
+                    bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+                elif act_type == "nav_path":
+                    clear_context(user_id)
+                    db.set_user_chat_mode(user_id, None, active=False)
+                    set_context(user_id, {"keyboard_path": target})
+                    path_markup = keyboards.get_path_reply_keyboard(all_models, lang, target)
+                    title_key = f"title_{target.replace('/', '_')}"
+                    title_text = get_text(title_key, lang)
+                    if title_text == title_key:
+                        cat_name = target.split("/")[-1].capitalize()
+                        display_name = get_text(f"menu_{cat_name.lower()}", lang)
+                        title_text = f"📂 <b>{display_name if not display_name.startswith('menu_') else cat_name}</b>"
+                    bot.send_message(user_id, title_text, reply_markup=path_markup, parse_mode='HTML')
+                elif act_type == "sel":
+                    clear_context(user_id)
+                    db.set_user_chat_mode(user_id, None, active=False)
+                    send_model_detail_view(bot, user_id, target, db, get_lang)
+                    set_context(user_id, {"keyboard_path": path})
+            return
+
+        clear_context(user_id)
+        db.set_user_chat_mode(user_id, None, active=False)
         if action == "nav_main":
-            clear_context(user_id)
             welcome_text = get_text("welcome", lang)
-            all_models = db.get_all_models()
-            markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+            markup = keyboards.get_main_reply_keyboard(lang)
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
         elif action.startswith("nav_path_"):
             target_path = action.replace("nav_path_", "")
-            all_models = db.get_all_models()
-            markup = keyboards.get_dynamic_model_menu(all_models, lang, target_path)
+            set_context(user_id, {"keyboard_path": target_path})
+            path_markup = keyboards.get_path_reply_keyboard(all_models, lang, target_path)
             title_key = f"title_{target_path.replace('/', '_')}"
             title_text = get_text(title_key, lang)
             if title_text == title_key:
                 cat_name = target_path.split("/")[-1].capitalize()
                 display_name = get_text(f"menu_{cat_name.lower()}", lang)
-                if display_name.startswith("menu_"):
-                    display_name = cat_name
-                title_text = f"📂 <b>{display_name}</b>"
-            bot.send_message(user_id, title_text, reply_markup=markup, parse_mode='HTML')
+                title_text = f"📂 <b>{display_name if not display_name.startswith('menu_') else cat_name}</b>"
+            bot.send_message(user_id, title_text, reply_markup=path_markup, parse_mode='HTML')
         elif action == "nav_profile":
             creds = db.get_user_credits(user_id)
             text = get_text("profile_text", lang).format(
@@ -117,6 +169,45 @@ def register(bot: TeleBot, generation_service, db) -> None:
                 f"❌ Fehler beim Neuladen der Modelle: {e}",
                 parse_mode="HTML",
             )
+
+    # 0c. Web App Data (Mini App sendet Aktionen)
+    @bot.message_handler(content_types=['web_app_data'])
+    def handle_web_app_data(message):
+        if not _is_webapp_mode(db):
+            return
+        try:
+            data = json.loads(message.web_app_data.data)
+            action = data.get("action", "")
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            return
+        user_id = message.chat.id
+        lang = get_lang(user_id)
+        all_models = db.get_all_models()
+        clear_context(user_id)
+        db.set_user_chat_mode(user_id, None, active=False)
+        try:
+            bot.delete_message(user_id, message.message_id)
+        except Exception:
+            pass
+        if action == "nav_main":
+            welcome_text = get_text("welcome", lang)
+            markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+            bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+        elif action.startswith("nav_path_"):
+            target_path = action.replace("nav_path_", "")
+            markup = keyboards.get_dynamic_model_menu(all_models, lang, target_path)
+            title_key = f"title_{target_path.replace('/', '_')}"
+            title_text = get_text(title_key, lang)
+            if title_text == title_key:
+                cat_name = target_path.split("/")[-1].capitalize()
+                display_name = get_text(f"menu_{cat_name.lower()}", lang)
+                title_text = f"📂 <b>{display_name if not display_name.startswith('menu_') else cat_name}</b>"
+            bot.send_message(user_id, title_text, reply_markup=markup, parse_mode='HTML')
+        elif action.startswith("sel_"):
+            model_key = action.replace("sel_", "")
+            send_model_detail_view(bot, user_id, model_key, db, get_lang)
+        elif action == "cmd_shop":
+            show_shop_logic(bot, message, db, lang)
 
     # 1. START COMMAND
     @bot.message_handler(commands=['start'])
@@ -159,8 +250,29 @@ def register(bot: TeleBot, generation_service, db) -> None:
         all_models = db.get_all_models()
 
         if _is_keyboard_mode(db):
-            # Tastatur-Modus: Menü direkt unter dem Eingabefeld (Kategorien als Buttons)
-            markup = keyboards.get_main_reply_keyboard(lang)
+            reply_kbd = keyboards.get_main_reply_keyboard(lang)
+            bot.send_message(user_id, welcome_text, reply_markup=reply_kbd, parse_mode='HTML')
+            grid_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+            bot.send_message(user_id, "👇 <i>Tastatur aktiv – Kategorien auch unten am Eingabefeld</i>",
+                            reply_markup=grid_markup, parse_mode='HTML')
+        elif _is_webapp_mode(db) and config.APP_URL:
+            webapp_url = config.APP_URL.rstrip("/") + "/webapp"
+            markup = types.InlineKeyboardMarkup(row_width=2)
+            markup.add(types.InlineKeyboardButton(
+                get_text("menu_mode_webapp", lang),
+                web_app=types.WebAppInfo(url=webapp_url)
+            ))
+            cat_btns = []
+            for cat in ("image", "video", "audio", "text", "tools"):
+                lbl = get_text(f"menu_{cat}", lang)
+                if lbl.startswith("menu_"):
+                    lbl = cat.capitalize()
+                cat_btns.append(types.InlineKeyboardButton(lbl, callback_data=f"nav_path_{cat}"))
+            markup.add(*cat_btns)
+            markup.add(
+                types.InlineKeyboardButton(get_text("menu_profile", lang), callback_data="nav_profile"),
+                types.InlineKeyboardButton(get_text("menu_shop", lang), callback_data="cmd_shop"),
+            )
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
@@ -186,6 +298,9 @@ def register(bot: TeleBot, generation_service, db) -> None:
             all_models = db.get_all_models()
             new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
             clear_context(user_id)
+            if _is_keyboard_mode(db):
+                main_kbd = keyboards.get_main_reply_keyboard(lang)
+                bot.send_message(user_id, "👇", reply_markup=main_kbd, parse_mode="HTML")
             
         elif target == "settings":
             settings = db.get_user_settings(user_id)
