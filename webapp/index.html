@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AZAMAT AI Hub</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --tg-theme-bg-color: #1a1a2e;
+      --tg-theme-text-color: #eee;
+      --tg-theme-button-color: #6366f1;
+      --tg-theme-button-text-color: #fff;
+      --card-bg: rgba(255,255,255,0.08);
+      --accent: #6366f1;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100vh;
+      padding: 16px;
+      padding-bottom: 24px;
+    }
+    .header {
+      text-align: center;
+      padding: 20px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .header h1 { font-size: 1.5rem; font-weight: 700; }
+    .header p { color: rgba(255,255,255,0.7); font-size: 0.9rem; margin-top: 4px; }
+    .section { margin-top: 20px; }
+    .section-title { font-size: 0.85rem; color: rgba(255,255,255,0.6); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: transform 0.15s, background 0.15s;
+      border: 1px solid rgba(255,255,255,0.06);
+      text-align: center;
+    }
+    .card:active { transform: scale(0.98); }
+    .card:hover { background: rgba(255,255,255,0.12); }
+    .card-icon { font-size: 2rem; margin-bottom: 8px; }
+    .card-label { font-size: 0.9rem; font-weight: 600; }
+    .card-desc { font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-top: 4px; }
+    .model-card {
+      background: var(--card-bg);
+      border-radius: 10px;
+      padding: 12px 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .model-card:active { transform: scale(0.99); }
+    .model-name { font-weight: 500; font-size: 0.95rem; }
+    .model-cost { font-size: 0.8rem; color: var(--accent); }
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 16px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 8px;
+      margin-bottom: 16px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .back-btn:active { opacity: 0.8; }
+    .loading { text-align: center; padding: 40px; color: rgba(255,255,255,0.5); }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="main-view">
+      <div class="header">
+        <h1>🤖 AZAMAT AI Hub</h1>
+        <p>Wähle eine Kategorie</p>
+      </div>
+      <div class="section">
+        <div class="section-title">Kategorien</div>
+        <div class="grid">
+          <div class="card" data-action="nav_path_image">
+            <div class="card-icon">🎨</div>
+            <div class="card-label">Bild Studio</div>
+            <div class="card-desc">Flux, DALL-E, SD</div>
+          </div>
+          <div class="card" data-action="nav_path_video">
+            <div class="card-icon">🎬</div>
+            <div class="card-label">Video Studio</div>
+            <div class="card-desc">Kling, Wan, Hunyuan</div>
+          </div>
+          <div class="card" data-action="nav_path_audio">
+            <div class="card-icon">🎙️</div>
+            <div class="card-label">Audio Studio</div>
+            <div class="card-desc">Music & Voice</div>
+          </div>
+          <div class="card" data-action="nav_path_text">
+            <div class="card-icon">📝</div>
+            <div class="card-label">Text / Chat</div>
+            <div class="card-desc">LLMs & Chat</div>
+          </div>
+          <div class="card" data-action="nav_path_tools">
+            <div class="card-icon">🛠️</div>
+            <div class="card-label">Werkzeuge</div>
+            <div class="card-desc">Profi-Tools</div>
+          </div>
+        </div>
+      </div>
+      <div class="section" style="margin-top: 24px;">
+        <div class="card" data-action="cmd_shop" style="grid-column: span 2;">
+          <div class="card-icon">💎</div>
+          <div class="card-label">Credits kaufen</div>
+        </div>
+      </div>
+    </div>
+    <div id="models-view" class="hidden">
+      <div class="back-btn" id="back-btn">← Zurück</div>
+      <div class="header">
+        <h1 id="models-title">Modelle</h1>
+      </div>
+      <div id="models-list"></div>
+    </div>
+  </div>
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      document.documentElement.style.setProperty('--tg-theme-bg-color', tg.themeParams.bg_color || '#1a1a2e');
+      document.documentElement.style.setProperty('--tg-theme-text-color', tg.themeParams.text_color || '#eee');
+      document.documentElement.style.setProperty('--tg-theme-button-color', tg.themeParams.button_color || '#6366f1');
+    }
+    const API_BASE = window.location.origin;
+    let currentPath = 'root';
+
+    function sendAction(action, payload = {}) {
+      const data = JSON.stringify({ action, ...payload });
+      if (tg?.sendData) {
+        tg.sendData(data);
+      } else {
+        console.log('Would send:', data);
+        alert('Demo: ' + data);
+      }
+    }
+
+    document.querySelectorAll('.card[data-action]').forEach(card => {
+      card.addEventListener('click', () => {
+        const action = card.dataset.action;
+        if (action.startsWith('nav_path_')) {
+          const path = action.replace('nav_path_', '');
+          fetch(API_BASE + '/api/models?path=' + encodeURIComponent(path))
+            .then(r => r.json())
+            .then(data => {
+              if (data.models && data.models.length > 0) {
+                showModels(path, data.models, data.title || path);
+              } else {
+                sendAction(action);
+              }
+            })
+            .catch(() => sendAction(action));
+        } else {
+          sendAction(action);
+        }
+      });
+    });
+
+    function showModels(path, models, title) {
+      currentPath = path;
+      document.getElementById('main-view').classList.add('hidden');
+      document.getElementById('models-view').classList.remove('hidden');
+      document.getElementById('models-title').textContent = title;
+      const list = document.getElementById('models-list');
+      list.innerHTML = models.map(m => `
+        <div class="model-card" data-key="${m.key}">
+          <span class="model-name">${m.name}</span>
+          <span class="model-cost">${m.final_cost > 0 ? m.final_cost + ' ⭐' : 'FREE'}</span>
+        </div>
+      `).join('');
+      list.querySelectorAll('.model-card').forEach(el => {
+        el.addEventListener('click', () => {
+          sendAction('sel_' + el.dataset.key);
+        });
+      });
+    }
+
+    document.getElementById('back-btn').addEventListener('click', () => {
+      const parts = currentPath.split('/');
+      if (parts.length > 1) {
+        parts.pop();
+        const parent = parts.join('/') || 'root';
+        fetch(API_BASE + '/api/models?path=' + encodeURIComponent(parent))
+          .then(r => r.json())
+          .then(data => {
+            currentPath = parent;
+            if (parent === 'root') {
+              document.getElementById('models-view').classList.add('hidden');
+              document.getElementById('main-view').classList.remove('hidden');
+            } else {
+              showModels(parent, data.models || [], data.title || parent);
+            }
+          })
+          .catch(() => { document.getElementById('models-view').classList.add('hidden'); document.getElementById('main-view').classList.remove('hidden'); currentPath = 'root'; });
+      } else {
+        document.getElementById('models-view').classList.add('hidden');
+        document.getElementById('main-view').classList.remove('hidden');
+        currentPath = 'root';
+      }
+    });
+  </script>
+</body>
+</html>

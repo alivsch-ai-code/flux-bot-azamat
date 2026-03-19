@@ -37,6 +37,11 @@ class Settings:
         self.PORT = int(os.getenv("PORT", 5000))
         self.APP_ENV = os.getenv("APP_ENV", "development")
         self.START_CREDITS = 2000
+        # URL für Mini App – nur HTTPS! APP_URL oder RENDER_EXTERNAL_URL (Render setzt das)
+        # Lokal: ngrok http 5000 → APP_URL=https://xxx.ngrok-free.app
+        raw = os.getenv("APP_URL") or os.getenv("RENDER_EXTERNAL_URL") or ""
+        url = raw.rstrip("/")
+        self.APP_URL = url if url.startswith("https://") else ""
 
     def _get_required(self, key: str) -> str:
         """Holt eine Variable oder wirft, wenn sie fehlt."""

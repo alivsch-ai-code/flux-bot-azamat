@@ -3,14 +3,14 @@
 STRINGS = {
     # --- NAVIGATION & MENUS ---
     "welcome": {
-        "en": "👋 <b>Welcome to the AI Hub!</b>\n\nExperience the future of AI creation!\n\n🎥 Check out our <a href='https://www.youtube.com/watch?v=dQw4w9WgXcQ'>demo video</a> to see amazing possibilities!\n\nChoose a category to start creating:",
-        "de": "👋 <b>Willkommen im AI Hub!</b>\n\nErlebe die Zukunft der KI-Kreation!\n\n🎥 Schau dir unser <a href='https://www.youtube.com/watch?v=dQw4w9WgXcQ'>Demo-Video</a> an, um unglaubliche Möglichkeiten zu sehen!\n\nWähle eine Kategorie, um zu starten:",
+        "en": "👋 <b>Welcome to the AI Hub!</b>\n\n<i>Experience the future of AI creation</i>\n\n<b>What you can do:</b>\n• 🎨 Images & Art\n• 🎬 Videos\n• 🎙️ Audio\n• 📝 Text & Chat\n• 🛠️ Tools\n\n🎥 <a href='https://www.youtube.com/watch?v=dQw4w9WgXcQ'>Demo Video</a>\n\n<b>Choose a category below:</b>",
+        "de": "👋 <b>Willkommen im AI Hub!</b>\n\n<i>Erlebe die Zukunft der KI-Kreation</i>\n\n<b>Möglichkeiten:</b>\n• 🎨 Bilder & Kunst\n• 🎬 Videos\n• 🎙️ Audio\n• 📝 Text & Chat\n• 🛠️ Werkzeuge\n\n🎥 <a href='https://www.youtube.com/watch?v=dQw4w9WgXcQ'>Demo-Video</a>\n\n<b>Wähle eine Kategorie:</b>",
         "ru": "👋 <b>Добро пожаловать в AI Hub!</b>\n\nОщутите будущее создания ИИ!\n\n🎥 Посмотрите наше <a href='https://www.youtube.com/watch?v=dQw4w9WgXcQ'>демонстрационное видео</a>, чтобы увидеть удивительные возможности!\n\nВыберите категорию:",
         "kk": "👋 <b>AI Hub-қа қош келдіңіз!</b>\n\nЖасанды интеллект жасаудың болашағын сезіңіз!\n\n🎥 Керемет мүмкіндіктерді көру үшін <a href='https://www.youtube.com/watch?v=dQw4w9WgXcQ'>бейне ролик</a>ке қараңыз!\n\nСанатты таңдаңыз:"
     },
     "transparency_msg": {
-        "en": "<b>🛡️ We believe in transparency</b>\n\nMany bots online are full of hidden costs and traps. With us, you pay per generation. You can save even more money by using Replicate models directly - great for tech-savvy users! Have fun with AZAMAT AI! 🚀",
-        "de": "<b>🛡️ Wir setzen auf Transparenz</b>\n\nIm Netz gibt es viele Kostentreiber und Fallen bei Bots. Bei uns zahlen Sie pro Generierung. Sie können noch mehr sparen, indem Sie direkt Replicate-Modelle nutzen - perfekt für technisch versierte Nutzer! Viel Spaß mit AZAMAT AI! 🚀",
+        "en": "<b>🛡️ We believe in transparency</b>\n\n<i>Many bots online are full of hidden costs. With us:</i>\n• Pay per generation\n• No subscriptions\n• Use Replicate directly for more savings\n\n<i>Have fun with AZAMAT AI!</i> 🚀",
+        "de": "<b>🛡️ Wir setzen auf Transparenz</b>\n\n<i>Viele Bots haben versteckte Kosten. Bei uns:</i>\n• Bezahlung pro Generierung\n• Keine Abos\n• Replicate direkt = mehr Ersparnis\n\n<i>Viel Spaß mit AZAMAT AI!</i> 🚀",
         "ru": "<b>🛡️ Мы верим в прозрачность</b>\n\nМногие боты в интернете полны скрытых платежей и ловушек. У нас вы платите за каждую генерацию. Вы можете сэкономить еще больше, используя модели Replicate напрямую - отлично подходит для технически продвинутых пользователей! Удачи с AZAMAT AI! 🚀",
         "kk": "<b>🛡️ Біз ашықтыққа сенеміз</b>\n\nИнтернетте көптеген жасанды интеллект боттары жасырын шығындар мен құнық бар. Бізде сіз әр жасау үшін құн төлейсіз. Техникалық білімі бар пайдаланушылар үшін Replicate модельдерін тура қолданып, тағы да көбірек үнемдеуге болады! AZAMAT AI-мен бірге уақытты қызықты өткізіңіз! 🚀"
     },
@@ -108,8 +108,8 @@ STRINGS = {
 
     # --- SETTINGS MENÜ ---
     "settings_title": {
-        "en": "<b>⚙️ Settings</b>\nHere you can configure the bot.",
-        "de": "<b>⚙️ Einstellungen</b>\nHier kannst du den Bot konfigurieren.",
+        "en": "<b>⚙️ Settings</b>\n\n<i>Configure your experience</i>\n\n<b>Available options:</b>",
+        "de": "<b>⚙️ Einstellungen</b>\n\n<i>Passe dein Erlebnis an</i>\n\n<b>Optionen:</b>",
         "ru": "<b>⚙️ Настройки</b>\nЗдесь вы можете настроить бота.",
         "kk": "<b>⚙️ Параметрлер</b>\nБұл жерде ботты баптай аласыз."
     },
@@ -170,10 +170,11 @@ STRINGS = {
     # --- ADMIN ---
     "admin_cheat_success": { "en": "Cheat activated.", "de": "Cheat aktiviert.", "ru": "Чит активирован.", "kk": "Чит қосылды." },
     "admin_menu_mode_set": { "en": "Menu mode set to: {mode}", "de": "Menü-Modus gesetzt: {mode}", "ru": "Режим меню: {mode}", "kk": "Мәзір режимі: {mode}" },
-    "admin_menu_mode_invalid": { "en": "Use: /set_menu_mode commands | keyboard", "de": "Verwende: /set_menu_mode commands | keyboard", "ru": "Используй: /set_menu_mode commands | keyboard", "kk": "Қолданыңыз: /set_menu_mode commands | keyboard" },
+    "admin_menu_mode_invalid": { "en": "Use: /set_menu_mode commands | keyboard | webapp", "de": "Verwende: /set_menu_mode commands | keyboard | webapp", "ru": "Используй: /set_menu_mode commands | keyboard | webapp", "kk": "Қолданыңыз: /set_menu_mode commands | keyboard | webapp" },
+    "menu_mode_webapp": { "en": "🌐 Web App", "de": "🌐 Web-App", "ru": "🌐 Веб-приложение", "kk": "🌐 Веб қолданба" },
     "profile_text": {
-        "en": "👤 <b>Profile</b>\n\nName: {name}\n💎 Balance: <b>{creds} Credits</b>\n🆔 ID: <code>{user_id}</code>",
-        "de": "👤 <b>Profil</b>\n\nName: {name}\n💎 Guthaben: <b>{creds} Credits</b>\n🆔 ID: <code>{user_id}</code>",
+        "en": "👤 <b>Profile</b>\n\n<b>Name:</b> {name}\n<b>Credits:</b> <code>{creds}</code> ⭐\n<b>ID:</b> <code>{user_id}</code>",
+        "de": "👤 <b>Profil</b>\n\n<b>Name:</b> {name}\n<b>Credits:</b> <code>{creds}</code> ⭐\n<b>ID:</b> <code>{user_id}</code>",
         "ru": "👤 <b>Профиль</b>\n\nИмя: {name}\n💎 Баланс: <b>{creds} Кредитов</b>\n🆔 ID: <code>{user_id}</code>",
         "kk": "👤 <b>Профиль</b>\n\nАты: {name}\n💎 Баланс: <b>{creds} Кредит</b>\n🆔 ID: <code>{user_id}</code>"
     },

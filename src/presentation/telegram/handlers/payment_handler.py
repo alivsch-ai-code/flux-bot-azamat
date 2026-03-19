@@ -37,9 +37,10 @@ def show_shop_logic(bot: TeleBot, message, db, lang: str = "de") -> None:
     current_credits = db.get_user_credits(message.chat.id)
 
     text = (
-        f"<b>💳 Guthaben aufladen</b>\n"
-        f"Dein aktuelles Guthaben: <b>{current_credits} Credits</b>\n\n"
-        f"Wähle ein Paket, um sicher via <b>Telegram Stars</b> aufzuladen:"
+        f"<b>💳 Guthaben aufladen</b>\n\n"
+        f"<b>Dein Stand:</b> <code>{current_credits} Credits</code>\n\n"
+        f"<i>Wähle ein Paket – sicher via Telegram Stars</i>\n\n"
+        f"<b>Pakete:</b>"
     )
 
     try:

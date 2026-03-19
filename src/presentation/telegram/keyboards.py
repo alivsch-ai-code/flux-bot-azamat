@@ -176,3 +176,84 @@ def get_keyboard_action_for_text(text: str) -> str | None:
             if get_text(key, lang) == text:
                 return action
     return None
+
+
+def get_path_reply_keyboard(
+    models: list, lang: str, current_path: str
+) -> types.ReplyKeyboardMarkup:
+    """Reply-Keyboard für Untermenü (Ordner + Modelle + Zurück/Hauptmenü)."""
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True)
+    sub_categories = set()
+    model_buttons = []
+
+    for m in models:
+        if m.menu_path == current_path:
+            cost_display = f"({m.final_cost} ⭐️)" if m.final_cost > 0 else "(FREE)"
+            model_buttons.append((f"{m.name} {cost_display}", m.key))
+        elif current_path == "root" and "/" not in m.menu_path and m.menu_path != "root":
+            sub_categories.add(m.menu_path)
+        elif m.menu_path.startswith(current_path + "/"):
+            rel = m.menu_path[len(current_path) + 1 :]
+            sub_categories.add(rel.split("/")[0])
+        elif current_path == "root" and m.menu_path == "root":
+            cost_display = f"({m.final_cost} ⭐️)" if m.final_cost > 0 else "(FREE)"
+            model_buttons.append((f"{m.name} {cost_display}", m.key))
+
+    for cat in sorted(sub_categories):
+        display = get_text(f"menu_{cat}", lang)
+        if display.startswith("menu_"):
+            display = cat.capitalize()
+        markup.row(types.KeyboardButton(f"📁 {display}"))
+
+    for i in range(0, len(model_buttons), 2):
+        row = [types.KeyboardButton(t) for t, _ in model_buttons[i : i + 2]]
+        markup.row(*row)
+
+    markup.row(
+        types.KeyboardButton(get_text("btn_back", lang)),
+        types.KeyboardButton(get_text("kb_main", lang)),
+    )
+    return markup
+
+
+def get_path_keyboard_action(
+    text: str, current_path: str, models: list, lang: str
+) -> tuple[str, str] | None:
+    """Liefert (action_type, target) für Path-Tastatur. action_type: nav_path, sel, nav_main, back."""
+    if not text or not text.strip():
+        return None
+    t = text.strip()
+    back_text = get_text("btn_back", lang)
+    main_text = get_text("kb_main", lang)
+    for l in ("de", "en", "ru", "kk"):
+        if get_text("btn_back", l) == t:
+            if "/" in current_path:
+                parent = current_path.rsplit("/", 1)[0]
+                return ("nav_path", parent)  # z.B. image/flux -> image
+            return ("nav_main", "")  # image -> Hauptmenü
+        if get_text("kb_main", l) == t:
+            return ("nav_main", "")
+
+    sub_categories = set()
+    for m in models:
+        if current_path == "root" and "/" not in m.menu_path and m.menu_path != "root":
+            sub_categories.add(m.menu_path)
+        elif m.menu_path.startswith(current_path + "/"):
+            rel = m.menu_path[len(current_path) + 1 :]
+            sub_categories.add(rel.split("/")[0])
+
+    for cat in sorted(sub_categories):
+        display = get_text(f"menu_{cat}", lang)
+        if display.startswith("menu_"):
+            display = cat.capitalize()
+        if t == f"📁 {display}":
+            target = cat if current_path == "root" else f"{current_path}/{cat}"
+            return ("nav_path", target)
+
+    for m in models:
+        if m.menu_path == current_path or (current_path == "root" and m.menu_path == "root"):
+            cost_display = f"({m.final_cost} ⭐️)" if m.final_cost > 0 else "(FREE)"
+            if t == f"{m.name} {cost_display}":
+                return ("sel", m.key)
+
+    return None
