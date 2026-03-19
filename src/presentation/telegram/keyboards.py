@@ -4,6 +4,18 @@ from telebot import types
 
 from src.utils.strings import get_text
 
+# Mapping: action -> string key für Reply-Keyboard-Buttons
+KEYBOARD_ACTIONS = [
+    ("nav_main", "kb_main"),
+    ("nav_path_image", "menu_image"),
+    ("nav_path_video", "menu_video"),
+    ("nav_path_audio", "menu_audio"),
+    ("nav_path_text", "menu_text"),
+    ("nav_path_tools", "menu_tools"),
+    ("cmd_shop", "menu_shop"),
+    ("nav_profile", "menu_profile"),
+]
+
 
 def btn(text: str, callback_data: str) -> types.InlineKeyboardButton:
     return types.InlineKeyboardButton(text=text, callback_data=callback_data)
@@ -136,3 +148,31 @@ def get_share_menu(link: str, text: str, lang: str = "en") -> types.InlineKeyboa
     markup.add(types.InlineKeyboardButton(get_text("btn_share_tg", lang), url=url))
     markup.add(btn(get_text("btn_back", lang), "nav_profile"))
     return markup
+
+
+# --- REPLY KEYBOARD (Tastatur direkt unter dem Eingabefeld) ---
+def get_main_reply_keyboard(lang: str = "de") -> types.ReplyKeyboardMarkup:
+    """Persistente Tastatur mit Hauptmenü-Shortcuts. Nur wenn menu_mode=keyboard."""
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, is_persistent=True)
+    # Zeile 1: Medien-Kategorien
+    row1 = [get_text(k, lang) for _, k in KEYBOARD_ACTIONS if k.startswith("menu_") and k not in ("menu_shop", "menu_profile")]
+    markup.row(*[types.KeyboardButton(t) for t in row1])
+    # Zeile 2: Credits, Profil, Hauptmenü
+    markup.row(
+        types.KeyboardButton(get_text("menu_shop", lang)),
+        types.KeyboardButton(get_text("menu_profile", lang)),
+        types.KeyboardButton(get_text("kb_main", lang)),
+    )
+    return markup
+
+
+def get_keyboard_action_for_text(text: str) -> str | None:
+    """Mappt gesendeten Tastatur-Button-Text auf die Action. None wenn kein Treffer."""
+    if not text or not text.strip():
+        return None
+    text = text.strip()
+    for action, key in KEYBOARD_ACTIONS:
+        for lang in ("de", "en", "ru", "kk"):
+            if get_text(key, lang) == text:
+                return action
+    return None

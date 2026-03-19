@@ -21,6 +21,7 @@ STRINGS = {
         "kk": "🌟 <b>Сіз әлі бізге ұсынбағансыз!</b>\n\nМұны істеңіз, содан кейін сізге тегін ұпайлар береміз!"
     },
     "btn_back": { "en": "🔙 Back", "de": "🔙 Zurück", "ru": "🔙 Назад", "kk": "🔙 Артқа" },
+    "kb_main": { "en": "🏠 Main Menu", "de": "🏠 Hauptmenü", "ru": "🏠 Меню", "kk": "🏠 Басты мәзір" },
     
     # --- MODEL CATEGORIES ---
     "menu_image": { "en": "🎨 Image Studio", "de": "🎨 Bild Studio", "ru": "🎨 Картинки", "kk": "🎨 Сурет" },
@@ -168,6 +169,8 @@ STRINGS = {
 
     # --- ADMIN ---
     "admin_cheat_success": { "en": "Cheat activated.", "de": "Cheat aktiviert.", "ru": "Чит активирован.", "kk": "Чит қосылды." },
+    "admin_menu_mode_set": { "en": "Menu mode set to: {mode}", "de": "Menü-Modus gesetzt: {mode}", "ru": "Режим меню: {mode}", "kk": "Мәзір режимі: {mode}" },
+    "admin_menu_mode_invalid": { "en": "Use: /set_menu_mode commands | keyboard", "de": "Verwende: /set_menu_mode commands | keyboard", "ru": "Используй: /set_menu_mode commands | keyboard", "kk": "Қолданыңыз: /set_menu_mode commands | keyboard" },
     "profile_text": {
         "en": "👤 <b>Profile</b>\n\nName: {name}\n💎 Balance: <b>{creds} Credits</b>\n🆔 ID: <code>{user_id}</code>",
         "de": "👤 <b>Profil</b>\n\nName: {name}\n💎 Guthaben: <b>{creds} Credits</b>\n🆔 ID: <code>{user_id}</code>",
