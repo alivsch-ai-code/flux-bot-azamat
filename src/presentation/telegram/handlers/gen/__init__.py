@@ -6,6 +6,7 @@ from src.presentation.telegram.handlers.gen.media_helpers import (
     path_to_mediafile,
     ctx_media_to_list,
     schema_requires_media,
+    schema_allows_multiple_media,
 )
 from src.presentation.telegram.handlers.gen.error_checks import (
     is_uri_too_large,
@@ -24,6 +25,7 @@ __all__ = [
     "path_to_mediafile",
     "ctx_media_to_list",
     "schema_requires_media",
+    "schema_allows_multiple_media",
     "is_uri_too_large",
     "is_rate_limit",
     "is_technical_error",

@@ -42,6 +42,14 @@ def ctx_media_to_list(ctx) -> list:
     return [path_to_mediafile(p) for p in raw]
 
 
+MEDIA_KEYWORDS = [
+    "image", "images", "img", "photo", "init_image", "target_image", "swap_image",
+    "input_image", "control_image", "mask", "redux_image",
+    "video", "videos", "input_video", "audio", "input_audio",
+    "file", "document",
+]
+
+
 def schema_requires_media(input_schema: dict) -> bool:
     """
     Prüft, ob Medien-Input (Bild/Video/Audio) PFLICHT ist.
@@ -51,10 +59,25 @@ def schema_requires_media(input_schema: dict) -> bool:
     if not input_schema or not isinstance(input_schema, dict):
         return False
     required = input_schema.get("required") or []
-    media_substrings = ["image", "video", "audio", "file", "img", "photo", "document", "init_image", "target_image", "swap_image", "input_image"]
     for req_key in required:
         if isinstance(req_key, str):
             k = req_key.lower()
-            if any(m in k for m in media_substrings):
+            if any(m in k for m in MEDIA_KEYWORDS):
                 return True
+    return False
+
+
+def schema_allows_multiple_media(input_schema: dict) -> bool:
+    """
+    Prüft, ob das Schema mehrere Medien (z.B. images als Array) erlaubt.
+    """
+    if not input_schema or not isinstance(input_schema, dict):
+        return False
+    props = input_schema.get("properties") or {}
+    for key, p in props.items():
+        if not isinstance(p, dict):
+            continue
+        k_lower = key.lower()
+        if any(m in k_lower for m in MEDIA_KEYWORDS) and p.get("type") == "array":
+            return True
     return False

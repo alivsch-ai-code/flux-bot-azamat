@@ -85,7 +85,12 @@ def register_media_handlers(bot, db, get_lang, run_generation) -> None:
         user_id = msg.chat.id
         ctx = get_context(user_id)
         t0 = time.perf_counter()
-        if not ctx or ctx.get("step") not in ("waiting_for_media", "waiting_for_image"):
+        in_model_flow = (
+            ctx
+            and ctx.get("model_key")
+            and ctx.get("step") in ("waiting_for_media", "waiting_for_image", "viewing_model")
+        )
+        if not in_model_flow:
             _handle_unsolicited_media(msg, file_id, media_type, default_ext)
             return
         try:

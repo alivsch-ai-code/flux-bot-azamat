@@ -93,6 +93,7 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith('sel_'))
     def handle_model_click(call):
+        from src.presentation.telegram.handlers.common import get_context, set_context
         user_id = call.message.chat.id
         lang = get_lang(user_id)
         key = call.data.split('sel_')[1]
@@ -100,6 +101,14 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
         if not model or not model.is_active:
             bot.answer_callback_query(call.id, get_text("err_model_maintenance", lang) or "⚠️ Inactive.")
             return
+        prev = get_context(user_id) or {}
+        set_context(user_id, {
+            "model_key": key,
+            "step": "viewing_model",
+            "menu_path": model.menu_path,
+            "last_bot_msg_id": call.message.message_id,
+            "media_paths": prev.get("media_paths") or [],
+        })
         final_cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
 
         # Beispielbild und Beispiel-Prompt immer vorbereiten (auch für Text-Modelle)

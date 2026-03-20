@@ -92,6 +92,18 @@ STRINGS = {
         "ru": "\n📎 <b>Загрузите медиа:</b> Изображения, видео или документы. Отправьте файлы, затем напишите промт.",
         "kk": "\n📎 <b>Медиа жүктеңіз:</b> Суреттер, бейнелер немесе құжаттар. Файлдарды жіберіңіз, содан кейін сұраныс жазыңыз."
     },
+    "model_req_media_single": {
+        "en": "\n📸 <b>Upload one image:</b> This model needs an input image.",
+        "de": "\n📸 <b>Lade ein Bild hoch:</b> Dieses Modell benötigt ein Eingabebild.",
+        "ru": "\n📸 <b>Загрузите одно изображение:</b> Этой модели нужно входное изображение.",
+        "kk": "\n📸 <b>Бір сурет жүктеңіз:</b> Бұл модель кіріс суретін қажет етеді."
+    },
+    "model_req_media_multiple": {
+        "en": "\n📎 <b>Upload one or more images:</b> Then write your prompt.",
+        "de": "\n📎 <b>Lade ein oder mehrere Bilder hoch:</b> Anschließend deinen Prompt schreiben.",
+        "ru": "\n📎 <b>Загрузите одно или несколько изображений:</b> Затем напишите промт.",
+        "kk": "\n📎 <b>Бір немесе бірнеше сурет жүктеңіз:</b> Содан кейін сұраныс жазыңыз."
+    },
     "media_received": {
         "en": "✅ Received {count} file(s). Write your prompt or send more files.",
         "de": "✅ {count} Datei(en) erhalten. Schreibe deinen Prompt oder sende weitere Dateien.",
