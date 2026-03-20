@@ -33,20 +33,31 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
     all_models = db.get_all_models()
     clear_context(user_id)
     db.set_user_chat_mode(user_id, None, active=False)
+    remove_kbd = types.ReplyKeyboardRemove(selective=False)
+    webapp_only_markup = None
+    if config.APP_URL:
+        webapp_url = config.APP_URL.rstrip("/") + "/webapp"
+        webapp_only_markup = types.InlineKeyboardMarkup()
+        webapp_only_markup.add(types.InlineKeyboardButton(
+            get_text("menu_mode_webapp", lang),
+            web_app=types.WebAppInfo(url=webapp_url)
+        ))
     if action == "nav_main":
         welcome_text = get_text("welcome", lang)
-        markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+        markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
         bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="HTML")
+        bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
     elif action.startswith("nav_path_"):
         target_path = action.replace("nav_path_", "")
-        markup = keyboards.get_dynamic_model_menu(all_models, lang, target_path)
         title_key = f"title_{target_path.replace('/', '_')}"
         title_text = get_text(title_key, lang)
         if title_text == title_key:
             cat_name = target_path.split("/")[-1].capitalize()
             display_name = get_text(f"menu_{cat_name.lower()}", lang)
             title_text = f"📂 <b>{display_name if not display_name.startswith('menu_') else cat_name}</b>"
+        markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, target_path)
         bot.send_message(user_id, title_text, reply_markup=markup, parse_mode="HTML")
+        bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
     elif action.startswith("sel_"):
         model_key = action.replace("sel_", "")
         send_model_detail_view(bot, user_id, model_key, db, get_lang)
@@ -257,34 +268,23 @@ def register(bot: TeleBot, generation_service, db) -> None:
         welcome_text = get_text("welcome", lang)
         all_models = db.get_all_models()
 
+        remove_kbd = types.ReplyKeyboardRemove(selective=False)
         if _is_keyboard_mode(db):
             reply_kbd = keyboards.get_main_reply_keyboard(lang)
             bot.send_message(user_id, welcome_text, reply_markup=reply_kbd, parse_mode='HTML')
-            grid_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
-            bot.send_message(user_id, "👇 <i>Tastatur aktiv – Kategorien auch unten am Eingabefeld</i>",
-                            reply_markup=grid_markup, parse_mode='HTML')
         elif _is_webapp_mode(db) and config.APP_URL:
             webapp_url = config.APP_URL.rstrip("/") + "/webapp"
-            markup = types.InlineKeyboardMarkup(row_width=2)
+            markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton(
                 get_text("menu_mode_webapp", lang),
                 web_app=types.WebAppInfo(url=webapp_url)
             ))
-            cat_btns = []
-            for cat in ("image", "video", "audio", "text", "tools"):
-                lbl = get_text(f"menu_{cat}", lang)
-                if lbl.startswith("menu_"):
-                    lbl = cat.capitalize()
-                cat_btns.append(types.InlineKeyboardButton(lbl, callback_data=f"nav_path_{cat}"))
-            markup.add(*cat_btns)
-            markup.add(
-                types.InlineKeyboardButton(get_text("menu_profile", lang), callback_data="nav_profile"),
-                types.InlineKeyboardButton(get_text("menu_shop", lang), callback_data="cmd_shop"),
-            )
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+            bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+            bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
 
     # 2. NAVIGATION (Static Menus)
     # WICHTIG: Wir ignorieren hier 'nav_path_', damit gen_handler diese übernehmen kann!
@@ -304,12 +304,40 @@ def register(bot: TeleBot, generation_service, db) -> None:
         if target == "main":
             new_text = get_text("welcome", lang)
             all_models = db.get_all_models()
-            new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
             clear_context(user_id)
+            remove_kbd = types.ReplyKeyboardRemove(selective=False)
             if _is_keyboard_mode(db):
                 main_kbd = keyboards.get_main_reply_keyboard(lang)
-                bot.send_message(user_id, "👇", reply_markup=main_kbd, parse_mode="HTML")
-            
+                try:
+                    bot.delete_message(user_id, call.message.message_id)
+                except Exception:
+                    pass
+                bot.send_message(user_id, new_text, reply_markup=main_kbd, parse_mode="HTML")
+            elif _is_webapp_mode(db) and config.APP_URL:
+                webapp_url = config.APP_URL.rstrip("/") + "/webapp"
+                new_markup = types.InlineKeyboardMarkup()
+                new_markup.add(types.InlineKeyboardButton(
+                    get_text("menu_mode_webapp", lang),
+                    web_app=types.WebAppInfo(url=webapp_url)
+                ))
+                try:
+                    bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
+                except Exception:
+                    bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
+                bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+            else:
+                new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+                try:
+                    bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
+                except Exception:
+                    bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
+                bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+            try:
+                bot.answer_callback_query(call.id)
+            except Exception:
+                pass
+            return
+
         elif target == "settings":
             settings = db.get_user_settings(user_id)
             new_text = get_text("settings_title", lang)

@@ -65,7 +65,7 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
         lang = get_lang(user_id)
         target_path = call.data.replace("nav_path_", "")
         all_models = db.get_all_models()
-        markup = keyboards.get_dynamic_model_menu(all_models, lang, target_path)
+        menu_mode = db.get_bot_setting("menu_mode", "commands")
         title_key = f"title_{target_path.replace('/', '_')}"
         title_text = get_text(title_key, lang)
         if title_text == title_key:
@@ -74,16 +74,22 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
             if display_name.startswith("menu_"):
                 display_name = cat_name
             title_text = f"📂 <b>{display_name}</b>"
-        try:
-            bot.edit_message_text(title_text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
-        except Exception as e:
-            logger.warning("Edit failed in handle_path_nav: %s", e)
-            bot.send_message(user_id, title_text, reply_markup=markup, parse_mode="HTML")
-        if db.get_bot_setting("menu_mode", "commands") == "keyboard":
+        if menu_mode == "keyboard":
             from src.presentation.telegram.handlers.common import set_context
             set_context(user_id, {"keyboard_path": target_path})
             path_kbd = keyboards.get_path_reply_keyboard(all_models, lang, target_path)
-            bot.send_message(user_id, "👇", reply_markup=path_kbd, parse_mode="HTML")
+            try:
+                bot.delete_message(user_id, call.message.message_id)
+            except Exception as e:
+                logger.warning("Delete failed in handle_path_nav: %s", e)
+            bot.send_message(user_id, title_text, reply_markup=path_kbd, parse_mode="HTML")
+        else:
+            markup = keyboards.get_dynamic_model_menu(all_models, lang, target_path)
+            try:
+                bot.edit_message_text(title_text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+            except Exception as e:
+                logger.warning("Edit failed in handle_path_nav: %s", e)
+                bot.send_message(user_id, title_text, reply_markup=markup, parse_mode="HTML")
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith('sel_'))
     def handle_model_click(call):
@@ -195,14 +201,19 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
         except Exception:
             pass
         all_models = db.get_all_models()
-        markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
         text = get_text("welcome", lang)
-        try:
-            bot.edit_message_text(text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
-        except Exception:
-            bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
         if db.get_bot_setting("menu_mode", "commands") == "keyboard":
             from src.presentation.telegram.handlers.common import clear_context
             clear_context(user_id)
-            path_kbd = keyboards.get_main_reply_keyboard(lang)
-            bot.send_message(user_id, "👇", reply_markup=path_kbd, parse_mode="HTML")
+            main_kbd = keyboards.get_main_reply_keyboard(lang)
+            try:
+                bot.delete_message(user_id, call.message.message_id)
+            except Exception:
+                pass
+            bot.send_message(user_id, text, reply_markup=main_kbd, parse_mode="HTML")
+        else:
+            markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+            try:
+                bot.edit_message_text(text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+            except Exception:
+                bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
