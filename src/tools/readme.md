@@ -87,5 +87,22 @@ streamlit run src/tools/admin_gui.py
 - **`import_staging.py`**: Breite Suche (Collections, Provider, Keywords), mehr Modelle. Behält manuelle Edits (`manual_override`).
 - **`admin_gui.py`**: Streamlit-Dashboard zur Bearbeitung und Freigabe.
 - **`approve_to_main.py`**: Transfer von Staging (is_approved=1) nach Live.
+- **`reclassify_models.py`**: Wendet die verbesserte Klassifikationslogik auf bestehende Modelle an (model_type, menu_path aus Input/Output-Schema).
 
 **Default:** `python -m src.tools.fetch_advanced` – schneller Import der Best-of-Modelle.
+
+---
+
+## 🔄 Modell-Klassifikation korrigieren
+
+Nach Änderungen an `replicate_fetcher.py` oder bei falsch zugeordneten Modellen (z.B. Vision-Chat in "Bild" statt "Text"):
+
+```bash
+# Staging-Tabelle aktualisieren
+python -m src.tools.reclassify_models
+
+# Haupt-Tabelle (Live) aktualisieren
+python -m src.tools.reclassify_models --main
+```
+
+**Klassifikation beim Import:** Modelle werden beim Laden von Replicate (`fetch_advanced`, `import_staging`) automatisch korrekt klassifiziert – Output-Typ entscheidet primär (Text→Chat, Bild→Bild Studio). `image_analysis` = Input Bild, Output Text. `img2img` nur wenn Bild-Input Pflicht.
