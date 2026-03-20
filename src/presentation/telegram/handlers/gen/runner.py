@@ -112,23 +112,46 @@ def create_run_generation(bot, db, generation_service, get_lang):
                             "menu_path": menu_path,
                         }
                         set_context(user_id, new_ctx)
-                        # Zwei Buttons: zurück zum Modell, zurück zum Hauptmenü
-                        back_markup = types.InlineKeyboardMarkup(row_width=2)
-                        back_markup.add(
-                            types.InlineKeyboardButton(get_text("btn_back", lang), callback_data=f"sel_{model.key}"),
-                            types.InlineKeyboardButton("🏠 Hauptmenü", callback_data="nav_path_root"),
-                        )
-                        bot.send_message(
-                            user_id,
-                            get_text("model_req_prompt", lang),
-                            reply_markup=back_markup,
-                            parse_mode="HTML",
-                        )
+                        menu_mode = db.get_bot_setting("menu_mode", "commands")
+                        if menu_mode == "keyboard":
+                            # Tastatur bleibt sichtbar, keine zusätzlichen Inline-Buttons
+                            bot.send_message(
+                                user_id,
+                                get_text("model_req_prompt", lang),
+                                parse_mode="HTML",
+                            )
+                        else:
+                            back_markup = types.InlineKeyboardMarkup(row_width=2)
+                            back_markup.add(
+                                types.InlineKeyboardButton(get_text("btn_back", lang), callback_data=f"sel_{model.key}"),
+                                types.InlineKeyboardButton("🏠 Hauptmenü", callback_data="nav_path_root"),
+                            )
+                            bot.send_message(
+                                user_id,
+                                get_text("model_req_prompt", lang),
+                                reply_markup=back_markup,
+                                parse_mode="HTML",
+                            )
                     else:
                         time.sleep(1)
-                        next_markup = keyboards.get_dynamic_model_menu(
-                            db.get_all_models(), lang, ctx.get("menu_path", "root") if ctx else "root"
-                        )
+                        menu_mode = db.get_bot_setting("menu_mode", "commands")
+                        menu_path = ctx.get("menu_path", "root") if ctx else "root"
+                        all_models = db.get_all_models()
+                        if menu_mode == "keyboard":
+                            next_markup = keyboards.get_path_reply_keyboard(all_models, lang, menu_path)
+                        elif menu_mode == "webapp":
+                            from src.config.settings import config
+                            if config.APP_URL:
+                                webapp_url = config.APP_URL.rstrip("/") + "/webapp"
+                                next_markup = types.InlineKeyboardMarkup()
+                                next_markup.add(types.InlineKeyboardButton(
+                                    get_text("menu_mode_webapp", lang),
+                                    web_app=types.WebAppInfo(url=webapp_url)
+                                ))
+                            else:
+                                next_markup = keyboards.get_dynamic_model_menu(all_models, lang, menu_path)
+                        else:
+                            next_markup = keyboards.get_dynamic_model_menu(all_models, lang, menu_path)
                         bot.send_message(
                             user_id,
                             get_text("msg_next_step", lang),

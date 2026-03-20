@@ -112,7 +112,7 @@ class GenerationService:
             
             try:
                 # SCHRITT 1: Basis-Bild mit Flux
-                res_base = self.ai.generate(flux_model, specific_prompt, image_url=None)
+                res_base = self.ai.generate(flux_model, specific_prompt, media_files=None)
                 if not res_base.success:
                     print(f"Skipping Variant {i+1}: {res_base.error}")
                     continue
@@ -163,7 +163,7 @@ class GenerationService:
             return False, "Modelle nicht gefunden."
         
         # 1. Bild generieren
-        res_step1 = self.ai.generate(flux_model, user_prompt, image_url=None)
+        res_step1 = self.ai.generate(flux_model, user_prompt, media_files=None)
         if not res_step1.success: return False, res_step1.error
         base_url = str(res_step1.data)
         
