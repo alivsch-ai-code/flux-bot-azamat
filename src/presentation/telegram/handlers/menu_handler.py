@@ -148,10 +148,17 @@ def register(bot: TeleBot, generation_service, db) -> None:
                         title_text = f"📂 <b>{display_name if not display_name.startswith('menu_') else cat_name}</b>"
                     bot.send_message(user_id, title_text, reply_markup=path_markup, parse_mode='HTML')
                 elif act_type == "sel":
+                    prev = get_context(user_id) or {}
                     clear_context(user_id)
                     db.set_user_chat_mode(user_id, None, active=False)
                     send_model_detail_view(bot, user_id, target, db, get_lang)
-                    set_context(user_id, {"keyboard_path": path})
+                    set_context(user_id, {
+                        "model_key": target,
+                        "step": "viewing_model",
+                        "keyboard_path": path,
+                        "menu_path": path,
+                        "media_paths": prev.get("media_paths") or [],
+                    })
             return
 
         clear_context(user_id)

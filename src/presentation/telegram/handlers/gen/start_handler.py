@@ -10,7 +10,10 @@ Registriert handle_start_gen (start_gen_*): User klickt auf „Start“ bei eine
 
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.common import get_context, set_context
-from src.presentation.telegram.handlers.gen.media_helpers import schema_requires_media
+from src.presentation.telegram.handlers.gen.media_helpers import (
+    schema_allows_multiple_media,
+    schema_requires_media,
+)
 from src.presentation.telegram.handlers.gen.ux import smart_update_status
 from src.utils.strings import get_text
 
@@ -28,8 +31,8 @@ def register_start_gen_handler(bot, db, get_lang) -> None:
         existing_media = prev.get("media_paths") or []
         has_media = bool(existing_media)
 
-        needs_media = schema_requires_media(model.input_schema) or (model.type and ("img2img" in model.type or "upscale" in model.type))
-        # Wenn der User bereits ein Medium hochgeladen hat (Hauptmenü-Fallback), fragen wir NICHT erneut nach Upload.
+        # Nur Schema entscheidet – bei optionalem Image ist txt2img möglich
+        needs_media = schema_requires_media(model.input_schema)
         step = "waiting_for_prompt" if has_media else ("waiting_for_media" if needs_media else "waiting_for_prompt")
 
         set_context(
@@ -42,7 +45,11 @@ def register_start_gen_handler(bot, db, get_lang) -> None:
                 "menu_path": model.menu_path,
             },
         )
-        prompt_text = get_text("model_req_media", lang) if step == "waiting_for_media" else get_text("model_req_prompt", lang)
+        if step == "waiting_for_media":
+            allow_multi = schema_allows_multiple_media(model.input_schema)
+            prompt_text = get_text("model_req_media_multiple", lang) if allow_multi else get_text("model_req_media_single", lang)
+        else:
+            prompt_text = get_text("model_req_prompt", lang)
         if model.example_data and model.example_data.get("prompt") and step == "waiting_for_prompt":
             prompt_text += f"\n\n📝 Bsp: <code>{model.example_data.get('prompt')[:100]}...</code>"
         markup = keyboards.get_back_menu(lang, target=f"sel_{key}")

@@ -46,16 +46,11 @@ DEFAULT_BEST_MODELS = [
     "google/veo-3.1",
     "openai/sora-2",
     "minimax/video-01",
-    "luma/ray",
-    "wan-ai/wan2.1-video",
     # --- AUDIO ---
     "suno-ai/bark",
     "meta/musicgen",
-    "meta/musicgen-melody",
     "openai/whisper",
     "stability-ai/stable-audio-2.5",
-    "minimax/speech-02",
-    "elevenlabs/eleven-multilingual-v2",
     # --- TEXT / CHAT ---
     "google/gemini-2.5-flash",
     "google/gemini-3.1-pro",
@@ -71,13 +66,11 @@ DEFAULT_BEST_MODELS = [
     "anthropic/claude-4.5-haiku",
     "anthropic/claude-opus-4.6",
     "meta/meta-llama-3.1-405b-instruct",
-    "meta/meta-llama-3.1-70b-instruct",
     "deepseek-ai/deepseek-r1",
     "deepseek-ai/deepseek-v3",
     "deepseek-ai/deepseek-v3.1",
     "xai/grok-4",
     "qwen/qwen3-235b-a22b-instruct-2507",
-    "mistralai/mistral-large",
 ]
 
 
