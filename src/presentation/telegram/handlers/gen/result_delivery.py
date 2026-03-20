@@ -93,9 +93,25 @@ def _try_send_as_file(bot, user_id, res_bytes, res, caption, model):
                 pass
 
 
+def _extract_urls_from_result(result):
+    """Extrahiert eine Liste von URLs aus dem Ergebnis (Einzel- oder Mehrfach-Output)."""
+    if isinstance(result, list) and result:
+        urls = []
+        for item in result:
+            _, url = _parse_raw_result(item)
+            if url and isinstance(url, str) and url.strip().startswith(("http://", "https://")):
+                urls.append(url)
+        return urls if urls else None
+    _, res = _parse_raw_result(result[0] if isinstance(result, list) and result else result)
+    if res and isinstance(res, str) and res.strip().startswith(("http://", "https://")):
+        return [res]
+    return None
+
+
 def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, prompt, keyboards_fn):
     """
     Parst das API-Ergebnis und liefert es aus. Berücksichtigt Chat-Modus vs. Medien-Modus.
+    Unterstützt Einzel- und Listen-Output (z.B. Premium Pipeline mit 4 Headshots).
     """
     t0 = time.perf_counter()
     raw = result[0] if isinstance(result, list) and result else result
@@ -139,7 +155,22 @@ def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, pro
     is_media_model = model.type and ("video" in model.type or "audio" in model.type or "image" in model.type)
     sent = False
 
-    if (res_bytes or (is_valid_url and is_media_model)) and is_media_model:
+    # Mehrfach-Bilder (z.B. Premium Pipeline mit 4 Headshots)
+    multi_urls = _extract_urls_from_result(result)
+    if multi_urls and len(multi_urls) > 1 and is_media_model and model.type and "image" in model.type:
+        try:
+            from telebot import types as tb_types
+            media_group = [
+                tb_types.InputMediaPhoto(url, caption=caption if i == 0 else "")
+                for i, url in enumerate(multi_urls[:10])
+            ]
+            bot.send_media_group(user_id, media_group)
+            sent = True
+        except Exception as e:
+            logger.warning("Media group failed, falling back to single: %s", e)
+            multi_urls = None
+
+    if not sent and (res_bytes or (is_valid_url and is_media_model)) and is_media_model:
         sent = _try_send_as_file(bot, user_id, res_bytes, res, caption, model)
     if not sent and is_valid_url and is_media_model and not url_too_long:
         try:
