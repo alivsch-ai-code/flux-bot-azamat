@@ -103,8 +103,9 @@ def api_models():
         return {"models": [], "title": ""}, 200
 
 def run_web_server():
-    logger.info("Starte Webserver auf Port %s...", config.PORT)
-    app.run(host='0.0.0.0', port=config.PORT, use_reloader=False)
+    logger.info("Starte Webserver auf Port %s (Waitress, multi-thread)...", config.PORT)
+    from waitress import serve
+    serve(app, host='0.0.0.0', port=config.PORT, threads=8)
 
 
 def get_status_text() -> str:

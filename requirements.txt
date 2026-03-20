@@ -2,6 +2,7 @@
 pyTelegramBotAPI
 # Webserver für Healthchecks (damit Render nicht einschläft)
 flask
+waitress
 # Schnittstelle zu den KI-Modellen
 replicate
 # Zum Laden von Umgebungsvariablen (.env)
