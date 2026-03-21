@@ -102,6 +102,17 @@
     }
     .lang-btn:active { opacity: 0.8; }
     .lang-btn.active { border-color: var(--accent); background: rgba(99,102,241,0.2); }
+    .detail-view { padding: 0 4px; }
+    .detail-preview { width: 100%; max-height: 200px; object-fit: contain; border-radius: 10px; margin: 12px 0; background: rgba(0,0,0,0.2); }
+    .detail-desc { color: rgba(255,255,255,0.8); font-size: 0.9rem; line-height: 1.4; margin: 12px 0; }
+    .detail-cost { color: var(--accent); font-weight: 600; margin: 12px 0; font-size: 1rem; }
+    .detail-example { font-size: 0.8rem; color: rgba(255,255,255,0.5); font-style: italic; margin: 8px 0; }
+    .btn-start { display: block; width: 100%; padding: 14px; margin: 16px 0 8px; background: var(--accent); color: var(--tg-theme-button-text-color); border: none; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; text-align: center; }
+    .btn-start:active { opacity: 0.9; }
+    .btn-secondary { display: block; width: 100%; padding: 12px; margin: 8px 0; background: rgba(255,255,255,0.1); color: inherit; border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; font-size: 0.95rem; cursor: pointer; text-align: center; }
+    .btn-secondary:active { opacity: 0.8; }
+    .chat-mode-btns { display: flex; gap: 10px; margin-top: 16px; }
+    .chat-mode-btns .btn-start { flex: 1; margin: 0; }
   </style>
 </head>
 <body>
@@ -175,6 +186,10 @@
         <button class="lang-btn" data-lang="ru">🇷🇺 Русский</button>
         <button class="lang-btn" data-lang="kk">🇰🇿 Қазақша</button>
       </div>
+    </div>
+    <div id="detail-view" class="detail-view hidden">
+      <div class="back-btn" id="detail-back-btn">← <span data-t="webapp_back">Zurück</span></div>
+      <div id="detail-content"></div>
     </div>
   </div>
   <script>
@@ -327,6 +342,7 @@
       document.getElementById('main-view').classList.add('hidden');
       document.getElementById('models-view').classList.remove('hidden');
       document.getElementById('settings-view').classList.add('hidden');
+      document.getElementById('detail-view').classList.add('hidden');
       document.getElementById('models-title').textContent = title;
       const list = document.getElementById('models-list');
       const folderHtml = (folders || []).map(f => {
@@ -360,7 +376,7 @@
       list.querySelectorAll('.model-card:not(.folder-card)').forEach(el => {
         el.addEventListener('click', () => {
           const key = el.getAttribute('data-key');
-          if (key) sendAction('sel_' + key);
+          if (key) showModelDetail(key);
         });
       });
       updateTopBar();
@@ -369,6 +385,7 @@
     function showSettings() {
       document.getElementById('main-view').classList.add('hidden');
       document.getElementById('models-view').classList.add('hidden');
+      document.getElementById('detail-view').classList.add('hidden');
       document.getElementById('settings-view').classList.remove('hidden');
       document.querySelectorAll('.lang-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.lang === state.user.lang);
@@ -386,6 +403,58 @@
         document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
       });
     });
+
+    function showModelDetail(key) {
+      fetch(API_BASE + '/api/model?key=' + encodeURIComponent(key))
+        .then(r => r.json())
+        .then(data => {
+          if (!data.ok) return;
+          document.getElementById('main-view').classList.add('hidden');
+          document.getElementById('models-view').classList.add('hidden');
+          document.getElementById('settings-view').classList.add('hidden');
+          document.getElementById('detail-view').classList.remove('hidden');
+          const isText = Array.isArray(data.model_type) && data.model_type.includes('text');
+          const costLabel = data.final_cost <= 0 ? 'FREE' : data.final_cost + ' ⭐';
+          let imgHtml = '';
+          if (data.example_image_url) {
+            imgHtml = `<img class="detail-preview" src="${escapeHtml(data.example_image_url)}" alt="Beispiel" onerror="this.style.display='none'">`;
+          }
+          const costHtml = `<div class="detail-cost">💰 Kosten: ${escapeHtml(String(data.final_cost))} Credits</div>`;
+          let btnHtml = '';
+          if (isText) {
+            btnHtml = `<div class="chat-mode-btns">
+              <button class="btn-start" data-action="chat_mode_yes_${escapeHtml(key)}">✅ Chat starten</button>
+              <button class="btn-secondary" data-action="chat_mode_no_${escapeHtml(key)}">❌ Einmaliger Prompt</button>
+            </div>`;
+          } else {
+            btnHtml = `<button class="btn-start" data-action="start_gen_${escapeHtml(key)}">🚀 Start (${costLabel})</button>`;
+          }
+          document.getElementById('detail-content').innerHTML = `
+            <div class="header">
+              <h1>🤖 ${escapeHtml(data.name || '')}</h1>
+            </div>
+            ${imgHtml}
+            <div class="detail-desc">${escapeHtml(data.description || '')}</div>
+            ${data.example_image_url ? '<div class="detail-example">🖼️ Dieses Modell hat ein Beispielbild oben in der Vorschau.</div>' : ''}
+            ${costHtml}
+            ${btnHtml}
+          `;
+          document.getElementById('detail-content').querySelectorAll('[data-action]').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const action = btn.getAttribute('data-action');
+              sendAction(action);
+            });
+          });
+        })
+        .catch(() => {});
+    }
+
+    function hideDetailView() {
+      document.getElementById('detail-view').classList.add('hidden');
+      document.getElementById('models-view').classList.remove('hidden');
+    }
+
+    document.getElementById('detail-back-btn').addEventListener('click', hideDetailView);
 
     document.getElementById('back-btn').addEventListener('click', () => {
       const parts = state.currentPath.split('/');

@@ -18,6 +18,51 @@ from src.presentation.telegram.handlers.gen.ux import smart_update_status
 from src.utils.strings import get_text
 
 
+def do_start_gen_flow(bot, user_id: int, model_key: str, db, get_lang, edit_message_id: int | None = None) -> bool:
+    """
+    Startet den Generierungs-Flow (Context setzen, Prompt/Media anfordern).
+    edit_message_id: Falls gesetzt, wird die Nachricht editiert; sonst wird neu gesendet.
+    Wird von WebApp (process_webapp_action) und Callback (handle_start_gen) genutzt.
+    """
+    model = db.get_model_by_key(model_key)
+    if not model or not model.is_active:
+        return False
+    lang = get_lang(user_id)
+    prev = get_context(user_id) or {}
+    existing_media = prev.get("media_paths") or []
+    has_media = bool(existing_media)
+    needs_media = schema_requires_media(model.input_schema)
+    step = "waiting_for_prompt" if has_media else ("waiting_for_media" if needs_media else "waiting_for_prompt")
+
+    set_context(
+        user_id,
+        {
+            "model_key": model_key,
+            "step": step,
+            "media_paths": existing_media if has_media else [],
+            "last_bot_msg_id": edit_message_id,
+            "menu_path": model.menu_path,
+        },
+    )
+    if step == "waiting_for_media":
+        allow_multi = schema_allows_multiple_media(model.input_schema)
+        prompt_text = get_text("model_req_media_multiple", lang) if allow_multi else get_text("model_req_media_single", lang)
+    else:
+        prompt_text = get_text("model_req_prompt", lang)
+    if model.example_data and model.example_data.get("prompt") and step == "waiting_for_prompt":
+        prompt_text += f"\n\n📝 Bsp: <code>{model.example_data.get('prompt')[:100]}...</code>"
+    markup = keyboards.get_back_menu(lang, target=f"sel_{model_key}")
+
+    if edit_message_id:
+        ctx = {"last_bot_msg_id": edit_message_id}
+        new_id = smart_update_status(bot, user_id, prompt_text, ctx, markup)
+    else:
+        msg = bot.send_message(user_id, prompt_text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=False)
+        new_id = msg.message_id
+    set_context(user_id, {**get_context(user_id) or {}, "last_bot_msg_id": new_id})
+    return True
+
+
 def register_start_gen_handler(bot, db, get_lang) -> None:
     """Registriert den handle_start_gen Callback-Handler."""
 
@@ -25,32 +70,8 @@ def register_start_gen_handler(bot, db, get_lang) -> None:
     def handle_start_gen(call):
         key = call.data.split('start_gen_')[1]
         user_id = call.message.chat.id
-        lang = get_lang(user_id)
-        model = db.get_model_by_key(key)
-        prev = get_context(user_id) or {}
-        existing_media = prev.get("media_paths") or []
-        has_media = bool(existing_media)
-
-        # Nur Schema entscheidet – bei optionalem Image ist txt2img möglich
-        needs_media = schema_requires_media(model.input_schema)
-        step = "waiting_for_prompt" if has_media else ("waiting_for_media" if needs_media else "waiting_for_prompt")
-
-        set_context(
-            user_id,
-            {
-                "model_key": key,
-                "step": step,
-                "media_paths": existing_media if has_media else [],
-                "last_bot_msg_id": call.message.message_id,
-                "menu_path": model.menu_path,
-            },
-        )
-        if step == "waiting_for_media":
-            allow_multi = schema_allows_multiple_media(model.input_schema)
-            prompt_text = get_text("model_req_media_multiple", lang) if allow_multi else get_text("model_req_media_single", lang)
-        else:
-            prompt_text = get_text("model_req_prompt", lang)
-        if model.example_data and model.example_data.get("prompt") and step == "waiting_for_prompt":
-            prompt_text += f"\n\n📝 Bsp: <code>{model.example_data.get('prompt')[:100]}...</code>"
-        markup = keyboards.get_back_menu(lang, target=f"sel_{key}")
-        smart_update_status(bot, user_id, prompt_text, {"last_bot_msg_id": call.message.message_id}, markup)
+        do_start_gen_flow(bot, user_id, key, db, get_lang, edit_message_id=call.message.message_id)
+        try:
+            bot.answer_callback_query(call.id)
+        except Exception:
+            pass
