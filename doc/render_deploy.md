@@ -40,6 +40,7 @@ Unter **Environment** diese Variablen setzen:
 | `DATABASE_URL` | Neon-PostgreSQL-URL |
 | `ADMIN_ID` | Deine Telegram-Chat-ID |
 | `SONAUTO_API_KEY` | (optional) |
+| `REPLICATE_MAX_CONCURRENT` | (optional) Max. parallele Replicate-Generierungen; Standard `1` (nacheinander). Z. B. `2` für zwei gleichzeitige Predictions. |
 | … | Weitere Keys wie in `.env` |
 
 **Hinweis:** `APP_URL` und `RENDER_EXTERNAL_URL` musst du **nicht** setzen – Render füllt `RENDER_EXTERNAL_URL` automatisch.

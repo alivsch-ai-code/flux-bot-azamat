@@ -5,6 +5,7 @@ from PIL import Image
 from typing import List, Optional
 
 from src.domain.entities import AIModel, GenerationResult, MediaFile
+from src.infrastructure.ai.replicate_concurrency import replicate_run_slot
 from src.infrastructure.metrics import record_timing
 from src.infrastructure.security.validator import InputValidator
 
@@ -125,13 +126,14 @@ class GenerationService:
 
                 # SCHRITT 2: Face Swap via Replicate direkt (da Pipeline-Logik spezifisch ist)
                 with open(user_image_path, "rb") as swap_image_file:
-                    output_swap = replicate.run(
-                        swap_model.replicate_id,
-                        input={
-                            "target_image": base_url,
-                            "swap_image": swap_image_file
-                        }
-                    )
+                    with replicate_run_slot():
+                        output_swap = replicate.run(
+                            swap_model.replicate_id,
+                            input={
+                                "target_image": base_url,
+                                "swap_image": swap_image_file
+                            }
+                        )
                 
                 # Ergebnis normalisieren
                 if isinstance(output_swap, list) and len(output_swap) > 0: 
@@ -172,10 +174,11 @@ class GenerationService:
         # 2. Face Swap
         try:
             with open(user_image_path, "rb") as swap_image_file:
-                output = replicate.run(
-                    swap_model.replicate_id,
-                    input={"target_image": base_url, "swap_image": swap_image_file}
-                )
+                with replicate_run_slot():
+                    output = replicate.run(
+                        swap_model.replicate_id,
+                        input={"target_image": base_url, "swap_image": swap_image_file}
+                    )
             final_url = output[0] if isinstance(output, list) else str(output)
             return True, final_url
         except Exception as e:
