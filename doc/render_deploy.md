@@ -1,5 +1,7 @@
 # Deployment auf Render
 
+> **Hinweis:** Aktuell läuft der Bot auf **Railway** – siehe `doc/railway_deploy.md`.
+
 ## Web-Adresse bekommen
 
 Bei einem **Web Service** auf Render bekommst du automatisch eine HTTPS-URL:

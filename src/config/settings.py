@@ -31,7 +31,7 @@ class Settings:
         for key in OPTIONAL_API_KEYS:
             setattr(self, key, os.getenv(key))
             if not getattr(self, key):
-                logger.warning("Umgebungsvariable '%s' fehlt (optional)", key)
+                logger.debug("Umgebungsvariable '%s' fehlt (optional)", key)
 
         # Optionale Einstellungen mit Standardwerten
         self.PORT = int(os.getenv("PORT", 5000))
@@ -39,9 +39,11 @@ class Settings:
         self.START_CREDITS = 2000
         # Max. parallele Replicate-Predictions (replicate.run). 1 = streng nacheinander.
         self.REPLICATE_MAX_CONCURRENT = max(1, int(os.getenv("REPLICATE_MAX_CONCURRENT", "1")))
-        # URL für Mini App – nur HTTPS! APP_URL oder RENDER_EXTERNAL_URL (Render setzt das)
-        # Lokal: ngrok http 5000 → APP_URL=https://xxx.ngrok-free.app
+        # URL für Mini App – nur HTTPS!
+        # Railway: APP_URL manuell oder RAILWAY_PUBLIC_DOMAIN; Render: RENDER_EXTERNAL_URL
         raw = os.getenv("APP_URL") or os.getenv("RENDER_EXTERNAL_URL") or ""
+        if not raw and os.getenv("RAILWAY_PUBLIC_DOMAIN"):
+            raw = f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN')}"
         url = raw.rstrip("/")
         self.APP_URL = url if url.startswith("https://") else ""
 

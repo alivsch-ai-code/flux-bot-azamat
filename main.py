@@ -230,9 +230,13 @@ def main():
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=30)
         except Exception as e:
-            if "timed out" in str(e).lower() or "timeout" in str(e).lower():
+            err_str = str(e).lower()
+            if "timed out" in err_str or "timeout" in err_str:
                 logger.warning("Telegram Polling Timeout – starte in 5s neu: %s", e)
                 time.sleep(5)
+            elif "409" in err_str or "conflict" in err_str:
+                logger.warning("Telegram 409 Conflict (andere Instanz?) – warte 30s, dann Retry: %s", e)
+                time.sleep(30)
             else:
                 logger.critical("Kritischer Absturz: %s", e)
                 sys.exit(1)
