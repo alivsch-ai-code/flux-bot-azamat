@@ -141,6 +141,13 @@
     const API_BASE = window.location.origin;
     let currentPath = 'root';
 
+    function escapeHtml(s) {
+      if (s == null || s === '') return '';
+      const div = document.createElement('div');
+      div.textContent = String(s);
+      return div.innerHTML;
+    }
+
     function initFromUrl() {
       const params = new URLSearchParams(window.location.search);
       const path = params.get('path');
@@ -148,9 +155,11 @@
         fetch(API_BASE + '/api/models?path=' + encodeURIComponent(path))
           .then(r => r.json())
           .then(data => {
-            if (data.models && data.models.length > 0) {
+            const hasM = data.models && data.models.length > 0;
+            const hasF = data.folders && data.folders.length > 0;
+            if (hasM || hasF) {
               currentPath = path;
-              showModels(path, data.models, data.title || path);
+              showModels(path, data.models || [], data.title || path, data.folders || []);
             }
           })
           .catch(() => {});
@@ -186,8 +195,10 @@
           fetch(API_BASE + '/api/models?path=' + encodeURIComponent(path))
             .then(r => r.json())
             .then(data => {
-              if (data.models && data.models.length > 0) {
-                showModels(path, data.models, data.title || path);
+              const hasM = data.models && data.models.length > 0;
+              const hasF = data.folders && data.folders.length > 0;
+              if (hasM || hasF) {
+                showModels(path, data.models || [], data.title || path, data.folders || []);
               } else {
                 sendAction(action);
               }
@@ -199,21 +210,43 @@
       });
     });
 
-    function showModels(path, models, title) {
+    function showModels(path, models, title, folders) {
       currentPath = path;
       document.getElementById('main-view').classList.add('hidden');
       document.getElementById('models-view').classList.remove('hidden');
       document.getElementById('models-title').textContent = title;
       const list = document.getElementById('models-list');
-      list.innerHTML = models.map(m => `
-        <div class="model-card" data-key="${m.key}">
-          <span class="model-name">${m.name}</span>
-          <span class="model-cost">${m.final_cost > 0 ? m.final_cost + ' ⭐' : 'FREE'}</span>
+      const folderHtml = (folders || []).map(f => {
+        const fp = f.path || f.slug;
+        const label = escapeHtml((f.slug || fp).replace(/_/g, ' '));
+        return `<div class="model-card folder-card" data-folder-path="${escapeHtml(fp)}" style="border-color: rgba(99,102,241,0.35);">
+          <span class="model-name">📁 ${label}</span>
+          <span class="model-cost">→</span>
+        </div>`;
+      }).join('');
+      const modelHtml = models.map(m => `
+        <div class="model-card" data-key="${escapeHtml(m.key)}">
+          <span class="model-name">${escapeHtml(m.name)}</span>
+          <span class="model-cost">${m.final_cost > 0 ? escapeHtml(String(m.final_cost)) + ' ⭐' : 'FREE'}</span>
         </div>
       `).join('');
-      list.querySelectorAll('.model-card').forEach(el => {
+      list.innerHTML = folderHtml + modelHtml;
+      list.querySelectorAll('.model-card.folder-card').forEach(el => {
         el.addEventListener('click', () => {
-          sendAction('sel_' + el.dataset.key);
+          const fp = el.getAttribute('data-folder-path');
+          if (!fp) return;
+          fetch(API_BASE + '/api/models?path=' + encodeURIComponent(fp))
+            .then(r => r.json())
+            .then(data => {
+              showModels(fp, data.models || [], data.title || fp, data.folders || []);
+            })
+            .catch(() => {});
+        });
+      });
+      list.querySelectorAll('.model-card:not(.folder-card)').forEach(el => {
+        el.addEventListener('click', () => {
+          const key = el.getAttribute('data-key');
+          if (key) sendAction('sel_' + key);
         });
       });
     }
@@ -231,7 +264,7 @@
               document.getElementById('models-view').classList.add('hidden');
               document.getElementById('main-view').classList.remove('hidden');
             } else {
-              showModels(parent, data.models || [], data.title || parent);
+              showModels(parent, data.models || [], data.title || parent, data.folders || []);
             }
           })
           .catch(() => { document.getElementById('models-view').classList.add('hidden'); document.getElementById('main-view').classList.remove('hidden'); currentPath = 'root'; });
