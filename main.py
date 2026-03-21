@@ -5,7 +5,7 @@ import threading
 import time
 
 import telebot
-from flask import Flask, request
+from flask import Flask, jsonify, request
 
 # --- 1. KONFIGURATION (lädt .env via settings) ---
 from src.config.settings import config
@@ -36,7 +36,6 @@ def health_check():
 @app.route('/webapp')
 def webapp():
     """Telegram Mini App – HTML-Menü"""
-    import os
     path = os.path.join(os.path.dirname(__file__), "webapp", "index.html")
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -48,7 +47,7 @@ def webapp():
 def api_webapp_action():
     """Web App sendet Aktionen per POST (sendData funktioniert nicht bei Menü-Button)."""
     if _db_instance is None:
-        return {"ok": False, "error": "no_db"}, 400
+        return jsonify(ok=False, error="no_db"), 400
     try:
         from src.utils.telegram_init_data import validate_init_data
         from src.presentation.telegram.handlers.menu_handler import process_webapp_action, _is_webapp_mode
@@ -57,34 +56,34 @@ def api_webapp_action():
         action = data.get("action", "")
         init_data = data.get("init_data", "")
         if not action or not init_data:
-            return {"ok": False, "error": "missing_params"}, 400
+            return jsonify(ok=False, error="missing_params"), 400
         if not _is_webapp_mode(_db_instance):
-            return {"ok": False, "error": "webapp_disabled"}, 400
+            return jsonify(ok=False, error="webapp_disabled"), 400
 
         user_id = validate_init_data(init_data, config.TELEGRAM_TOKEN)
         if not user_id:
-            return {"ok": False, "error": "invalid_init_data"}, 403
+            return jsonify(ok=False, error="invalid_init_data"), 403
 
         if _bot_instance is None:
-            return {"ok": False, "error": "no_bot"}, 500
+            return jsonify(ok=False, error="no_bot"), 500
 
         process_webapp_action(_bot_instance, user_id, action, _db_instance)
-        return {"ok": True}
+        return jsonify(ok=True)
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("webapp_action error: %s", e)
-        return {"ok": False, "error": str(e)}, 500
+        return jsonify(ok=False, error=str(e)), 500
 
 
 @app.route('/api/models')
 def api_models():
-    """API für Mini App: Modelle nach Pfad"""
+    """API für Mini App: Modelle und Unterordner pro menu_path (wie Inline-Menü)."""
     if _db_instance is None:
-        return {"models": [], "title": ""}, 200
-    path = request.args.get("path", "root")
+        return jsonify(models=[], folders=[], title=""), 200
+    path = request.args.get("path", "root") or "root"
     try:
         models = _db_instance.get_all_models()
-        sub_cats = set()
+        sub_cats: set[str] = set()
         items = []
         for m in models:
             if m.menu_path == path:
@@ -92,15 +91,25 @@ def api_models():
                 items.append({"key": m.key, "name": m.name, "final_cost": cost})
             elif path == "root" and "/" not in m.menu_path and m.menu_path != "root":
                 sub_cats.add(m.menu_path)
-            elif m.menu_path.startswith(path + "/"):
+            elif path != "root" and m.menu_path.startswith(path + "/"):
                 sub_cats.add(m.menu_path[len(path) + 1 :].split("/")[0])
-        titles = {"image": "Bild Studio", "video": "Video Studio", "audio": "Audio Studio", "text": "Text / Chat", "tools": "Werkzeuge"}
-        title = titles.get(path.split("/")[-1], path.capitalize())
-        return {"models": items, "title": title}
+        titles = {
+            "image": "Bild Studio",
+            "video": "Video Studio",
+            "audio": "Audio Studio",
+            "text": "Text / Chat",
+            "tools": "Werkzeuge",
+        }
+        title = titles.get(path.split("/")[-1], path.replace("/", " · ").title() if path != "root" else "Kategorien")
+        folders = [
+            {"path": seg if path == "root" else f"{path}/{seg}", "slug": seg}
+            for seg in sorted(sub_cats)
+        ]
+        return jsonify(models=items, folders=folders, title=title)
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("api_models error: %s", e)
-        return {"models": [], "title": ""}, 200
+        return jsonify(models=[], folders=[], title=""), 200
 
 def run_web_server():
     logger.info("Starte Webserver auf Port %s (Waitress, multi-thread)...", config.PORT)
