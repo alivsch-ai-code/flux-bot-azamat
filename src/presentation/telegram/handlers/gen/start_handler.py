@@ -8,6 +8,8 @@ Registriert handle_start_gen (start_gen_*): User klickt auf „Start“ bei eine
 - Aktualisiert die Nachricht via smart_update_status
 """
 
+from typing import Optional
+
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.common import get_context, set_context
 from src.presentation.telegram.handlers.gen.media_helpers import (
@@ -59,7 +61,9 @@ def do_start_gen_flow(bot, user_id: int, model_key: str, db, get_lang, edit_mess
     else:
         msg = bot.send_message(user_id, prompt_text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=False)
         new_id = msg.message_id
-    set_context(user_id, {**get_context(user_id) or {}, "last_bot_msg_id": new_id})
+    ctx = dict(get_context(user_id) or {})
+    ctx["last_bot_msg_id"] = new_id
+    set_context(user_id, ctx)
     return True
 
 
