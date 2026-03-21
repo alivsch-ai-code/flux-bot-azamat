@@ -56,7 +56,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
         welcome_text = get_text("welcome", lang)
         markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
         bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="HTML")
-        bot.send_message(user_id, " ", reply_markup=remove_kbd)
+        bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
     elif action.startswith("nav_path_"):
         target_path = action.replace("nav_path_", "")
         title_key = f"title_{target_path.replace('/', '_')}"
@@ -67,7 +67,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
             title_text = f"📂 <b>{display_name if not display_name.startswith('menu_') else cat_name}</b>"
         markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, target_path)
         bot.send_message(user_id, title_text, reply_markup=markup, parse_mode="HTML")
-        bot.send_message(user_id, " ", reply_markup=remove_kbd)
+        bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
     elif action.startswith("sel_"):
         model_key = action.replace("sel_", "")
         send_model_detail_view(bot, user_id, model_key, db, get_lang)
@@ -297,11 +297,11 @@ def register(bot: TeleBot, generation_service, db) -> None:
                 web_app=types.WebAppInfo(url=webapp_url)
             ))
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
-            bot.send_message(user_id, " ", reply_markup=remove_kbd)
+            bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
-            bot.send_message(user_id, " ", reply_markup=remove_kbd)
+            bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
 
     # 2. NAVIGATION (Static Menus)
     # WICHTIG: Wir ignorieren hier 'nav_path_', damit gen_handler diese übernehmen kann!
@@ -341,14 +341,14 @@ def register(bot: TeleBot, generation_service, db) -> None:
                     bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
                 except Exception:
                     bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
-                bot.send_message(user_id, " ", reply_markup=remove_kbd)
+                bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
             else:
                 new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                 try:
                     bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
                 except Exception:
                     bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
-                bot.send_message(user_id, " ", reply_markup=remove_kbd)
+                bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
             try:
                 bot.answer_callback_query(call.id)
             except Exception:
