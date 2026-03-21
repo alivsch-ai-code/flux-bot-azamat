@@ -12,7 +12,17 @@ from src.presentation.telegram.handlers.payment_handler import show_shop_logic
 from src.utils.strings import get_text
 
 logger = logging.getLogger(__name__)
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+
+
+def _parse_admin_id() -> int:
+    raw = os.getenv("ADMIN_ID", "0") or "0"
+    try:
+        return int(raw.strip())
+    except (ValueError, TypeError):
+        return 0
+
+
+ADMIN_ID = _parse_admin_id()
 
 REFERRAL_REWARD = 50
 
@@ -46,7 +56,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
         welcome_text = get_text("welcome", lang)
         markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
         bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="HTML")
-        bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+        bot.send_message(user_id, " ", reply_markup=remove_kbd)
     elif action.startswith("nav_path_"):
         target_path = action.replace("nav_path_", "")
         title_key = f"title_{target_path.replace('/', '_')}"
@@ -57,7 +67,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
             title_text = f"📂 <b>{display_name if not display_name.startswith('menu_') else cat_name}</b>"
         markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, target_path)
         bot.send_message(user_id, title_text, reply_markup=markup, parse_mode="HTML")
-        bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+        bot.send_message(user_id, " ", reply_markup=remove_kbd)
     elif action.startswith("sel_"):
         model_key = action.replace("sel_", "")
         send_model_detail_view(bot, user_id, model_key, db, get_lang)
@@ -287,11 +297,11 @@ def register(bot: TeleBot, generation_service, db) -> None:
                 web_app=types.WebAppInfo(url=webapp_url)
             ))
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
-            bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+            bot.send_message(user_id, " ", reply_markup=remove_kbd)
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
-            bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+            bot.send_message(user_id, " ", reply_markup=remove_kbd)
 
     # 2. NAVIGATION (Static Menus)
     # WICHTIG: Wir ignorieren hier 'nav_path_', damit gen_handler diese übernehmen kann!
@@ -331,14 +341,14 @@ def register(bot: TeleBot, generation_service, db) -> None:
                     bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
                 except Exception:
                     bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
-                bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+                bot.send_message(user_id, " ", reply_markup=remove_kbd)
             else:
                 new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                 try:
                     bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
                 except Exception:
                     bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
-                bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+                bot.send_message(user_id, " ", reply_markup=remove_kbd)
             try:
                 bot.answer_callback_query(call.id)
             except Exception:
