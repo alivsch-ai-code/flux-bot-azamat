@@ -301,13 +301,25 @@
           body: JSON.stringify(payload2)
         }).then(r => r.json()).then(res => {
           if (res.ok && !noClose && tg?.close) tg.close();
-        }).catch(() => {
-          if (!noClose && tg?.sendData) tg.sendData(JSON.stringify({ action }));
-          else if (!noClose && tg?.close) tg.close();
+          else if (!res.ok && !noClose) showError(res.error || 'Fehler');
+        }).catch((err) => {
+          if (!noClose) {
+            if (tg?.sendData) tg.sendData(JSON.stringify({ action }));
+            else if (tg?.close) tg.close();
+            else showError('Verbindungsfehler');
+          }
         });
       } else if (!noClose && tg?.sendData) {
         tg.sendData(JSON.stringify({ action }));
       } else if (!noClose && tg?.close) tg.close();
+    }
+
+    function showError(msg) {
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;bottom:20px;left:16px;right:16px;padding:12px;background:#c33;color:#fff;border-radius:8px;text-align:center;z-index:9999;';
+      el.textContent = '⚠️ ' + msg + ' – Bitte im Chat /start nutzen.';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 4000);
     }
 
     document.querySelectorAll('.card[data-action]').forEach(card => {
@@ -423,11 +435,11 @@
           let btnHtml = '';
           if (isText) {
             btnHtml = `<div class="chat-mode-btns">
-              <button class="btn-start" data-action="chat_mode_yes_${escapeHtml(key)}">✅ Chat starten</button>
-              <button class="btn-secondary" data-action="chat_mode_no_${escapeHtml(key)}">❌ Einmaliger Prompt</button>
+              <button type="button" class="btn-start" data-action="chat_mode_yes_${escapeHtml(key)}">✅ Chat starten</button>
+              <button type="button" class="btn-secondary" data-action="chat_mode_no_${escapeHtml(key)}">❌ Einmaliger Prompt</button>
             </div>`;
           } else {
-            btnHtml = `<button class="btn-start" data-action="start_gen_${escapeHtml(key)}">🚀 Start (${costLabel})</button>`;
+            btnHtml = `<button type="button" class="btn-start" data-action="start_gen_${escapeHtml(key)}">🚀 Start (${costLabel})</button>`;
           }
           document.getElementById('detail-content').innerHTML = `
             <div class="header">
@@ -440,8 +452,13 @@
             ${btnHtml}
           `;
           document.getElementById('detail-content').querySelectorAll('[data-action]').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
               const action = btn.getAttribute('data-action');
+              if (!action) return;
+              btn.disabled = true;
+              if (btn.classList.contains('btn-start')) btn.textContent = '⏳ …';
               sendAction(action);
             });
           });
