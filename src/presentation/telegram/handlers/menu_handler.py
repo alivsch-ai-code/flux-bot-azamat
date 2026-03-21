@@ -290,14 +290,26 @@ def register(bot: TeleBot, generation_service, db) -> None:
             reply_kbd = keyboards.get_main_reply_keyboard(lang)
             bot.send_message(user_id, welcome_text, reply_markup=reply_kbd, parse_mode='HTML')
         elif _is_webapp_mode(db) and config.APP_URL:
-            webapp_url = config.APP_URL.rstrip("/") + "/webapp"
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton(
-                get_text("menu_mode_webapp", lang),
-                web_app=types.WebAppInfo(url=webapp_url)
-            ))
-            bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
-            bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
+            webapp_url = (config.APP_URL or "").rstrip("/")
+            if webapp_url.startswith("https://"):
+                webapp_url = webapp_url + "/webapp"
+                try:
+                    markup = types.InlineKeyboardMarkup()
+                    markup.add(types.InlineKeyboardButton(
+                        get_text("menu_mode_webapp", lang),
+                        web_app=types.WebAppInfo(url=webapp_url)
+                    ))
+                    bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+                    bot.send_message(user_id, ".", reply_markup=remove_kbd)
+                except Exception as e:
+                    logger.warning("WebApp-Button fehlgeschlagen, Fallback zu Inline-Menü: %s", e)
+                    markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+                    bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+                    bot.send_message(user_id, ".", reply_markup=remove_kbd)
+            else:
+                markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+                bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+                bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
@@ -331,17 +343,35 @@ def register(bot: TeleBot, generation_service, db) -> None:
                     pass
                 bot.send_message(user_id, new_text, reply_markup=main_kbd, parse_mode="HTML")
             elif _is_webapp_mode(db) and config.APP_URL:
-                webapp_url = config.APP_URL.rstrip("/") + "/webapp"
-                new_markup = types.InlineKeyboardMarkup()
-                new_markup.add(types.InlineKeyboardButton(
-                    get_text("menu_mode_webapp", lang),
-                    web_app=types.WebAppInfo(url=webapp_url)
-                ))
-                try:
-                    bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
-                except Exception:
-                    bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
-                bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
+                webapp_url = (config.APP_URL or "").rstrip("/")
+                if webapp_url.startswith("https://"):
+                    webapp_url = webapp_url + "/webapp"
+                    try:
+                        new_markup = types.InlineKeyboardMarkup()
+                        new_markup.add(types.InlineKeyboardButton(
+                            get_text("menu_mode_webapp", lang),
+                            web_app=types.WebAppInfo(url=webapp_url)
+                        ))
+                        try:
+                            bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
+                        except Exception:
+                            bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
+                        bot.send_message(user_id, ".", reply_markup=remove_kbd)
+                    except Exception as e:
+                        logger.warning("WebApp-Button (nav_main) fehlgeschlagen, Fallback: %s", e)
+                        new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+                        try:
+                            bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
+                        except Exception:
+                            bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
+                        bot.send_message(user_id, ".", reply_markup=remove_kbd)
+                else:
+                    new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
+                    try:
+                        bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
+                    except Exception:
+                        bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
+                    bot.send_message(user_id, ".", reply_markup=remove_kbd)
             else:
                 new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                 try:

@@ -42,10 +42,12 @@ Railway ist die aktuelle Haupt-Deployment-Plattform (schneller Start, kein Cold-
 
 **APP_URL:** Nach dem ersten Deploy unter **Settings → Networking → Generate Domain** eine URL erzeugen, dann in den Variables `APP_URL=https://xxx.up.railway.app` setzen (ohne `/webapp` am Ende).
 
+**Aktuelle Production-URL:** `https://flux-bot-azamat-production.up.railway.app`
+
 ### 4. Web-App mit BotFather
 
 1. [@BotFather](https://t.me/BotFather) → `/setmenubutton`
-2. URL: `https://<dein-service>.up.railway.app/webapp`
+2. URL: `https://flux-bot-azamat-production.up.railway.app/webapp`
 
 ### 5. Port
 

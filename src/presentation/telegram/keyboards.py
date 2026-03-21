@@ -17,8 +17,19 @@ KEYBOARD_ACTIONS = [
 ]
 
 
+def _truncate_callback_data(data: str, max_bytes: int = 64) -> str:
+    """Telegram erlaubt callback_data nur 1–64 Bytes."""
+    enc = data.encode("utf-8")
+    if len(enc) <= max_bytes:
+        return data
+    while len(enc) > max_bytes and data:
+        data = data[:-1]
+        enc = data.encode("utf-8")
+    return data if data else "err"
+
+
 def btn(text: str, callback_data: str) -> types.InlineKeyboardButton:
-    return types.InlineKeyboardButton(text=text, callback_data=callback_data)
+    return types.InlineKeyboardButton(text=text, callback_data=_truncate_callback_data(callback_data))
 
 # --- DYNAMISCHES MENÜ SYSTEM ---
 def get_dynamic_model_menu(
