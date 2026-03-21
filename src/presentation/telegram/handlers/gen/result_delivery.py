@@ -161,7 +161,7 @@ def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, pro
         try:
             from telebot import types as tb_types
             media_group = [
-                tb_types.InputMediaPhoto(url, caption=caption if i == 0 else "")
+                tb_types.InputMediaPhoto(media=url, caption=caption if i == 0 else None)
                 for i, url in enumerate(multi_urls[:10])
             ]
             bot.send_media_group(user_id, media_group)
