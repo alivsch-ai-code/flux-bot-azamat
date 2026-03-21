@@ -8,6 +8,7 @@ from openai import OpenAI
 from src.config.settings import config
 from src.domain.entities import AIModel, GenerationResult, MediaFile
 from src.infrastructure.ai.dynamic_adapter import DynamicSchemaAdapter
+from src.infrastructure.ai.replicate_concurrency import replicate_run_slot
 
 
 def _is_http_url(s: str) -> bool:
@@ -119,28 +120,32 @@ class UnifiedAIClient:
     # --- PROVIDER IMPLEMENTIERUNGEN ---
 
     def _run_replicate(self, model, prompt, media_files):
-        file_paths = [mf.path for mf in (media_files or []) if mf.path] if media_files else []
-        file_urls = file_paths
-        if file_paths and any(not _is_http_url(p) for p in file_paths):
-            client = replicate.Client(api_token=self.config.REPLICATE_API_TOKEN)
-            file_urls = _local_paths_to_urls(file_paths, client)
-        if model.input_schema and isinstance(model.input_schema, dict):
-            input_data = self.schema_adapter.build_input_payload(
-                model_schema=model.input_schema,
-                user_prompt=prompt,
-                file_urls=file_urls if file_urls else None,
-            )
-        else:
-            input_data = {"prompt": prompt}
-            if file_urls:
-                input_data["image"] = file_urls[0]
-        if "flux" in model.key and "aspect_ratio" not in input_data:
-            input_data["aspect_ratio"] = "16:9"
-            input_data["safety_tolerance"] = 5
-        if "minimax" in (model.key or ""):
-            input_data["prompt_optimizer"] = True
-        output = replicate.run(model.replicate_id, input=input_data)
+        with replicate_run_slot():
+            file_paths = [mf.path for mf in (media_files or []) if mf.path] if media_files else []
+            file_urls = file_paths
+            if file_paths and any(not _is_http_url(p) for p in file_paths):
+                client = replicate.Client(api_token=self.config.REPLICATE_API_TOKEN)
+                file_urls = _local_paths_to_urls(file_paths, client)
+            if model.input_schema and isinstance(model.input_schema, dict):
+                input_data = self.schema_adapter.build_input_payload(
+                    model_schema=model.input_schema,
+                    user_prompt=prompt,
+                    file_urls=file_urls if file_urls else None,
+                )
+            else:
+                input_data = {"prompt": prompt}
+                if file_urls:
+                    input_data["image"] = file_urls[0]
+            if "flux" in model.key and "aspect_ratio" not in input_data:
+                input_data["aspect_ratio"] = "16:9"
+                input_data["safety_tolerance"] = 5
+            if "minimax" in (model.key or ""):
+                input_data["prompt_optimizer"] = True
+            output = replicate.run(model.replicate_id, input=input_data)
 
+            return self._normalize_replicate_output(output)
+
+    def _normalize_replicate_output(self, output):
         # FileOutput/Objekte mit .url erhalten – URL und read() für result_delivery verfügbar.
         # Text-Modelle liefern dagegen oft Listen/Iteratoren von Strings → komplett zusammenfügen.
         if hasattr(output, "url"):

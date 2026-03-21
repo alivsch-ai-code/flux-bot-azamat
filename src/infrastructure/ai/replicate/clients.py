@@ -8,6 +8,7 @@ from replicate.exceptions import ReplicateError
 from src.domain.entities import AIModel, GenerationResult, MediaFile
 from src.domain.interfaces import AIProvider
 from src.infrastructure.ai.dynamic_adapter import DynamicSchemaAdapter
+from src.infrastructure.ai.replicate_concurrency import replicate_run_slot
 
 
 class ReplicateClient(AIProvider):
@@ -46,7 +47,8 @@ class ReplicateClient(AIProvider):
         
         for attempt in range(max_retries):
             try:
-                output = self.client.run(model.replicate_id, input=inputs)
+                with replicate_run_slot():
+                    output = self.client.run(model.replicate_id, input=inputs)
                 
                 # Output normalisieren via Adapter
                 final_data = self.adapter.parse_output(output, model.output_schema)

@@ -114,17 +114,16 @@ def create_run_generation(bot, db, generation_service, get_lang):
                         set_context(user_id, new_ctx)
                         menu_mode = db.get_bot_setting("menu_mode", "commands")
                         if menu_mode == "keyboard":
-                            # Tastatur bleibt sichtbar, keine zusätzlichen Inline-Buttons
                             bot.send_message(
                                 user_id,
                                 get_text("model_req_prompt", lang),
                                 parse_mode="HTML",
                             )
                         else:
-                            back_markup = types.InlineKeyboardMarkup(row_width=2)
-                            back_markup.add(
-                                types.InlineKeyboardButton(get_text("btn_back", lang), callback_data=f"sel_{model.key}"),
-                                types.InlineKeyboardButton("🏠 Hauptmenü", callback_data="nav_path_root"),
+                            from src.config.settings import config
+                            webapp_url = (config.APP_URL or "").rstrip("/")
+                            back_markup = keyboards.get_image_loop_buttons(
+                                lang, menu_mode, webapp_url, model.key, menu_path or "image",
                             )
                             bot.send_message(
                                 user_id,

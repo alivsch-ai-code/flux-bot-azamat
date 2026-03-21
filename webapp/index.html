@@ -141,6 +141,23 @@
     const API_BASE = window.location.origin;
     let currentPath = 'root';
 
+    function initFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const path = params.get('path');
+      if (path && path !== 'root') {
+        fetch(API_BASE + '/api/models?path=' + encodeURIComponent(path))
+          .then(r => r.json())
+          .then(data => {
+            if (data.models && data.models.length > 0) {
+              currentPath = path;
+              showModels(path, data.models, data.title || path);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+    initFromUrl();
+
     function sendAction(action, payload = {}) {
       const payload2 = { action, ...payload };
       const hasInitData = tg?.initData;

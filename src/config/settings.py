@@ -37,6 +37,8 @@ class Settings:
         self.PORT = int(os.getenv("PORT", 5000))
         self.APP_ENV = os.getenv("APP_ENV", "development")
         self.START_CREDITS = 2000
+        # Max. parallele Replicate-Predictions (replicate.run). 1 = streng nacheinander.
+        self.REPLICATE_MAX_CONCURRENT = max(1, int(os.getenv("REPLICATE_MAX_CONCURRENT", "1")))
         # URL für Mini App – nur HTTPS! APP_URL oder RENDER_EXTERNAL_URL (Render setzt das)
         # Lokal: ngrok http 5000 → APP_URL=https://xxx.ngrok-free.app
         raw = os.getenv("APP_URL") or os.getenv("RENDER_EXTERNAL_URL") or ""

@@ -142,6 +142,40 @@ def get_back_menu(lang: str = "de", target: str = "nav_path_root") -> types.Inli
     markup.add(btn(get_text("btn_back", lang), target))
     return markup
 
+
+def get_image_loop_buttons(
+    lang: str,
+    menu_mode: str,
+    webapp_url: str,
+    model_key: str,
+    menu_path: str,
+) -> types.InlineKeyboardMarkup:
+    """
+    Zurück + Hauptmenü nach Bildgenerierung.
+    Im WebApp-Modus: Buttons öffnen die Mini App (Zurück = Kategorie, Hauptmenü = Root).
+    """
+    if menu_mode == "webapp" and webapp_url:
+        base = webapp_url.rstrip("/")
+        back_path = menu_path or "image"
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            types.InlineKeyboardButton(
+                get_text("btn_back", lang),
+                web_app=types.WebAppInfo(url=f"{base}/webapp?path={back_path}"),
+            ),
+            types.InlineKeyboardButton(
+                get_text("kb_main", lang),
+                web_app=types.WebAppInfo(url=f"{base}/webapp?path=root"),
+            ),
+        )
+        return markup
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        btn(get_text("btn_back", lang), f"sel_{model_key}"),
+        btn(get_text("kb_main", lang), "nav_path_root"),
+    )
+    return markup
+
 def get_share_menu(link: str, text: str, lang: str = "en") -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup()
     url = f"https://t.me/share/url?url={quote(link)}&text={quote(text)}"
