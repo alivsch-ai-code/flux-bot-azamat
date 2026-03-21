@@ -46,8 +46,8 @@ def webapp():
 @app.route('/api/webapp_action', methods=['POST'])
 def api_webapp_action():
     """Web App sendet Aktionen per POST (sendData funktioniert nicht bei Menü-Button)."""
-        if _db_instance is None:
-            return jsonify(ok=False, error="no_db"), 400
+    if _db_instance is None:
+        return jsonify(ok=False, error="no_db"), 400
     try:
         from src.utils.telegram_init_data import validate_init_data
         from src.presentation.telegram.handlers.menu_handler import process_webapp_action, _is_webapp_mode
@@ -72,6 +72,37 @@ def api_webapp_action():
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("webapp_action error: %s", e)
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@app.route('/api/model')
+def api_model():
+    """API für WebApp: Vollständige Modell-Details (Name, Beschreibung, Beispielbild, Kosten)."""
+    if _db_instance is None:
+        return jsonify(ok=False, error="no_db"), 400
+    key = request.args.get("key", "")
+    if not key:
+        return jsonify(ok=False, error="missing_key"), 400
+    try:
+        model = _db_instance.get_model_by_key(key)
+        if not model or not model.is_active:
+            return jsonify(ok=False, error="not_found"), 404
+        final_cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
+        example_url = ""
+        example_prompt = ""
+        if model.example_data and isinstance(model.example_data, dict):
+            example_url = (
+                model.example_data.get("output_image") or
+                model.example_data.get("image") or
+                model.example_data.get("url") or ""
+            )
+            example_prompt = (model.example_data.get("prompt") or model.example_data.get("example_prompt") or "")[:200]
+        return jsonify(ok=True, key=model.key, name=model.name, description=model.description or "",
+            example_image_url=example_url, example_prompt=example_prompt,
+            final_cost=final_cost, menu_path=model.menu_path or "root",
+            model_type=model.type or [])
+    except Exception as e:
+        logger.warning("api_model error: %s", e)
         return jsonify(ok=False, error=str(e)), 500
 
 
