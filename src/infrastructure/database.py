@@ -129,6 +129,11 @@ class DatabaseManager:
                 for col, dtype in user_cols:
                     c.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {dtype}")
 
+                # 3. Bot-Settings Default: menu_mode (commands | keyboard | webapp)
+                c.execute("SELECT 1 FROM bot_settings WHERE key = 'menu_mode'")
+                if c.fetchone() is None:
+                    c.execute("INSERT INTO bot_settings (key, value) VALUES ('menu_mode', 'commands')")
+
                 conn.commit()
             except Exception as e:
                 print(f"⚠️ Migration Warning: {e}")

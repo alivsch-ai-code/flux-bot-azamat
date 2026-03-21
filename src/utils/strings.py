@@ -184,6 +184,24 @@ STRINGS = {
     "admin_menu_mode_set": { "en": "Menu mode set to: {mode}", "de": "Menü-Modus gesetzt: {mode}", "ru": "Режим меню: {mode}", "kk": "Мәзір режимі: {mode}" },
     "admin_menu_mode_invalid": { "en": "Use: /set_menu_mode commands | keyboard | webapp", "de": "Verwende: /set_menu_mode commands | keyboard | webapp", "ru": "Используй: /set_menu_mode commands | keyboard | webapp", "kk": "Қолданыңыз: /set_menu_mode commands | keyboard | webapp" },
     "menu_mode_webapp": { "en": "🌐 Web App", "de": "🌐 Web-App", "ru": "🌐 Веб-приложение", "kk": "🌐 Веб қолданба" },
+
+    # --- WEBAPP UI (für Mini App) ---
+    "webapp_title": { "en": "AZAMAT AI Hub", "de": "AZAMAT AI Hub", "ru": "AZAMAT AI Hub", "kk": "AZAMAT AI Hub" },
+    "webapp_choose_category": { "en": "Choose a category", "de": "Wähle eine Kategorie", "ru": "Выберите категорию", "kk": "Санатты таңдаңыз" },
+    "webapp_categories": { "en": "Categories", "de": "Kategorien", "ru": "Категории", "kk": "Санаттар" },
+    "webapp_credits_buy": { "en": "Buy Credits", "de": "Credits kaufen", "ru": "Купить кредиты", "kk": "Кредит сатып алу" },
+    "webapp_models": { "en": "Models", "de": "Modelle", "ru": "Модели", "kk": "Модельдер" },
+    "webapp_back": { "en": "Back", "de": "Zurück", "ru": "Назад", "kk": "Артқа" },
+    "webapp_free": { "en": "FREE", "de": "FREE", "ru": "Бесплатно", "kk": "Тегін" },
+    "webapp_settings": { "en": "Settings", "de": "Einstellungen", "ru": "Настройки", "kk": "Параметрлер" },
+    "webapp_language": { "en": "Language", "de": "Sprache", "ru": "Язык", "kk": "Тіл" },
+    "webapp_credits_remaining": { "en": "Credits", "de": "Credits", "ru": "Кредиты", "kk": "Кредиттер" },
+    "webapp_user": { "en": "User", "de": "Benutzer", "ru": "Пользователь", "kk": "Пайдаланушы" },
+    "webapp_desc_image": { "en": "Flux, DALL-E, SD", "de": "Flux, DALL-E, SD", "ru": "Flux, DALL-E, SD", "kk": "Flux, DALL-E, SD" },
+    "webapp_desc_video": { "en": "Kling, Wan, Hunyuan", "de": "Kling, Wan, Hunyuan", "ru": "Kling, Wan, Hunyuan", "kk": "Kling, Wan, Hunyuan" },
+    "webapp_desc_audio": { "en": "Music & Voice", "de": "Music & Voice", "ru": "Музыка и голос", "kk": "Музыка және дауыс" },
+    "webapp_desc_text": { "en": "LLMs & Chat", "de": "LLMs & Chat", "ru": "LLM и чат", "kk": "LLM және чат" },
+    "webapp_desc_tools": { "en": "Profi Tools", "de": "Profi-Tools", "ru": "Профи инструменты", "kk": "Кәсіби құралдар" },
     "profile_text": {
         "en": "👤 <b>Profile</b>\n\n<b>Name:</b> {name}\n<b>Credits:</b> <code>{creds}</code> ⭐\n<b>ID:</b> <code>{user_id}</code>",
         "de": "👤 <b>Profil</b>\n\n<b>Name:</b> {name}\n<b>Credits:</b> <code>{creds}</code> ⭐\n<b>ID:</b> <code>{user_id}</code>",
@@ -236,6 +254,21 @@ STRINGS = {
 
 def get_text(key, lang="en"):
     return STRINGS.get(key, {}).get(lang, STRINGS.get(key, {}).get("en", key))
+
+
+# Keys that the WebApp needs for i18n
+WEBAPP_STRING_KEYS = [
+    "webapp_title", "webapp_choose_category", "webapp_categories", "webapp_credits_buy",
+    "webapp_models", "webapp_back", "webapp_free", "webapp_settings", "webapp_language",
+    "webapp_credits_remaining", "webapp_user",
+    "webapp_desc_image", "webapp_desc_video", "webapp_desc_audio", "webapp_desc_text", "webapp_desc_tools",
+    "menu_image", "menu_video", "menu_audio", "menu_text", "menu_tools",
+]
+
+
+def get_webapp_strings(lang: str = "de") -> dict:
+    """Liefert alle für die WebApp relevanten Strings als {key: value}."""
+    return {k: get_text(k, lang) for k in WEBAPP_STRING_KEYS}
 
 
 def get_random_daily_fallback(lang="de"):

@@ -12,8 +12,10 @@ Alle Handler nutzen keyboards.get_dynamic_model_menu, get_chat_mode_ask_menu usw
 
 import logging
 
+from urllib.parse import quote
 from telebot import TeleBot, types
 
+from src.config.settings import config
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.common import set_context
 from src.utils.strings import get_text
@@ -75,7 +77,6 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
                 display_name = cat_name
             title_text = f"📂 <b>{display_name}</b>"
         if menu_mode == "keyboard":
-            from src.presentation.telegram.handlers.common import set_context
             set_context(user_id, {"keyboard_path": target_path})
             path_kbd = keyboards.get_path_reply_keyboard(all_models, lang, target_path)
             try:
@@ -83,6 +84,15 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
             except Exception as e:
                 logger.warning("Delete failed in handle_path_nav: %s", e)
             bot.send_message(user_id, title_text, reply_markup=path_kbd, parse_mode="HTML")
+        elif menu_mode == "webapp" and config.APP_URL and config.APP_URL.startswith("https://"):
+            webapp_url = config.APP_URL.rstrip("/") + "/webapp?path=" + quote(target_path, safe="")
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=webapp_url)))
+            try:
+                bot.edit_message_text(title_text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+            except Exception as e:
+                logger.warning("Edit failed in handle_path_nav: %s", e)
+                bot.send_message(user_id, title_text, reply_markup=markup, parse_mode="HTML")
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, target_path)
             try:
@@ -209,17 +219,26 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
             bot.answer_callback_query(call.id)
         except Exception:
             pass
+        from src.presentation.telegram.handlers.common import clear_context
+        clear_context(user_id)
         all_models = db.get_all_models()
         text = get_text("welcome", lang)
-        if db.get_bot_setting("menu_mode", "commands") == "keyboard":
-            from src.presentation.telegram.handlers.common import clear_context
-            clear_context(user_id)
+        menu_mode = db.get_bot_setting("menu_mode", "commands")
+        if menu_mode == "keyboard":
             main_kbd = keyboards.get_main_reply_keyboard(lang)
             try:
                 bot.delete_message(user_id, call.message.message_id)
             except Exception:
                 pass
             bot.send_message(user_id, text, reply_markup=main_kbd, parse_mode="HTML")
+        elif menu_mode == "webapp" and config.APP_URL and config.APP_URL.startswith("https://"):
+            webapp_url = config.APP_URL.rstrip("/") + "/webapp"
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=webapp_url)))
+            try:
+                bot.edit_message_text(text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+            except Exception:
+                bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
             try:

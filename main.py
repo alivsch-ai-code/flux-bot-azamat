@@ -75,6 +75,46 @@ def api_webapp_action():
         return jsonify(ok=False, error=str(e)), 500
 
 
+@app.route('/api/user_info', methods=['POST'])
+def api_user_info():
+    """WebApp: User-Infos (username, credits, lang) via init_data."""
+    if _db_instance is None:
+        return jsonify(ok=False, error="no_db"), 400
+    try:
+        from src.utils.telegram_init_data import validate_init_data
+
+        data = request.get_json() or {}
+        init_data = data.get("init_data", "")
+        if not init_data:
+            return jsonify(ok=False, error="missing_init_data"), 400
+
+        user_id = validate_init_data(init_data, config.TELEGRAM_TOKEN)
+        if not user_id:
+            return jsonify(ok=False, error="invalid_init_data"), 403
+
+        user = _db_instance.get_user(user_id)
+        settings = _db_instance.get_user_settings(user_id)
+        credits = _db_instance.get_user_credits(user_id)
+        return jsonify(ok=True, user_id=user_id, username=user.username or "User", credits=credits, lang=settings["lang"])
+    except Exception as e:
+        logger.exception("api_user_info error: %s", e)
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@app.route('/api/strings')
+def api_strings():
+    """WebApp: Lokalisierte Strings für die gewählte Sprache."""
+    lang = request.args.get("lang", "de") or "de"
+    if lang not in ("de", "en", "ru", "kk"):
+        lang = "de"
+    try:
+        from src.utils.strings import get_webapp_strings
+        return jsonify(get_webapp_strings(lang))
+    except Exception as e:
+        logger.warning("api_strings error: %s", e)
+        return jsonify({}), 200
+
+
 @app.route('/api/models')
 def api_models():
     """API für Mini App: Modelle und Unterordner pro menu_path (wie Inline-Menü)."""
@@ -93,14 +133,27 @@ def api_models():
                 sub_cats.add(m.menu_path)
             elif path != "root" and m.menu_path.startswith(path + "/"):
                 sub_cats.add(m.menu_path[len(path) + 1 :].split("/")[0])
-        titles = {
-            "image": "Bild Studio",
-            "video": "Video Studio",
-            "audio": "Audio Studio",
-            "text": "Text / Chat",
-            "tools": "Werkzeuge",
-        }
-        title = titles.get(path.split("/")[-1], path.replace("/", " · ").title() if path != "root" else "Kategorien")
+        lang = request.args.get("lang", "de") or "de"
+        if lang not in ("de", "en", "ru", "kk"):
+            lang = "de"
+        try:
+            from src.utils.strings import get_text
+            titles = {
+                "image": get_text("menu_image", lang),
+                "video": get_text("menu_video", lang),
+                "audio": get_text("menu_audio", lang),
+                "text": get_text("menu_text", lang),
+                "tools": get_text("menu_tools", lang),
+            }
+        except Exception:
+            titles = {"image": "Bild Studio", "video": "Video Studio", "audio": "Audio Studio", "text": "Text / Chat", "tools": "Werkzeuge"}
+        root_title = "Kategorien"
+        try:
+            from src.utils.strings import get_text
+            root_title = get_text("webapp_categories", lang)
+        except Exception:
+            pass
+        title = titles.get(path.split("/")[-1], path.replace("/", " · ").title() if path != "root" else root_title)
         folders = [
             {"path": seg if path == "root" else f"{path}/{seg}", "slug": seg}
             for seg in sorted(sub_cats)

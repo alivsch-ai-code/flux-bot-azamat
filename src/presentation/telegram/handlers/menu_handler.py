@@ -78,6 +78,10 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
     elif action == "cmd_shop":
         fake = type('Msg', (), {'chat': type('C', (), {'id': user_id})()})()
         show_shop_logic(bot, fake, db, lang)
+    elif action.startswith("set_lang_"):
+        new_lang = action.replace("set_lang_", "")
+        if new_lang in ("de", "en", "ru", "kk"):
+            db.update_setting(user_id, "language", new_lang)
 
 
 def register(bot: TeleBot, generation_service, db) -> None:
