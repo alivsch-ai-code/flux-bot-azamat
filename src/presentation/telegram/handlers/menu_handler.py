@@ -78,13 +78,13 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
         send_model_detail_view(bot, user_id, model_key, db, get_lang)
     elif action.startswith("start_gen_"):
         model_key = action.replace("start_gen_", "")
-        bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+        bot.send_message(user_id, ".", reply_markup=remove_kbd)
         do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
     elif action.startswith("chat_mode_yes_"):
         model_key = action.replace("chat_mode_yes_", "")
         model = db.get_model_by_key(model_key)
         if model and model.is_active:
-            bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+            bot.send_message(user_id, ".", reply_markup=remove_kbd)
             db.set_user_chat_mode(user_id, model_key, active=True)
             final_cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
             text = get_text("chat_active_msg", lang).format(model=model.name, cost=final_cost)
@@ -92,7 +92,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
             bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
     elif action.startswith("chat_mode_no_"):
         model_key = action.replace("chat_mode_no_", "")
-        bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+        bot.send_message(user_id, ".", reply_markup=remove_kbd)
         do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
     elif action == "cmd_shop":
         fake = type('Msg', (), {'chat': type('C', (), {'id': user_id})()})()
