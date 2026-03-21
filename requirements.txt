@@ -8,7 +8,6 @@ replicate
 # Zum Laden von Umgebungsvariablen (.env)
 python-dotenv
 Pillow
-python-dotenv
 psycopg2-binary
 jwt
 openai

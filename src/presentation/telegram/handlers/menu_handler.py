@@ -12,7 +12,17 @@ from src.presentation.telegram.handlers.payment_handler import show_shop_logic
 from src.utils.strings import get_text
 
 logger = logging.getLogger(__name__)
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+
+
+def _parse_admin_id() -> int:
+    raw = os.getenv("ADMIN_ID", "0") or "0"
+    try:
+        return int(raw.strip())
+    except (ValueError, TypeError):
+        return 0
+
+
+ADMIN_ID = _parse_admin_id()
 
 REFERRAL_REWARD = 50
 

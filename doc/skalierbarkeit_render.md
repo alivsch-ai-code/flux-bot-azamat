@@ -98,18 +98,9 @@ Zusätzlich: Neue Verbindung pro Request (`_get_connection()`), kein Connection-
 
 ---
 
-### 2.5 `user_context` (Niedrig)
+### 2.5 `user_context` (behoben)
 
-```python
-# common.py
-user_context = {}  # Kein Lock
-def set_context(user_id, data):
-    user_context[user_id] = data
-```
-
-- Gleichzeitige Schreibzugriffe verschiedener User auf das Dict sind meist unkritisch (verschiedene Keys)
-- Gleichzeitige Zugriffe desselben Users sind eher selten
-- Empfehlung: Für saubere Skalierung ein `threading.Lock` ergänzen
+- `common.py` nutzt jetzt ein **`threading.Lock`** und `get_context` liefert eine **Kopie** des Kontexts, damit parallele Handler-Threads sicher sind.
 
 ---
 
@@ -162,8 +153,7 @@ def set_context(user_id, data):
 6. **Generierungen asynchron**  
    - z.B. Celery oder Background-Threads, damit Handler-Threads nicht minutenlang blockieren (größerer Refactor)
 
-7. **`user_context` thread-sicher machen**  
-   - z.B. Lock um `get_context`/`set_context`/`clear_context`
+7. ~~**`user_context` thread-sicher machen**~~ – umgesetzt (siehe `common.py`).
 
 ---
 
