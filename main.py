@@ -46,8 +46,8 @@ def webapp():
 @app.route('/api/webapp_action', methods=['POST'])
 def api_webapp_action():
     """Web App sendet Aktionen per POST (sendData funktioniert nicht bei Menü-Button)."""
-        if _db_instance is None:
-            return jsonify(ok=False, error="no_db"), 400
+    if _db_instance is None:
+        return jsonify(ok=False, error="no_db"), 400
     try:
         from src.utils.telegram_init_data import validate_init_data
         from src.presentation.telegram.handlers.menu_handler import process_webapp_action, _is_webapp_mode
