@@ -39,9 +39,10 @@ def webapp():
     path = os.path.join(os.path.dirname(__file__), "webapp", "index.html")
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return f.read()
+            html = f.read()
+        return html, 200, {"Content-Type": "text/html; charset=utf-8"}
     except FileNotFoundError:
-        return "<h1>Web App nicht gefunden</h1>", 404
+        return "<h1>Web App nicht gefunden</h1>", 404, {"Content-Type": "text/html; charset=utf-8"}
 
 @app.route('/api/webapp_action', methods=['POST'])
 def api_webapp_action():
@@ -70,8 +71,7 @@ def api_webapp_action():
         process_webapp_action(_bot_instance, user_id, action, _db_instance)
         return jsonify(ok=True)
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).exception("webapp_action error: %s", e)
+        logger.exception("webapp_action error: %s", e)
         return jsonify(ok=False, error=str(e)), 500
 
 
@@ -107,8 +107,7 @@ def api_models():
         ]
         return jsonify(models=items, folders=folders, title=title)
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning("api_models error: %s", e)
+        logger.warning("api_models error: %s", e)
         return jsonify(models=[], folders=[], title=""), 200
 
 def run_web_server():

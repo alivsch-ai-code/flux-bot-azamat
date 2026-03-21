@@ -45,13 +45,17 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
     db.set_user_chat_mode(user_id, None, active=False)
     remove_kbd = types.ReplyKeyboardRemove(selective=False)
     webapp_only_markup = None
-    if config.APP_URL:
-        webapp_url = config.APP_URL.rstrip("/") + "/webapp"
-        webapp_only_markup = types.InlineKeyboardMarkup()
-        webapp_only_markup.add(types.InlineKeyboardButton(
-            get_text("menu_mode_webapp", lang),
-            web_app=types.WebAppInfo(url=webapp_url)
-        ))
+    app_url = (config.APP_URL or "").strip().rstrip("/")
+    if app_url.startswith("https://"):
+        webapp_url = app_url + "/webapp"
+        try:
+            webapp_only_markup = types.InlineKeyboardMarkup()
+            webapp_only_markup.add(types.InlineKeyboardButton(
+                get_text("menu_mode_webapp", lang),
+                web_app=types.WebAppInfo(url=webapp_url)
+            ))
+        except Exception as e:
+            logger.warning("WebApp-Markup (process_webapp_action) fehlgeschlagen: %s", e)
     if action == "nav_main":
         welcome_text = get_text("welcome", lang)
         markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")

@@ -95,10 +95,12 @@ Vollständiger Durchgang: Einstieg, Bot, Replicate, Mini-App-UI, Infrastruktur, 
 
 1. **`requirements.txt`:** doppeltes `python-dotenv` entfernt.
 2. **`common.py`:** Thread-sicherer Zugriff auf `user_context` (Lock, `get_context` liefert Kopie).
-3. **`menu_handler.py`:** sichere `ADMIN_ID`-Interpretation.
-4. **`main.py`:** `jsonify` für `/api/webapp_action` und `/api/models`; `/api/models` mit **`folders`** und korrigierter Pfadlogik; redundanter `import os` in `webapp()` entfernt.
+3. **`menu_handler.py`:** sichere `ADMIN_ID`-Interpretation; WebApp-Button-Fallback bei BUTTON_TYPE_INVALID; HTTPS-Validierung.
+4. **`main.py`:** `jsonify` für API; `/api/models` mit **`folders`**; 409-Retry; redundante Imports entfernt; WebApp Content-Type.
 5. **`webapp/index.html`:** Unterordner-Navigation, `escapeHtml`, robustere `showModels`-Signatur.
 6. **`result_delivery.py`:** `InputMediaPhoto(media=url, …)`.
+7. **`keyboards.py`:** `callback_data`-Truncation (64 Bytes) gegen BUTTON_TYPE_INVALID.
+8. **Railway:** `runtime.txt`, `railway_deploy.md`, `RAILWAY_PUBLIC_DOMAIN` für APP_URL.
 
 ---
 
