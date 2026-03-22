@@ -36,6 +36,17 @@ def _is_webapp_mode(db) -> bool:
     return db.get_bot_setting("menu_mode", "commands") == "webapp"
 
 
+def _remove_reply_keyboard_silently(bot: TeleBot, user_id: int) -> None:
+    """Entfernt die Reply-Tastatur ohne sichtbare Punkt-Nachricht. Telegram verlangt
+    mind. 1 Zeichen – wir senden, entfernen die Tastatur und löschen die Nachricht direkt."""
+    remove_kbd = types.ReplyKeyboardRemove(selective=False)
+    try:
+        sent = bot.send_message(user_id, ".", reply_markup=remove_kbd)
+        bot.delete_message(user_id, sent.message_id)
+    except Exception:
+        pass
+
+
 def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
     """Führt eine Web-App-Aktion aus. Nutzbar von web_app_data-Handler und API."""
     def get_lang(uid):
@@ -44,7 +55,6 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
     all_models = db.get_all_models()
     clear_context(user_id)
     db.set_user_chat_mode(user_id, None, active=False)
-    remove_kbd = types.ReplyKeyboardRemove(selective=False)
     webapp_only_markup = None
     app_url = (config.APP_URL or "").strip().rstrip("/")
     if app_url.startswith("https://"):
@@ -62,7 +72,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
         welcome_text = get_welcome(lang, user_name)
         markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
         bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="HTML")
-        bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
+        _remove_reply_keyboard_silently(bot, user_id)
     elif action.startswith("nav_path_"):
         target_path = action.replace("nav_path_", "")
         title_key = f"title_{target_path.replace('/', '_')}"
@@ -79,7 +89,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, target_path)
         bot.send_message(user_id, title_text, reply_markup=markup, parse_mode="HTML")
-        bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
+        _remove_reply_keyboard_silently(bot, user_id)
     elif action.startswith("sel_"):
         model_key = action.replace("sel_", "")
         if webapp_only_markup:
@@ -91,18 +101,18 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
             markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=model_url)))
             text = get_text("webapp_open_model", lang).format(name=model_name)
             bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
-            bot.send_message(user_id, ".", reply_markup=remove_kbd)
+            _remove_reply_keyboard_silently(bot, user_id)
         else:
             send_model_detail_view(bot, user_id, model_key, db, get_lang)
     elif action.startswith("start_gen_"):
         model_key = action.replace("start_gen_", "")
-        bot.send_message(user_id, ".", reply_markup=remove_kbd)
+        _remove_reply_keyboard_silently(bot, user_id)
         do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
     elif action.startswith("chat_mode_yes_"):
         model_key = action.replace("chat_mode_yes_", "")
         model = db.get_model_by_key(model_key)
         if model and model.is_active:
-            bot.send_message(user_id, ".", reply_markup=remove_kbd)
+            _remove_reply_keyboard_silently(bot, user_id)
             db.set_user_chat_mode(user_id, model_key, active=True)
             final_cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
             text = get_text("chat_active_msg", lang).format(model=model.name, cost=final_cost)
@@ -110,7 +120,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
             bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
     elif action.startswith("chat_mode_no_"):
         model_key = action.replace("chat_mode_no_", "")
-        bot.send_message(user_id, ".", reply_markup=remove_kbd)
+        _remove_reply_keyboard_silently(bot, user_id)
         do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
     elif action == "cmd_shop":
         if webapp_only_markup:
@@ -119,7 +129,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
             markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=shop_url)))
             text = get_text("webapp_open_shop", lang)
             bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
-            bot.send_message(user_id, ".", reply_markup=remove_kbd)
+            _remove_reply_keyboard_silently(bot, user_id)
         else:
             fake = type('Msg', (), {'chat': type('C', (), {'id': user_id})()})()
             show_shop_logic(bot, fake, db, lang)
@@ -359,7 +369,6 @@ def register(bot: TeleBot, generation_service, db) -> None:
         welcome_text = get_welcome(lang, user_name)
         all_models = db.get_all_models()
 
-        remove_kbd = types.ReplyKeyboardRemove(selective=False)
         if _is_keyboard_mode(db):
             reply_kbd = keyboards.get_main_reply_keyboard(lang)
             bot.send_message(user_id, welcome_text, reply_markup=reply_kbd, parse_mode='HTML')
@@ -374,20 +383,20 @@ def register(bot: TeleBot, generation_service, db) -> None:
                         web_app=types.WebAppInfo(url=webapp_url)
                     ))
                     bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
-                    bot.send_message(user_id, ".", reply_markup=remove_kbd)
+                    _remove_reply_keyboard_silently(bot, user_id)
                 except Exception as e:
                     logger.warning("WebApp-Button fehlgeschlagen, Fallback zu Inline-Menü: %s", e)
                     markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                     bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
-                    bot.send_message(user_id, ".", reply_markup=remove_kbd)
+                    _remove_reply_keyboard_silently(bot, user_id)
             else:
                 markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                 bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
-                bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
+                _remove_reply_keyboard_silently(bot, user_id)
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
-            bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
+            _remove_reply_keyboard_silently(bot, user_id)
 
     # 2. NAVIGATION (Static Menus)
     # WICHTIG: Wir ignorieren hier 'nav_path_', damit gen_handler diese übernehmen kann!
@@ -409,7 +418,6 @@ def register(bot: TeleBot, generation_service, db) -> None:
             new_text = get_welcome(lang, user_name)
             all_models = db.get_all_models()
             clear_context(user_id)
-            remove_kbd = types.ReplyKeyboardRemove(selective=False)
             if _is_keyboard_mode(db):
                 main_kbd = keyboards.get_main_reply_keyboard(lang)
                 try:
@@ -431,7 +439,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
                             bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
                         except Exception:
                             bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
-                        bot.send_message(user_id, ".", reply_markup=remove_kbd)
+                        _remove_reply_keyboard_silently(bot, user_id)
                     except Exception as e:
                         logger.warning("WebApp-Button (nav_main) fehlgeschlagen, Fallback: %s", e)
                         new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
@@ -439,21 +447,21 @@ def register(bot: TeleBot, generation_service, db) -> None:
                             bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
                         except Exception:
                             bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
-                        bot.send_message(user_id, ".", reply_markup=remove_kbd)
+                        _remove_reply_keyboard_silently(bot, user_id)
                 else:
                     new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                     try:
                         bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
                     except Exception:
                         bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
-                    bot.send_message(user_id, ".", reply_markup=remove_kbd)
+                    _remove_reply_keyboard_silently(bot, user_id)
             else:
                 new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                 try:
                     bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
                 except Exception:
                     bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
-                bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
+                _remove_reply_keyboard_silently(bot, user_id)
             try:
                 bot.answer_callback_query(call.id)
             except Exception:
