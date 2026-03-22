@@ -56,6 +56,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
         chat_id = msg.chat.id
         user_id = msg.from_user.id
         db.add_user_if_not_exists(user_id, msg.from_user.username)
+        db.add_group_if_not_exists(chat_id, db.get_group_language(chat_id))
         _try_send_one_time_greeting(bot, db, generation_service, user_id, msg.from_user.first_name or msg.from_user.username, get_group_lang(chat_id))
         lang = get_group_lang(chat_id)
         text = get_text("grp_welcome", lang)
@@ -69,6 +70,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
     def group_shop(msg):
         chat_id = msg.chat.id
         user_id = msg.from_user.id
+        db.add_group_if_not_exists(chat_id, get_group_lang(chat_id))
         lang = get_group_lang(chat_id)
         db.add_user_if_not_exists(user_id, msg.from_user.username)
         _try_send_one_time_greeting(bot, db, generation_service, user_id, msg.from_user.first_name or msg.from_user.username, lang)
@@ -87,6 +89,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
             return
         chat_id = msg.chat.id
         user_id = msg.from_user.id
+        db.add_group_if_not_exists(chat_id, get_group_lang(chat_id))
         db.add_user_if_not_exists(user_id, msg.from_user.username)
         lang = get_group_lang(chat_id)
         _try_send_one_time_greeting(bot, db, generation_service, user_id, msg.from_user.first_name or msg.from_user.username, lang)
@@ -125,6 +128,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
     def group_cb_shop(call):
         chat_id = call.message.chat.id
         user_id = call.from_user.id
+        db.add_group_if_not_exists(chat_id, get_group_lang(chat_id))
         lang = get_group_lang(chat_id)
         db.add_user_if_not_exists(user_id, call.from_user.username)
         _try_send_one_time_greeting(bot, db, generation_service, user_id, call.from_user.first_name or call.from_user.username, lang)

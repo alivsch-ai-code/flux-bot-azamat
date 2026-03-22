@@ -121,6 +121,12 @@ class DatabaseManager:
                         PRIMARY KEY (user_id, sent_date, slot)
                     )
                 ''')
+                # Azamat Random-Posts Zähler (Witz/Info pro Tag)
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS azamat_random_count (
+                        sent_date TEXT PRIMARY KEY, count INTEGER DEFAULT 0
+                    )
+                ''')
                 # Gruppen-spezifische Credits pro User (Kauf über Gruppen-Button)
                 c.execute('''
                     CREATE TABLE IF NOT EXISTS group_user_credits (
@@ -193,6 +199,11 @@ class DatabaseManager:
                     CREATE TABLE IF NOT EXISTS azamat_daily_sent (
                         user_id BIGINT NOT NULL, sent_date TEXT NOT NULL, slot INTEGER NOT NULL,
                         PRIMARY KEY (user_id, sent_date, slot)
+                    )
+                """)
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS azamat_random_count (
+                        sent_date TEXT PRIMARY KEY, count INTEGER DEFAULT 0
                     )
                 """)
 
@@ -488,6 +499,67 @@ class DatabaseManager:
             c.execute("INSERT INTO group_greeting_attempted (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_id,))
             conn.commit()
             conn.close()
+
+    def add_group_if_not_exists(self, chat_id: int, lang: str = "en") -> None:
+        """Fügt eine Gruppe hinzu, falls nicht vorhanden (für Random-Posts)."""
+        if lang not in ("de", "en", "ru", "kk"):
+            lang = "en"
+        with self.lock:
+            try:
+                conn = self._get_connection()
+                c = conn.cursor()
+                c.execute(
+                    "INSERT INTO group_settings (chat_id, language) VALUES (%s, %s) ON CONFLICT (chat_id) DO NOTHING",
+                    (chat_id, lang)
+                )
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f"⚠️ add_group_if_not_exists: {e}")
+
+    def get_all_tracked_groups(self) -> list:
+        """Alle bekannten Gruppen-Chat-IDs (group_settings)."""
+        with self.lock:
+            try:
+                conn = self._get_connection()
+                c = conn.cursor()
+                c.execute("SELECT chat_id FROM group_settings")
+                rows = c.fetchall()
+                conn.close()
+                return [r[0] for r in rows] if rows else []
+            except Exception:
+                return []
+
+    def get_azamat_random_count_today(self) -> int:
+        """Anzahl heute bereits gesendeter Random-Posts."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        with self.lock:
+            try:
+                conn = self._get_connection()
+                c = conn.cursor()
+                c.execute("SELECT count FROM azamat_random_count WHERE sent_date = %s", (today,))
+                row = c.fetchone()
+                conn.close()
+                return int(row[0]) if row and row[0] is not None else 0
+            except Exception:
+                return 0
+
+    def increment_azamat_random_count_today(self) -> None:
+        """Erhöht den Zähler für heute gesendete Random-Posts."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        with self.lock:
+            try:
+                conn = self._get_connection()
+                c = conn.cursor()
+                c.execute(
+                    "INSERT INTO azamat_random_count (sent_date, count) VALUES (%s, 1) "
+                    "ON CONFLICT (sent_date) DO UPDATE SET count = azamat_random_count.count + 1",
+                    (today,)
+                )
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f"⚠️ increment_azamat_random_count: {e}")
 
     def get_group_language(self, chat_id: int) -> str:
         """Sprache für eine Gruppe. Default: en."""
