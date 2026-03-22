@@ -184,6 +184,7 @@ STRINGS = {
     "admin_menu_mode_set": { "en": "Menu mode set to: {mode}", "de": "Menü-Modus gesetzt: {mode}", "ru": "Режим меню: {mode}", "kk": "Мәзір режимі: {mode}" },
     "admin_menu_mode_invalid": { "en": "Use: /set_menu_mode commands | keyboard | webapp", "de": "Verwende: /set_menu_mode commands | keyboard | webapp", "ru": "Используй: /set_menu_mode commands | keyboard | webapp", "kk": "Қолданыңыз: /set_menu_mode commands | keyboard | webapp" },
     "menu_mode_webapp": { "en": "🌐 Web App", "de": "🌐 Web-App", "ru": "🌐 Веб-приложение", "kk": "🌐 Веб қолданба" },
+    "webapp_open_shop": { "en": "💎 Open Shop in the App", "de": "💎 Shop in der App öffnen", "ru": "💎 Открыть магазин в приложении", "kk": "💎 Дүкенді қолданбада ашу" },
     "profile_text": {
         "en": "👤 <b>Profile</b>\n\n<b>Name:</b> {name}\n<b>Credits:</b> <code>{creds}</code> ⭐\n<b>ID:</b> <code>{user_id}</code>",
         "de": "👤 <b>Profil</b>\n\n<b>Name:</b> {name}\n<b>Credits:</b> <code>{creds}</code> ⭐\n<b>ID:</b> <code>{user_id}</code>",
@@ -198,6 +199,56 @@ STRINGS = {
     },
     "daily_news_on": { "en": "Daily News: ON", "de": "Daily News: AN", "ru": "Новости: ВКЛ", "kk": "Жаңалықтар: ҚОСУ" },
     "daily_news_off": { "en": "Daily News: OFF", "de": "Daily News: AUS", "ru": "Новости: ВЫКЛ", "kk": "Жаңалықтар: ӨШІРУ" },
+
+    # --- GRUPPEN-CHAT (nur Gruppen) ---
+    "grp_welcome": {
+        "en": "🤖 <b>AZAMAT AI</b> – Bot from Kazakhstan!\n\nHere in the group you can chat with me. For the full power of AI (images, video, etc.) write me in <b>Direct Message</b>!\n\n👇 Choose:",
+        "de": "🤖 <b>AZAMAT AI</b> – Ein Bot aus Kasachstan!\n\nHier in der Gruppe könnt ihr mit mir chatten. Für die volle Kraft von KI (Bilder, Video usw.) schreibt mir im <b>Direktchat</b>!\n\n👇 Wähle:",
+        "ru": "🤖 <b>AZAMAT AI</b> – Бот из Казахстана!\n\nЗдесь в группе вы можете со мной общаться. Для полной мощи ИИ (картинки, видео и т.д.) пишите мне в <b>личные сообщения</b>!\n\n👇 Выберите:",
+        "kk": "🤖 <b>AZAMAT AI</b> – Қазақстаннан бот!\n\nМұнда топта менімен чаттаса аласыз. AI-дың толық күшін (суреттер, бейнелер т.б.) көру үшін маған <b>жеке хабарлама</b> жазыңыз!\n\n👇 Таңдаңыз:"
+    },
+    "grp_btn_credits": {
+        "en": "💎 Buy Credits",
+        "de": "💎 Credits kaufen",
+        "ru": "💎 Купить кредиты",
+        "kk": "💎 Кредит сатып алу"
+    },
+    "grp_btn_lang": {
+        "en": "🌐 Language",
+        "de": "🌐 Sprache",
+        "ru": "🌐 Язык",
+        "kk": "🌐 Тіл"
+    },
+    "grp_credits_sent": {
+        "en": "✅ I've sent you a private message with the shop!",
+        "de": "✅ Ich habe dir eine private Nachricht mit dem Shop geschickt!",
+        "ru": "✅ Я отправил вам личное сообщение с магазином!",
+        "kk": "✅ Сізге дүкенмен жеке хабарлама жібердім!"
+    },
+    "grp_credits_start_first": {
+        "en": "👋 First write /start in a private chat with me, then I can send you the shop!",
+        "de": "👋 Schreib mir zuerst /start im Direktchat, dann kann ich dir den Shop schicken!",
+        "ru": "👋 Сначала напишите /start в личные сообщения, тогда я смогу отправить магазин!",
+        "kk": "👋 Алдымен маған жеке чатта /start жазыңыз, содан кейін дүкенді жібере аламын!"
+    },
+    "grp_lang_changed": {
+        "en": "✅ Language set to English.",
+        "de": "✅ Sprache auf Deutsch gesetzt.",
+        "ru": "✅ Язык изменён на Русский.",
+        "kk": "✅ Тіл Қазақшаға өзгертілді."
+    },
+    "grp_greeting_prompt": {
+        "en": "Generate a short, friendly personal greeting (2-4 sentences) in English. Address the person by name if given. You are AZAMAT AI, a fun chatbot from Kazakhstan. Say hello, introduce yourself briefly, and mention that they can use various AI models here (images, video, chat). Be warm and slightly cheeky. No bullet points, just natural text.",
+        "de": "Erstelle eine kurze, freundliche persönliche Begrüßung (2-4 Sätze) auf Deutsch. Sprich die Person mit Namen an, falls angegeben. Du bist AZAMAT AI, ein lustiger Chatbot aus Kasachstan. Sag Hallo, stell dich kurz vor und erwähne, dass man hier verschiedene KI-Modelle nutzen kann (Bilder, Video, Chat). Sei herzlich und etwas frech. Keine Aufzählungen, nur fließender Text.",
+        "ru": "Сгенерируй короткое дружелюбное личное приветствие (2-4 предложения) на русском. Обратись к человеку по имени, если дано. Ты AZAMAT AI, весёлый чат-бот из Казахстана. Поздоровайся, кратко представься и упомяни, что здесь можно использовать разные ИИ-модели (картинки, видео, чат). Будь тёплым и немного дерзким. Без списков, только живой текст.",
+        "kk": "Қазақша 2-4 сөйлемнен қысқа, мейірімді жеке сәлемдеме жаса. Аты берілсе, адамды атымен ата. Сен AZAMAT AI – Қазақстаннан көңілді чат-бот. Сәлемдес, қысқаша таныстыр және мұнда әртүрлі AI модельдерін (суреттер, бейне, чат) пайдалануға болатынын айт. Жылы және сәл өжет бол. Тізімсіз, тек табиғи мәтін."
+    },
+    "azamat_system_prompt": {
+        "en": "You are AZAMAT AI, a chatbot from Kazakhstan. Funny, friendly, but also cheeky. You're here for light chat in the group. If users want the full power of AI (images, video, etc.), tell them to message you in Direct Chat. Keep answers relatively short and entertaining.",
+        "de": "Du bist AZAMAT AI, ein Chatbot aus Kasachstan. Lustig und freundlich, aber auch frech. Du bist hier für lockeren Chat in der Gruppe. Wer die volle Kraft von KI will (Bilder, Video usw.), soll dich im Direktchat anschreiben. Halte Antworten relativ kurz und unterhaltsam.",
+        "ru": "Ты AZAMAT AI, чат-бот из Казахстана. Весёлый и дружелюбный, но также дерзкий. Ты здесь для лёгкого общения в группе. Кто хочет полную мощь ИИ (картинки, видео и т.д.) – пусть пишет тебе в личку. Отвечай коротко и занимательно.",
+        "kk": "Сен AZAMAT AI – Қазақстаннан чат-бот. Көңілді және мейірімді, сонымен бірге өжет. Мұнда топта жеңіл чат үшінсің. AI-дың толық күшін қалайтындар сеніме жеке хабарлама жазады. Жауаптарды қысқа және қызықты ұста."
+    },
 
     # --- DAILY FALLBACK (wenn keine DB-Nachricht für heute) ---
     "daily_fallback": [

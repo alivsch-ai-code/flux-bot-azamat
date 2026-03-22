@@ -57,7 +57,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
         welcome_text = get_text("welcome", lang)
         markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
         bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="HTML")
-        bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+        bot.send_message(user_id, ".", reply_markup=remove_kbd)
     elif action.startswith("nav_path_"):
         target_path = action.replace("nav_path_", "")
         title_key = f"title_{target_path.replace('/', '_')}"
@@ -68,19 +68,19 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
             title_text = f"📂 <b>{display_name if not display_name.startswith('menu_') else cat_name}</b>"
         markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, target_path)
         bot.send_message(user_id, title_text, reply_markup=markup, parse_mode="HTML")
-        bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+        bot.send_message(user_id, ".", reply_markup=remove_kbd)
     elif action.startswith("sel_"):
         model_key = action.replace("sel_", "")
         send_model_detail_view(bot, user_id, model_key, db, get_lang)
     elif action.startswith("start_gen_"):
         model_key = action.replace("start_gen_", "")
-        bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+        bot.send_message(user_id, ".", reply_markup=remove_kbd)
         do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
     elif action.startswith("chat_mode_yes_"):
         model_key = action.replace("chat_mode_yes_", "")
         model = db.get_model_by_key(model_key)
         if model and model.is_active:
-            bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+            bot.send_message(user_id, ".", reply_markup=remove_kbd)
             db.set_user_chat_mode(user_id, model_key, active=True)
             final_cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
             text = get_text("chat_active_msg", lang).format(model=model.name, cost=final_cost)
@@ -88,7 +88,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
             bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
     elif action.startswith("chat_mode_no_"):
         model_key = action.replace("chat_mode_no_", "")
-        bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+        bot.send_message(user_id, ".", reply_markup=remove_kbd)
         do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
     elif action == "cmd_shop":
         fake = type('Msg', (), {'chat': type('C', (), {'id': user_id})()})()
@@ -264,8 +264,8 @@ def register(bot: TeleBot, generation_service, db) -> None:
             pass
         process_webapp_action(bot, user_id, action, db)
 
-    # 1. START COMMAND
-    @bot.message_handler(commands=['start'])
+    # 1. START COMMAND (nur private Chats – Gruppen werden von group_handler bedient)
+    @bot.message_handler(commands=['start'], func=lambda m: str(m.chat.type) == 'private')
     def send_welcome(message):
         user_id = message.chat.id
         db.add_user_if_not_exists(user_id, message.from_user.username)
@@ -316,11 +316,11 @@ def register(bot: TeleBot, generation_service, db) -> None:
                 web_app=types.WebAppInfo(url=webapp_url)
             ))
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
-            bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+            bot.send_message(user_id, ".", reply_markup=remove_kbd)
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
-            bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+            bot.send_message(user_id, ".", reply_markup=remove_kbd)
 
     # 2. NAVIGATION (Static Menus)
     # WICHTIG: Wir ignorieren hier 'nav_path_', damit gen_handler diese übernehmen kann!
@@ -360,14 +360,14 @@ def register(bot: TeleBot, generation_service, db) -> None:
                     bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
                 except Exception:
                     bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
-                bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+                bot.send_message(user_id, ".", reply_markup=remove_kbd)
             else:
                 new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                 try:
                     bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
                 except Exception:
                     bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
-                bot.send_message(user_id, "\u200B", reply_markup=remove_kbd)
+                bot.send_message(user_id, ".", reply_markup=remove_kbd)
             try:
                 bot.answer_callback_query(call.id)
             except Exception:

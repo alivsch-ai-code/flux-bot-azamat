@@ -22,9 +22,28 @@ def get_user_lang(msg) -> str:
         return "de"
 
 
-def show_shop_logic(bot: TeleBot, message, db, lang: str = "de") -> None:
-    """Zeigt den Shop (Credits kaufen). Aufrufbar aus Callback oder Tastatur-Button."""
+def show_shop_logic(bot: TeleBot, message, db, lang: str = "de", force_inline: bool = False) -> None:
+    """Zeigt den Shop (Credits kaufen). Bei menu_mode=webapp: WebApp-Button – außer force_inline=True (z.B. Gruppen)."""
+    from src.config.settings import config
+
     clear_context(message.chat.id)
+    user_id = message.chat.id
+    menu_mode = db.get_bot_setting("menu_mode", "commands")
+
+    if not force_inline and menu_mode == "webapp" and config.APP_URL and config.APP_URL.startswith("https://"):
+        app_url = config.APP_URL.rstrip("/")
+        shop_url = app_url + "/webapp?view=shop"
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton(
+            get_text("menu_mode_webapp", lang),
+            web_app=types.WebAppInfo(url=shop_url)
+        ))
+        text = get_text("webapp_open_shop", lang)
+        try:
+            bot.edit_message_text(text, user_id, message.message_id, reply_markup=markup, parse_mode="HTML")
+        except Exception:
+            bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+        return
 
     markup = types.InlineKeyboardMarkup(row_width=1)
     for label, desc, price, credits in CREDIT_PACKAGES:
@@ -34,7 +53,7 @@ def show_shop_logic(bot: TeleBot, message, db, lang: str = "de") -> None:
     back_text = get_text("btn_back", lang)
     markup.add(types.InlineKeyboardButton(back_text, callback_data="nav_main"))
 
-    current_credits = db.get_user_credits(message.chat.id)
+    current_credits = db.get_user_credits(user_id)
 
     text = (
         f"<b>💳 Guthaben aufladen</b>\n\n"
@@ -45,11 +64,11 @@ def show_shop_logic(bot: TeleBot, message, db, lang: str = "de") -> None:
 
     try:
         bot.edit_message_text(
-            text, message.chat.id, message.message_id,
+            text, user_id, message.message_id,
             reply_markup=markup, parse_mode="HTML",
         )
     except Exception:
-        bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode="HTML")
+        bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
 
 
 def register(bot: TeleBot, db) -> None:

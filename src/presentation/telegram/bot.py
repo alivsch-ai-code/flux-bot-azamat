@@ -3,7 +3,7 @@ from telebot import TeleBot, types
 
 from src.application.daily_services import DailyService
 from src.config.settings import config
-from src.presentation.telegram.handlers import gen_handler, menu_handler, payment_handler
+from src.presentation.telegram.handlers import gen_handler, group_handler, menu_handler, payment_handler
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ def setup_bot(bot: TeleBot, generation_service, db) -> None:
         except Exception as e:
             logger.debug("Menü-Button Reset: %s", e)
 
+    group_handler.register(bot, generation_service, db)
     menu_handler.register(bot, generation_service, db)
     payment_handler.register(bot, db)
     gen_handler.register(bot, generation_service, db)

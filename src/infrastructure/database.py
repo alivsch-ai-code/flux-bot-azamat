@@ -94,6 +94,24 @@ class DatabaseManager:
                         value TEXT NOT NULL DEFAULT ''
                     )
                 ''')
+                # Gruppen-Einstellungen (Sprache pro Gruppe)
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS group_settings (
+                        chat_id BIGINT PRIMARY KEY,
+                        language TEXT DEFAULT 'de'
+                    )
+                ''')
+                # Einmalige Willkommens-DM an User aus Gruppen
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS group_greeting_sent (
+                        user_id BIGINT PRIMARY KEY
+                    )
+                ''')
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS group_greeting_attempted (
+                        user_id BIGINT PRIMARY KEY
+                    )
+                ''')
                 
                 conn.commit()
                 conn.close()
@@ -128,6 +146,25 @@ class DatabaseManager:
                 ]
                 for col, dtype in user_cols:
                     c.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {dtype}")
+
+                # 3. Bot-Settings Default: menu_mode
+                c.execute("SELECT 1 FROM bot_settings WHERE key = 'menu_mode'")
+                if c.fetchone() is None:
+                    c.execute("INSERT INTO bot_settings (key, value) VALUES ('menu_mode', 'commands')")
+
+                # 4. Gruppen-Einstellungen
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS group_settings (
+                        chat_id BIGINT PRIMARY KEY,
+                        language TEXT DEFAULT 'de'
+                    )
+                """)
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS group_greeting_sent (user_id BIGINT PRIMARY KEY)
+                """)
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS group_greeting_attempted (user_id BIGINT PRIMARY KEY)
+                """)
 
                 conn.commit()
             except Exception as e:
@@ -303,6 +340,74 @@ class DatabaseManager:
             c.execute(
                 "INSERT INTO bot_settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = %s",
                 (key, value, value)
+            )
+            conn.commit()
+            conn.close()
+
+    def has_group_greeting_been_sent(self, user_id: int) -> bool:
+        """Prüft ob dem User bereits die einmalige Willkommens-DM geschickt wurde."""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS group_greeting_sent (user_id BIGINT PRIMARY KEY)")
+            c.execute("SELECT 1 FROM group_greeting_sent WHERE user_id = %s", (user_id,))
+            res = c.fetchone()
+            conn.close()
+            return res is not None
+
+    def has_group_greeting_been_attempted(self, user_id: int) -> bool:
+        """Prüft ob wir bereits versucht haben, die Willkommens-DM zu senden."""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS group_greeting_attempted (user_id BIGINT PRIMARY KEY)")
+            c.execute("SELECT 1 FROM group_greeting_attempted WHERE user_id = %s", (user_id,))
+            res = c.fetchone()
+            conn.close()
+            return res is not None
+
+    def mark_group_greeting_sent(self, user_id: int) -> None:
+        """Markiert dass dem User die einmalige Willkommens-DM geschickt wurde."""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS group_greeting_sent (user_id BIGINT PRIMARY KEY)")
+            c.execute("INSERT INTO group_greeting_sent (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_id,))
+            conn.commit()
+            conn.close()
+
+    def mark_group_greeting_attempted(self, user_id: int) -> None:
+        """Markiert dass wir versucht haben, die Willkommens-DM zu senden."""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS group_greeting_attempted (user_id BIGINT PRIMARY KEY)")
+            c.execute("INSERT INTO group_greeting_attempted (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_id,))
+            conn.commit()
+            conn.close()
+
+    def get_group_language(self, chat_id: int) -> str:
+        """Sprache für eine Gruppe. Default: de."""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS group_settings (chat_id BIGINT PRIMARY KEY, language TEXT DEFAULT 'de')")
+            c.execute("SELECT language FROM group_settings WHERE chat_id = %s", (chat_id,))
+            res = c.fetchone()
+            conn.close()
+            return (res[0] or "de") if res else "de"
+
+    def set_group_language(self, chat_id: int, lang: str) -> None:
+        """Sprache für eine Gruppe setzen."""
+        if lang not in ("de", "en", "ru", "kk"):
+            return
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS group_settings (chat_id BIGINT PRIMARY KEY, language TEXT DEFAULT 'de')")
+            c.execute(
+                "INSERT INTO group_settings (chat_id, language) VALUES (%s, %s) ON CONFLICT (chat_id) DO UPDATE SET language = %s",
+                (chat_id, lang, lang)
             )
             conn.commit()
             conn.close()
