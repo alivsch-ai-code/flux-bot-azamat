@@ -13,13 +13,14 @@ from typing import List, Dict
 from src.infrastructure.ai.replicate.prompt_engineer import optimize_prompt_via_llm
 
 
-def build_chat_prompt_from_messages(messages: List[Dict], new_user_message: str) -> str:
-    """Baut einen Prompt mit [SYSTEM]/[HISTORY]-Block aus der History."""
+def build_chat_prompt_from_messages(messages: List[Dict], new_user_message: str, system_prompt: str = None) -> str:
+    """Baut einen Prompt mit [SYSTEM]/[HISTORY]-Block aus der History. Optional: system_prompt für Gruppen (AZAMAT)."""
+    default_system = "Du bist ein hilfreicher Chatbot. Unten steht der bisherige Dialog (History). Beantworte nur die letzte Nachricht des Users."
+    sys_block = (system_prompt or default_system).strip()
     lines = [
         "[SYSTEM]",
-        "Du bist ein hilfreicher Chatbot. Unten steht der bisherige Dialog (History).",
-        "Beantworte nur die letzte Nachricht des Users.\n",
-        "[HISTORY]",
+        sys_block,
+        "\n[HISTORY]",
     ]
     for m in messages:
         role = m.get("role")

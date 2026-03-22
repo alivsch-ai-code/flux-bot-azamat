@@ -226,6 +226,51 @@ STRINGS = {
     "daily_news_on": { "en": "Daily News: ON", "de": "Daily News: AN", "ru": "Новости: ВКЛ", "kk": "Жаңалықтар: ҚОСУ" },
     "daily_news_off": { "en": "Daily News: OFF", "de": "Daily News: AUS", "ru": "Новости: ВЫКЛ", "kk": "Жаңалықтар: ӨШІРУ" },
 
+    # --- GRUPPEN-CHAT (nur Gruppen) ---
+    "grp_welcome": {
+        "en": "🤖 <b>AZAMAT AI</b> – Bot from Kazakhstan!\n\nHere in the group you can chat with me. For the full power of AI (images, video, etc.) write me in <b>Direct Message</b>!\n\n👇 Choose:",
+        "de": "🤖 <b>AZAMAT AI</b> – Ein Bot aus Kasachstan!\n\nHier in der Gruppe könnt ihr mit mir chatten. Für die volle Kraft von KI (Bilder, Video usw.) schreibt mir im <b>Direktchat</b>!\n\n👇 Wähle:",
+        "ru": "🤖 <b>AZAMAT AI</b> – Бот из Казахстана!\n\nЗдесь в группе вы можете со мной общаться. Для полной мощи ИИ (картинки, видео и т.д.) пишите мне в <b>личные сообщения</b>!\n\n👇 Выберите:",
+        "kk": "🤖 <b>AZAMAT AI</b> – Қазақстаннан бот!\n\nМұнда топта менімен чаттаса аласыз. AI-дың толық күшін (суреттер, бейнелер т.б.) көру үшін маған <b>жеке хабарлама</b> жазыңыз!\n\n👇 Таңдаңыз:"
+    },
+    "grp_btn_credits": {
+        "en": "💎 Buy Credits",
+        "de": "💎 Credits kaufen",
+        "ru": "💎 Купить кредиты",
+        "kk": "💎 Кредит сатып алу"
+    },
+    "grp_btn_lang": {
+        "en": "🌐 Language",
+        "de": "🌐 Sprache",
+        "ru": "🌐 Язык",
+        "kk": "🌐 Тіл"
+    },
+    "grp_credits_sent": {
+        "en": "✅ I've sent you a private message with the shop!",
+        "de": "✅ Ich habe dir eine private Nachricht mit dem Shop geschickt!",
+        "ru": "✅ Я отправил вам личное сообщение с магазином!",
+        "kk": "✅ Сізге дүкенмен жеке хабарлама жібердім!"
+    },
+    "grp_credits_start_first": {
+        "en": "👋 First write /start in a private chat with me, then I can send you the shop!",
+        "de": "👋 Schreib mir zuerst /start im Direktchat, dann kann ich dir den Shop schicken!",
+        "ru": "👋 Сначала напишите /start в личные сообщения, тогда я смогу отправить магазин!",
+        "kk": "👋 Алдымен маған жеке чатта /start жазыңыз, содан кейін дүкенді жібере аламын!"
+    },
+    "grp_lang_changed": {
+        "en": "✅ Language set to English.",
+        "de": "✅ Sprache auf Deutsch gesetzt.",
+        "ru": "✅ Язык изменён на Русский.",
+        "kk": "✅ Тіл Қазақшаға өзгертілді."
+    },
+    # AZAMAT System-Prompt (Rolle für Gruppen-Chat) – pro Sprache
+    "azamat_system_prompt": {
+        "en": "You are AZAMAT AI, a chatbot from Kazakhstan. Funny, friendly, but also cheeky. You're here for light chat in the group. If users want the full power of AI (images, video, etc.), tell them to message you in Direct Chat. Keep answers relatively short and entertaining.",
+        "de": "Du bist AZAMAT AI, ein Chatbot aus Kasachstan. Lustig und freundlich, aber auch frech. Du bist hier für lockeren Chat in der Gruppe. Wer die volle Kraft von KI will (Bilder, Video usw.), soll dich im Direktchat anschreiben. Halte Antworten relativ kurz und unterhaltsam.",
+        "ru": "Ты AZAMAT AI, чат-бот из Казахстана. Весёлый и дружелюбный, но также дерзкий. Ты здесь для лёгкого общения в группе. Кто хочет полную мощь ИИ (картинки, видео и т.д.) – пусть пишет тебе в личку. Отвечай коротко и занимательно.",
+        "kk": "Сен AZAMAT AI – Қазақстаннан чат-бот. Көңілді және мейірімді, сонымен бірге өжет. Мұнда топта жеңіл чат үшінсің. AI-дың толық күшін қалайтындар сеніме жеке хабарлама жазады. Жауаптарды қысқа және қызықты ұста."
+    },
+
     # --- DAILY FALLBACK (wenn keine DB-Nachricht für heute) ---
     "daily_fallback": [
         {

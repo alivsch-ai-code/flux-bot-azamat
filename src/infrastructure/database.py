@@ -94,6 +94,13 @@ class DatabaseManager:
                         value TEXT NOT NULL DEFAULT ''
                     )
                 ''')
+                # Gruppen-Einstellungen (Sprache pro Gruppe)
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS group_settings (
+                        chat_id BIGINT PRIMARY KEY,
+                        language TEXT DEFAULT 'de'
+                    )
+                ''')
                 
                 conn.commit()
                 conn.close()
@@ -133,6 +140,14 @@ class DatabaseManager:
                 c.execute("SELECT 1 FROM bot_settings WHERE key = 'menu_mode'")
                 if c.fetchone() is None:
                     c.execute("INSERT INTO bot_settings (key, value) VALUES ('menu_mode', 'commands')")
+
+                # 4. Gruppen-Einstellungen (falls nicht in _init_db)
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS group_settings (
+                        chat_id BIGINT PRIMARY KEY,
+                        language TEXT DEFAULT 'de'
+                    )
+                """)
 
                 conn.commit()
             except Exception as e:
@@ -308,6 +323,30 @@ class DatabaseManager:
             c.execute(
                 "INSERT INTO bot_settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = %s",
                 (key, value, value)
+            )
+            conn.commit()
+            conn.close()
+
+    def get_group_language(self, chat_id: int) -> str:
+        """Sprache für eine Gruppe. Default: de."""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("SELECT language FROM group_settings WHERE chat_id = %s", (chat_id,))
+            res = c.fetchone()
+            conn.close()
+            return (res[0] or "de") if res else "de"
+
+    def set_group_language(self, chat_id: int, lang: str) -> None:
+        """Sprache für eine Gruppe setzen."""
+        if lang not in ("de", "en", "ru", "kk"):
+            return
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO group_settings (chat_id, language) VALUES (%s, %s) ON CONFLICT (chat_id) DO UPDATE SET language = %s",
+                (chat_id, lang, lang)
             )
             conn.commit()
             conn.close()
