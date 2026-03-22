@@ -13,3 +13,4 @@ jwt
 openai
 ruff
 psutil
+feedparser

@@ -1,10 +1,19 @@
 import os
 import random
+import re
 import time
 import threading
 from datetime import datetime
 
+import feedparser
+
 from src.utils.strings import get_random_daily_fallback, get_text
+
+# Google News RSS für AI-Themen
+AI_NEWS_RSS_URL = os.getenv(
+    "AI_NEWS_RSS_URL",
+    "https://news.google.com/rss/search?q=Artificial+Intelligence&hl=en-US&gl=US&ceid=US:en",
+)
 
 # Fallback nur 1× pro Tag senden, wenn keine DB-Nachricht
 _last_fallback_date = None
@@ -64,8 +73,8 @@ class DailyService:
                 # Azamat 2× täglich: generierte Begrüßung an bekannte User
                 self._maybe_send_azamat_greetings()
 
-                # Azamat Random-Posts: Witz oder Info an Gruppen + User (bis zu N/Tag)
-                self._maybe_send_random_azamat_post()
+                # Azamat News: 2 Latest AI-News von Google RSS → Gemini → User/Gruppen (bis zu N/Tag)
+                self._maybe_send_ai_news_post()
 
             except Exception as e:
                 print(f"⚠️ Fehler im Daily Service Loop: {e}")
@@ -216,8 +225,26 @@ class DailyService:
         if success:
             print(f"✅ Azamat Greeting: {success}/{len(users)} gesendet.")
 
-    def _maybe_send_random_azamat_post(self):
-        """Sendet bis zu N× täglich zufällige Gemini-Posts (Witz oder Info) an Gruppen + bekannte User."""
+    def _fetch_ai_news_from_rss(self, max_items: int = 2) -> list:
+        """Lädt die neuesten AI-News von Google News RSS. Gibt Liste von {title, snippet, link} zurück."""
+        try:
+            feed = feedparser.parse(AI_NEWS_RSS_URL)
+            items = getattr(feed, "entries", [])[:max_items]
+            result = []
+            for entry in items:
+                title = getattr(entry, "title", "") or ""
+                # description kann HTML enthalten
+                desc = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
+                desc = re.sub(r"<[^>]+>", "", desc)
+                link = getattr(entry, "link", "") or ""
+                result.append({"title": title, "snippet": desc[:300], "link": link})
+            return result
+        except Exception as e:
+            print(f"⚠️ RSS-Fetch fehlgeschlagen: {e}")
+            return []
+
+    def _maybe_send_ai_news_post(self):
+        """5×/Tag: Holt 2 Latest AI-News von Google RSS, fasst/übersetzt mit Gemini, sendet spannend mit Emojis."""
         if not self.generation_service:
             return
         max_per_day = int(os.getenv("AZAMAT_RANDOM_POSTS_PER_DAY", "5"))
@@ -226,14 +253,22 @@ class DailyService:
         sent_today = self.db.get_azamat_random_count_today()
         if sent_today >= max_per_day:
             return
-        # ~10% Chance pro Lauf (alle 60s), um über den Tag verteilt zu senden
         if random.random() > 0.10:
             return
         model = self.db.get_model_by_key(AZAMAT_GREETING_MODEL)
         if not model or "text" not in (model.type or []):
             return
 
-        recipients = []  # (type, id, lang)
+        news_items = self._fetch_ai_news_from_rss(max_items=2)
+        if len(news_items) < 2:
+            return
+
+        news_block = "\n\n".join(
+            f"News {i+1}:\nTitle: {n['title']}\nSnippet: {n['snippet']}\nLink: {n.get('link', '')}"
+            for i, n in enumerate(news_items)
+        )
+
+        recipients = []
         for chat_id in self.db.get_all_tracked_groups():
             lang = self.db.get_group_language(chat_id)
             recipients.append(("group", chat_id, lang))
@@ -241,39 +276,23 @@ class DailyService:
             settings = self.db.get_user_settings(user_id)
             lang = settings.get("lang", "en")
             recipients.append(("user", user_id, lang))
-
         if not recipients:
             return
 
         target_type, target_id, lang = random.choice(recipients)
-        content_type = random.choice(["joke", "info"])
-        key = "azamat_random_joke_prompt" if content_type == "joke" else "azamat_random_info_prompt"
-        prompt_tpl = get_text(key, lang)
-        user_name = ""
-        if target_type == "user":
-            user_name = self.db.get_user_username_or_name(target_id)
-        if target_type == "user" and user_name and user_name != "User":
-            mention_tpl = get_text("azamat_random_mention_name", lang)
-            prompt_tpl = f"{prompt_tpl}\n\n{mention_tpl}: {user_name}"
-        prompt = f"{prompt_tpl}\n\nOutput ONLY the generated text, nothing else."
-
-        # process_request braucht user_id (no_charge) – bei Gruppen: beliebiger Abonnent
-        user_id_for_gen = target_id if target_type == "user" else None
-        if not user_id_for_gen:
-            users = self.db.get_subscribed_users()
-            if not users:
-                return
-            user_id_for_gen = users[0]
-
+        prompt_tpl = get_text("azamat_news_summary_prompt", lang)
+        prompt = f"{prompt_tpl}\n\n---\n{news_block}\n---\n\nOutput ONLY the summarized news text."
+        user_id_for_gen = target_id if target_type == "user" else (self.db.get_subscribed_users() or [target_id])[0]
         ok, result = self.generation_service.process_request(
             user_id_for_gen, model, prompt, media_files=None, no_charge=True
         )
         if not ok or not result or not str(result).strip():
             return
+        text = str(result).strip()
         try:
-            self.bot.send_message(target_id, str(result), parse_mode="HTML")
+            self.bot.send_message(target_id, text, parse_mode="HTML")
             self.db.increment_azamat_random_count_today()
             label = "group" if target_type == "group" else "user"
-            print(f"🤖 Azamat Random ({content_type}) an {label} {target_id} gesendet.")
+            print(f"📰 Azamat AI News an {label} {target_id} gesendet.")
         except Exception:
             pass
