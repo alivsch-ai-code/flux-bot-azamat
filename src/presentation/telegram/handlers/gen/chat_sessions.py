@@ -10,7 +10,7 @@ kompakten System-Eintrag. Privat: alle 5 Nachrichten. Gruppen: Puffer bis 20, da
 
 from typing import List, Dict
 
-from src.infrastructure.ai.replicate.prompt_engineer import optimize_prompt_via_llm, summarize_conversation_via_llm
+from src.infrastructure.ai.replicate.prompt_engineer import summarize_conversation_via_llm
 
 
 def _format_msg_for_display(m: Dict) -> str:

@@ -64,20 +64,23 @@ def optimize_prompt_via_llm(user_prompt: str):
         return user_prompt # Fallback: Original zurückgeben
 
 
-SUMMARY_SYSTEM = (
-    "You summarize conversations concisely. Preserve who said what (names) when present. "
-    "Output ONLY the summary, no intro. Keep it short (2-5 sentences)."
-)
+# Separater System-Prompt NUR für Chat-Zusammenfassung (nicht für Bild-Prompt-Optimierung!)
+SUMMARY_SYSTEM = """You are a conversation summarizer. Your ONLY task is to summarize the given chat dialogue.
+RULES:
+- Output a short summary (2-5 sentences) of what was discussed.
+- Preserve who said what (participant names) when present.
+- Do NOT generate image prompts, artistic descriptions, or photography terms.
+- Output ONLY the summary text. No labels, no "Summary:", no quotes."""
 
 
 def summarize_conversation_via_llm(conversation_text: str) -> str:
-    """Fasst eine Unterhaltung via Gemini zusammen. Erhält Teilnehmer-Namen."""
+    """Fasst eine Unterhaltung via Gemini zusammen. Erhält Teilnehmer-Namen. Separater Prompt von Bild-Optimierung."""
     api_token = os.getenv("REPLICATE_API_TOKEN")
     if not api_token:
         return conversation_text[:500]  # Fallback: Kürzung
     try:
         client = replicate.Client(api_token=api_token)
-        prompt_input = f"{SUMMARY_SYSTEM}\n\nCONVERSATION:\n{conversation_text}\n\nSUMMARY:"
+        prompt_input = f"{SUMMARY_SYSTEM}\n\nCONVERSATION:\n{conversation_text}\n\nYour summary:"
         output = client.run(
             MODEL_ID,
             input={"prompt": prompt_input, "temperature": 0.3, "max_tokens": 300, "top_p": 0.9},
@@ -85,6 +88,10 @@ def summarize_conversation_via_llm(conversation_text: str) -> str:
         full_response = "".join([str(x) for x in output]).strip()
         if not full_response or len(full_response) < 3:
             return conversation_text[:500]
+        # Safeguard: Wenn die Antwort wie ein Bild-Prompt aussieht (falsche API-Antwort), nicht verwenden
+        img_keywords = ("photorealistic", "8k", "ultra-detailed", "hyper-realistic", "bokeh", "chiaroscuro", "arri alexa")
+        if any(kw in full_response.lower() for kw in img_keywords):
+            return conversation_text[:400] + "..."
         return full_response
     except Exception as e:
         print(f"⚠️ Gemini Summarization fehlgeschlagen: {e}")
