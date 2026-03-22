@@ -112,6 +112,15 @@ class DatabaseManager:
                         user_id BIGINT PRIMARY KEY
                     )
                 ''')
+                # Azamat 2x täglich Begrüßung (user_id, sent_date, slot)
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS azamat_daily_sent (
+                        user_id BIGINT NOT NULL,
+                        sent_date TEXT NOT NULL,
+                        slot INTEGER NOT NULL,
+                        PRIMARY KEY (user_id, sent_date, slot)
+                    )
+                ''')
                 # Gruppen-spezifische Credits pro User (Kauf über Gruppen-Button)
                 c.execute('''
                     CREATE TABLE IF NOT EXISTS group_user_credits (
@@ -178,6 +187,12 @@ class DatabaseManager:
                     CREATE TABLE IF NOT EXISTS group_user_credits (
                         user_id BIGINT NOT NULL, chat_id BIGINT NOT NULL,
                         credits INTEGER DEFAULT 0, PRIMARY KEY (user_id, chat_id)
+                    )
+                """)
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS azamat_daily_sent (
+                        user_id BIGINT NOT NULL, sent_date TEXT NOT NULL, slot INTEGER NOT NULL,
+                        PRIMARY KEY (user_id, sent_date, slot)
                     )
                 """)
 
@@ -575,6 +590,48 @@ class DatabaseManager:
             results = c.fetchall()
             conn.close()
             return [r[0] for r in results]
+
+    def has_azamat_greeting_been_sent(self, user_id: int, sent_date: str, slot: int) -> bool:
+        with self.lock:
+            try:
+                conn = self._get_connection()
+                c = conn.cursor()
+                c.execute(
+                    "SELECT 1 FROM azamat_daily_sent WHERE user_id = %s AND sent_date = %s AND slot = %s",
+                    (user_id, sent_date, slot)
+                )
+                res = c.fetchone()
+                conn.close()
+                return res is not None
+            except Exception:
+                return False
+
+    def mark_azamat_greeting_sent(self, user_id: int, sent_date: str, slot: int) -> None:
+        with self.lock:
+            try:
+                conn = self._get_connection()
+                c = conn.cursor()
+                c.execute(
+                    "INSERT INTO azamat_daily_sent (user_id, sent_date, slot) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                    (user_id, sent_date, slot)
+                )
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f"⚠️ mark_azamat_greeting_sent: {e}")
+
+    def get_user_username_or_name(self, user_id: int) -> str:
+        """Holt username oder user_id als Fallback für Begrüßungen."""
+        with self.lock:
+            try:
+                conn = self._get_connection()
+                c = conn.cursor()
+                c.execute("SELECT username FROM users WHERE user_id = %s", (user_id,))
+                row = c.fetchone()
+                conn.close()
+                return (row[0] or f"User") if row else "User"
+            except Exception:
+                return "User"
 
     # --- GENERATION ERRORS (Logging + 7-Tage-Cleanup) ---
     def insert_generation_error(self, user_id: int, model_key: str, error_message: str):

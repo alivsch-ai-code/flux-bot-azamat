@@ -1,18 +1,24 @@
+import os
 import time
 import threading
 from datetime import datetime
 
-from src.utils.strings import get_random_daily_fallback
+from src.utils.strings import get_random_daily_fallback, get_text
 
 # Fallback nur 1× pro Tag senden, wenn keine DB-Nachricht
 _last_fallback_date = None
 _last_errors_cleanup_date = None
+# Azamat-Begrüßung: bereits gesendete Slots (date, slot)
+_last_azamat_slots_done = set()
+
+AZAMAT_GREETING_MODEL = "google-gemini-2-5-flash"
 
 
 class DailyService:
-    def __init__(self, bot, db):
+    def __init__(self, bot, db, generation_service=None):
         self.bot = bot
         self.db = db
+        self.generation_service = generation_service
         self.running = False
 
     def start(self):
@@ -53,6 +59,9 @@ class DailyService:
                 if _last_errors_cleanup_date != today:
                     self.db.cleanup_old_generation_errors()
                     _last_errors_cleanup_date = today
+
+                # Azamat 2× täglich: generierte Begrüßung an bekannte User
+                self._maybe_send_azamat_greetings()
 
             except Exception as e:
                 print(f"⚠️ Fehler im Daily Service Loop: {e}")
@@ -134,3 +143,70 @@ class DailyService:
             print(f"✅ Daily Fallback: {success}/{len(users)} erfolgreich.")
         except Exception as e:
             print(f"⚠️ Fehler beim Daily Fallback: {e}")
+
+    def _maybe_send_azamat_greetings(self):
+        """Sendet 2× täglich eine von Azamat generierte Begrüßung an User mit daily_msg=1."""
+        if not self.generation_service:
+            return
+        hours_str = os.getenv("AZAMAT_GREETING_HOURS", "8,18")
+        try:
+            greeting_hours = [int(h.strip()) for h in hours_str.split(",") if h.strip()]
+        except (ValueError, TypeError):
+            greeting_hours = [8, 18]
+        if not greeting_hours:
+            return
+
+        now = datetime.utcnow()
+        today = now.strftime("%Y-%m-%d")
+        current_hour = now.hour
+
+        # Prüfen ob wir in einem Greeting-Slot sind (ganze Stunde)
+        slot = None
+        for i, h in enumerate(greeting_hours):
+            if current_hour == h:
+                slot = i
+                break
+        if slot is None:
+            return
+
+        global _last_azamat_slots_done
+        key = (today, slot)
+        if key in _last_azamat_slots_done:
+            return
+        _last_azamat_slots_done.add(key)
+        _last_azamat_slots_done = {k for k in _last_azamat_slots_done if k[0] == today}
+
+        model = self.db.get_model_by_key(AZAMAT_GREETING_MODEL)
+        if not model or "text" not in (model.type or []):
+            print("ℹ️ Azamat Greeting: Text-Modell nicht verfügbar.")
+            return
+
+        users = self.db.get_subscribed_users()
+        if not users:
+            return
+
+        print(f"🤖 Azamat Greeting Slot {slot} ({today}): Sende an {len(users)} User...")
+        success = 0
+        for user_id in users:
+            try:
+                if self.db.has_azamat_greeting_been_sent(user_id, today, slot):
+                    continue
+                settings = self.db.get_user_settings(user_id)
+                lang = settings.get("lang", "de")
+                user_name = self.db.get_user_username_or_name(user_id)
+                prompt_tpl = get_text("azamat_daily_greeting_prompt", lang)
+                prompt = f"{prompt_tpl}\n\nName der Person: {user_name or 'User'}"
+
+                ok, result = self.generation_service.process_request(
+                    user_id, model, prompt, media_files=None, no_charge=True
+                )
+                if not ok or not result:
+                    continue
+                self.bot.send_message(user_id, str(result), parse_mode="HTML")
+                self.db.mark_azamat_greeting_sent(user_id, today, slot)
+                success += 1
+                time.sleep(0.08)
+            except Exception as e:
+                pass
+        if success:
+            print(f"✅ Azamat Greeting: {success}/{len(users)} gesendet.")

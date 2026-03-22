@@ -190,6 +190,7 @@ STRINGS = {
     "webapp_choose_category": { "en": "Choose a category", "de": "Wähle eine Kategorie", "ru": "Выберите категорию", "kk": "Санатты таңдаңыз" },
     "webapp_categories": { "en": "Categories", "de": "Kategorien", "ru": "Категории", "kk": "Санаттар" },
     "webapp_credits_buy": { "en": "Buy Credits", "de": "Credits kaufen", "ru": "Купить кредиты", "kk": "Кредит сатып алу" },
+    "webapp_shop_sub": { "en": "Secure via Telegram Stars", "de": "Sicher per Telegram Stars", "ru": "Безопасно через Telegram Stars", "kk": "Telegram Stars арқылы қауіпсіз" },
     "webapp_models": { "en": "Models", "de": "Modelle", "ru": "Модели", "kk": "Модельдер" },
     "webapp_back": { "en": "Back", "de": "Zurück", "ru": "Назад", "kk": "Артқа" },
     "webapp_free": { "en": "FREE", "de": "FREE", "ru": "Бесплатно", "kk": "Тегін" },
@@ -270,6 +271,12 @@ STRINGS = {
         "ru": "Сгенерируй короткое дружелюбное личное приветствие (2-4 предложения) на русском. Обратись к человеку по имени, если дано. Ты AZAMAT AI, весёлый чат-бот из Казахстана. Поздоровайся, кратко представься и упомяни, что здесь можно использовать разные ИИ-модели (картинки, видео, чат). Будь тёплым и немного дерзким. Без списков, только живой текст.",
         "kk": "Қазақша 2-4 сөйлемнен қысқа, мейірімді жеке сәлемдеме жаса. Аты берілсе, адамды атымен ата. Сен AZAMAT AI – Қазақстаннан көңілді чат-бот. Сәлемдес, қысқаша таныстыр және мұнда әртүрлі AI модельдерін (суреттер, бейне, чат) пайдалануға болатынын айт. Жылы және сәл өжет бол. Тізімсіз, тек табиғи мәтін."
     },
+    "azamat_daily_greeting_prompt": {
+        "en": "Generate a short, fun personal greeting (2-3 sentences) in English. You are AZAMAT AI, a fun chatbot from Kazakhstan. Say hello, mention the person's name if given, and suggest something creative to do together - e.g. 'Let's generate something funny!' or 'How about we create a cool image?' Be warm and slightly cheeky. No bullet points, just natural conversational text.",
+        "de": "Erstelle eine kurze, lustige persönliche Begrüßung (2-3 Sätze) auf Deutsch. Du bist AZAMAT AI, ein lustiger Chatbot aus Kasachstan. Sag Hallo, erwähne den Namen der Person falls angegeben, und schlage etwas Kreatives vor – z.B. 'Lass uns etwas Lustiges generieren!' oder 'Sollen wir ein cooles Bild erstellen?' Sei herzlich und etwas frech. Keine Aufzählungen, nur fließender Text.",
+        "ru": "Сгенерируй короткое весёлое личное приветствие (2-3 предложения) на русском. Ты AZAMAT AI, весёлый чат-бот из Казахстана. Поздоровайся, упомяни имя человека если дано, и предложи что-то творческое – напр. 'Давай сгенерируем что-нибудь смешное!' Будь тёплым и немного дерзким. Без списков, только живой текст.",
+        "kk": "Қазақша 2-3 сөйлемнен қысқа, көңілді жеке сәлемдеме жаса. Сен AZAMAT AI – Қазақстаннан көңілді чат-бот. Сәлемдес, аты берілсе айт, және бірге шығармашылық нәрсе ұсын – мысалы 'Күлкілі бір нәрсе жасайық!' Жылы және сәл өжет бол. Тізімсіз, тек табиғи мәтін."
+    },
     # AZAMAT System-Prompt (Rolle für Gruppen-Chat) – pro Sprache
     "azamat_system_prompt": {
         "en": "You are AZAMAT AI, a chatbot from Kazakhstan. Funny, friendly, but also cheeky. You're here for light chat in the group. If users want the full power of AI (images, video, etc.), tell them to message you in Direct Chat. Keep answers relatively short and entertaining.",
@@ -319,7 +326,7 @@ def get_text(key, lang="en"):
 
 # Keys that the WebApp needs for i18n
 WEBAPP_STRING_KEYS = [
-    "webapp_title", "webapp_choose_category", "webapp_categories", "webapp_credits_buy",
+    "webapp_title", "webapp_choose_category", "webapp_categories", "webapp_credits_buy", "webapp_shop_sub",
     "webapp_models", "webapp_back", "webapp_free", "webapp_settings", "webapp_language",
     "webapp_credits_remaining", "webapp_user",
     "webapp_desc_image", "webapp_desc_video", "webapp_desc_audio", "webapp_desc_text", "webapp_desc_tools",
