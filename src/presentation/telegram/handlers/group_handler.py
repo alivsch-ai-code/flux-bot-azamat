@@ -33,7 +33,7 @@ def _try_send_one_time_greeting(bot: TeleBot, db, generation_service, user_id: i
     if not model or "text" not in (model.type or []):
         return
     prompt_template = get_text("grp_greeting_prompt", lang)
-    prompt = f"{prompt_template}\n\nName der Person: {user_name or 'User'}"
+    prompt = f"{prompt_template}\n\nName: {user_name or 'User'}\n\nOutput ONLY the greeting text, nothing else."
     success, result = generation_service.process_request(user_id, model, prompt, media_files=None, no_charge=True)
     if not success or not result:
         return

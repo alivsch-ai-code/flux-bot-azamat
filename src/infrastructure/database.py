@@ -404,9 +404,9 @@ class DatabaseManager:
             result = c.fetchone()
             conn.close()
             if result:
-                lang = result[0] if result[0] and result[0].strip() else 'de'
+                lang = result[0] if result[0] and result[0].strip() in ("de", "en", "ru", "kk") else "en"
                 return {"lang": lang, "auto_opt": bool(result[1]), "daily_msg": bool(result[2])}
-            return {"lang": "de", "auto_opt": True, "daily_msg": True}
+            return {"lang": "en", "auto_opt": True, "daily_msg": True}
 
     def add_user_if_not_exists(self, user_id, username):
         with self.lock:
@@ -490,15 +490,16 @@ class DatabaseManager:
             conn.close()
 
     def get_group_language(self, chat_id: int) -> str:
-        """Sprache für eine Gruppe. Default: de."""
+        """Sprache für eine Gruppe. Default: en."""
         with self.lock:
             conn = self._get_connection()
             c = conn.cursor()
-            c.execute("CREATE TABLE IF NOT EXISTS group_settings (chat_id BIGINT PRIMARY KEY, language TEXT DEFAULT 'de')")
+            c.execute("CREATE TABLE IF NOT EXISTS group_settings (chat_id BIGINT PRIMARY KEY, language TEXT DEFAULT 'en')")
             c.execute("SELECT language FROM group_settings WHERE chat_id = %s", (chat_id,))
             res = c.fetchone()
             conn.close()
-            return (res[0] or "de") if res else "de"
+            lang = (res[0] or "en") if res else "en"
+            return lang if lang in ("de", "en", "ru", "kk") else "en"
 
     def set_group_language(self, chat_id: int, lang: str) -> None:
         """Sprache für eine Gruppe setzen."""

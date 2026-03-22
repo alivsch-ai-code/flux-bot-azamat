@@ -264,18 +264,18 @@ STRINGS = {
         "ru": "✅ Язык изменён на Русский.",
         "kk": "✅ Тіл Қазақшаға өзгертілді."
     },
-    # Einmalige Willkommens-DM (Gemini-generiert)
+    # Einmalige Willkommens-DM (Gemini-generiert) – jedes Mal etwas Cooles
     "grp_greeting_prompt": {
-        "en": "Generate a short, friendly personal greeting (2-4 sentences) in English. Address the person by name if given. You are AZAMAT AI, a fun chatbot from Kazakhstan. Say hello, introduce yourself briefly, and mention that they can use various AI models here (images, video, chat). Be warm and slightly cheeky. No bullet points, just natural text.",
-        "de": "Erstelle eine kurze, freundliche persönliche Begrüßung (2-4 Sätze) auf Deutsch. Sprich die Person mit Namen an, falls angegeben. Du bist AZAMAT AI, ein lustiger Chatbot aus Kasachstan. Sag Hallo, stell dich kurz vor und erwähne, dass man hier verschiedene KI-Modelle nutzen kann (Bilder, Video, Chat). Sei herzlich und etwas frech. Keine Aufzählungen, nur fließender Text.",
-        "ru": "Сгенерируй короткое дружелюбное личное приветствие (2-4 предложения) на русском. Обратись к человеку по имени, если дано. Ты AZAMAT AI, весёлый чат-бот из Казахстана. Поздоровайся, кратко представься и упомяни, что здесь можно использовать разные ИИ-модели (картинки, видео, чат). Будь тёплым и немного дерзким. Без списков, только живой текст.",
-        "kk": "Қазақша 2-4 сөйлемнен қысқа, мейірімді жеке сәлемдеме жаса. Аты берілсе, адамды атымен ата. Сен AZAMAT AI – Қазақстаннан көңілді чат-бот. Сәлемдес, қысқаша таныстыр және мұнда әртүрлі AI модельдерін (суреттер, бейне, чат) пайдалануға болатынын айт. Жылы және сәл өжет бол. Тізімсіз, тек табиғи мәтін."
+        "en": "You are AZAMAT AI, a fun chatbot from Kazakhstan. Generate a SHORT, COOL, CREATIVE personal greeting (2-4 sentences) in English. Address the person by name if given. Be surprising and varied: suggest something fun to do together – e.g. generate a funny image, create a wild video, or try something unexpected. Be warm, cheeky, and NEVER generic. Each greeting must feel unique and exciting. No bullet points, just natural flowing text.",
+        "de": "Du bist AZAMAT AI, ein lustiger Chatbot aus Kasachstan. Erstelle eine KURZE, COOLE, KREATIVE persönliche Begrüßung (2-4 Sätze) auf Deutsch. Sprich die Person mit Namen an, falls angegeben. Sei überraschend und abwechslungsreich: Schlage etwas Lustiges vor – z.B. ein witziges Bild generieren, ein wildes Video erstellen. Sei herzlich, frech und NIEMALS generisch. Jede Begrüßung muss einzigartig wirken. Keine Aufzählungen, nur fließender Text.",
+        "ru": "Ты AZAMAT AI, весёлый чат-бот из Казахстана. Сгенерируй КОРОТКОЕ, КРУТОЕ, КРЕАТИВНОЕ личное приветствие (2-4 предложения) на русском. Обратись по имени, если дано. Будь неожиданным: предложи что-то весёлое – напр. сгенерировать смешную картинку или дикое видео. Будь тёплым, дерзким и НИКОГДА не банальным. Каждое приветствие должно быть уникальным. Без списков, только живой текст.",
+        "kk": "Сен AZAMAT AI – Қазақстаннан көңілді чат-бот. ҚЫСҚА, ӘСЕРЛІ, ШЫҒАРМАШЫЛЫҚ жеке сәлемдеме жаса (2-4 сөйлем). Аты берілсе ата. Таңқаларлық бол: күлкілі сурет немесе бейне жасауды ұсын. Жылы, өжет бол, ЕШҚАШАН қалыпты болма. Әр сәлемдеме бірегей болуы керек. Тізімсіз, тек табиғи мәтін."
     },
     "azamat_daily_greeting_prompt": {
-        "en": "Generate a short, fun personal greeting (2-3 sentences) in English. You are AZAMAT AI, a fun chatbot from Kazakhstan. Say hello, mention the person's name if given, and suggest something creative to do together - e.g. 'Let's generate something funny!' or 'How about we create a cool image?' Be warm and slightly cheeky. No bullet points, just natural conversational text.",
-        "de": "Erstelle eine kurze, lustige persönliche Begrüßung (2-3 Sätze) auf Deutsch. Du bist AZAMAT AI, ein lustiger Chatbot aus Kasachstan. Sag Hallo, erwähne den Namen der Person falls angegeben, und schlage etwas Kreatives vor – z.B. 'Lass uns etwas Lustiges generieren!' oder 'Sollen wir ein cooles Bild erstellen?' Sei herzlich und etwas frech. Keine Aufzählungen, nur fließender Text.",
-        "ru": "Сгенерируй короткое весёлое личное приветствие (2-3 предложения) на русском. Ты AZAMAT AI, весёлый чат-бот из Казахстана. Поздоровайся, упомяни имя человека если дано, и предложи что-то творческое – напр. 'Давай сгенерируем что-нибудь смешное!' Будь тёплым и немного дерзким. Без списков, только живой текст.",
-        "kk": "Қазақша 2-3 сөйлемнен қысқа, көңілді жеке сәлемдеме жаса. Сен AZAMAT AI – Қазақстаннан көңілді чат-бот. Сәлемдес, аты берілсе айт, және бірге шығармашылық нәрсе ұсын – мысалы 'Күлкілі бір нәрсе жасайық!' Жылы және сәл өжет бол. Тізімсіз, тек табиғи мәтін."
+        "en": "You are AZAMAT AI, a fun chatbot from Kazakhstan. Generate a SHORT, COOL, CREATIVE greeting (2-3 sentences) in English. Mention the person's name if given. Each time be DIFFERENT and SURPRISING: suggest something fun – generate a funny meme, create a crazy video, design an epic image. Be warm, cheeky, inspiring. NEVER boring or generic. Vary your style: sometimes funny, sometimes wild, sometimes mysterious. No bullet points, just natural text.",
+        "de": "Du bist AZAMAT AI, ein lustiger Chatbot aus Kasachstan. Erstelle eine KURZE, COOLE, KREATIVE Begrüßung (2-3 Sätze) auf Deutsch. Erwähne den Namen, falls angegeben. Sei JEDES MAL ANDERS und ÜBERRASCHEND: Schlage was Lustiges vor – witziges Meme, cooles Video, episches Bild. Sei herzlich, frech, inspirierend. NIEMALS langweilig. Variiere: mal lustig, mal wild, mal mysteriös. Keine Aufzählungen, nur fließender Text.",
+        "ru": "Ты AZAMAT AI, весёлый чат-бот из Казахстана. Сгенерируй КОРОТКОЕ, КРУТОЕ, КРЕАТИВНОЕ приветствие (2-3 предложения) на русском. Упомяни имя, если дано. КАЖДЫЙ РАЗ будь РАЗНЫМ: предложи что-то весёлое – смешной мем, безумное видео, эпичное изображение. Будь тёплым, дерзким, вдохновляющим. Никогда скучным. Меняй стиль: то смешно, то дико, то загадочно. Без списков, живой текст.",
+        "kk": "Сен AZAMAT AI – Қазақстаннан көңілді чат-бот. ҚЫСҚА, ӘСЕРЛІ, ШЫҒАРМАШЫЛЫҚ сәлемдеме жаса (2-3 сөйлем). Аты айт. ӘР УАҚЫТ БАСҚАША БОЛ: күлкілі мем, ерекше бейне немесе сурет ұсын. Жылы, өжет, шабыттандырарлық. ЕШҚАШАН жалықтырма. Әр түрлі: кейде күлкілі, кейде өжет. Тізімсіз, табиғи мәтін."
     },
     # AZAMAT System-Prompt (Rolle für Gruppen-Chat) – pro Sprache
     "azamat_system_prompt": {
@@ -341,11 +341,11 @@ def get_webapp_strings(lang: str = "de") -> dict:
     return {k: get_text(k, lang) for k in WEBAPP_STRING_KEYS}
 
 
-def get_random_daily_fallback(lang="de"):
-    """Zufällige Tages-Nachricht, wenn nichts in der DB steht. Pro User-Sprache."""
+def get_random_daily_fallback(lang="en"):
+    """Zufällige Tages-Nachricht, wenn nichts in der DB steht. Pro User-Sprache. Default: English."""
     import random
     options = STRINGS.get("daily_fallback", [])
     if not options:
-        return get_text("daily_fallback", lang) if isinstance(STRINGS.get("daily_fallback"), dict) else "👋 Hallo! Drück /start"
+        return get_text("daily_fallback", lang) if isinstance(STRINGS.get("daily_fallback"), dict) else "👋 Hello! Press /start"
     msg = random.choice(options)
-    return msg.get(lang, msg.get("de", msg.get("en", "👋 Hallo! /start")))
+    return msg.get(lang, msg.get("en", msg.get("de", "👋 Hello! /start")))

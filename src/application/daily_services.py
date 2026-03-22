@@ -133,7 +133,7 @@ class DailyService:
             for user_id in users:
                 try:
                     settings = self.db.get_user_settings(user_id)
-                    lang = settings.get("lang", "de")
+                    lang = settings.get("lang", "en")
                     text = get_random_daily_fallback(lang)
                     self.bot.send_message(user_id, text, parse_mode="HTML")
                     success += 1
@@ -192,10 +192,10 @@ class DailyService:
                 if self.db.has_azamat_greeting_been_sent(user_id, today, slot):
                     continue
                 settings = self.db.get_user_settings(user_id)
-                lang = settings.get("lang", "de")
+                lang = settings.get("lang", "en")
                 user_name = self.db.get_user_username_or_name(user_id)
                 prompt_tpl = get_text("azamat_daily_greeting_prompt", lang)
-                prompt = f"{prompt_tpl}\n\nName der Person: {user_name or 'User'}"
+                prompt = f"{prompt_tpl}\n\nPerson's name: {user_name or 'User'}\n\nOutput ONLY the greeting text, nothing else."
 
                 ok, result = self.generation_service.process_request(
                     user_id, model, prompt, media_files=None, no_charge=True
