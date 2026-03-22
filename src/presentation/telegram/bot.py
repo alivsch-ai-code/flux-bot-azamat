@@ -38,6 +38,6 @@ def setup_bot(bot: TeleBot, generation_service, db) -> None:
     payment_handler.register(bot, db)
     gen_handler.register(bot, generation_service, db)
 
-    daily = DailyService(bot, db)
+    daily = DailyService(bot, db, generation_service)
     daily.start()
     

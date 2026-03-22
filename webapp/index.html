@@ -28,11 +28,16 @@
       padding: 20px 0;
       border-bottom: 1px solid rgba(255,255,255,0.1);
     }
-    .header h1 { font-size: 1.5rem; font-weight: 700; }
-    .header p { color: rgba(255,255,255,0.7); font-size: 0.9rem; margin-top: 4px; }
+    .header h1 { font-size: 1.4rem; font-weight: 700; }
+    .header p { color: rgba(255,255,255,0.7); font-size: 0.85rem; margin-top: 6px; }
+    .credits-badge {
+      display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+      padding: 8px 14px; background: rgba(99,102,241,0.25); border-radius: 999px;
+      font-size: 0.9rem; font-weight: 600; color: var(--accent);
+    }
     .section { margin-top: 20px; }
     .section-title { font-size: 0.85rem; color: rgba(255,255,255,0.6); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
     .card {
       background: var(--card-bg);
       border-radius: 12px;
@@ -86,6 +91,9 @@
     .btn-secondary:active { opacity: 0.8; }
     .chat-mode-btns { display: flex; gap: 10px; margin-top: 16px; }
     .chat-mode-btns .btn-start { flex: 1; margin: 0; }
+    .card-shop { grid-column: 1 / -1; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 12px; text-align: left; padding: 18px 20px; }
+    .card-shop .card-icon { margin-bottom: 0; font-size: 2.2rem; }
+    .card-shop .card-desc { margin-top: 2px; margin-left: 0; }
   </style>
 </head>
 <body>
@@ -94,6 +102,7 @@
       <div class="header">
         <h1>🤖 AZAMAT AI Hub</h1>
         <p>Wähle eine Kategorie</p>
+        <div class="credits-badge" id="credits-badge" style="display:none">💎 <span id="credits-count">0</span> Credits</div>
       </div>
       <div class="section">
         <div class="section-title">Kategorien</div>
@@ -123,12 +132,11 @@
             <div class="card-label">Werkzeuge</div>
             <div class="card-desc">Profi-Tools</div>
           </div>
-        </div>
-      </div>
-      <div class="section" style="margin-top: 24px;">
-        <div class="card" data-action="cmd_shop" style="grid-column: span 2;">
-          <div class="card-icon">💎</div>
-          <div class="card-label">Credits kaufen</div>
+          <div class="card card-shop" data-action="cmd_shop">
+            <div class="card-icon">💎</div>
+            <div class="card-label">Credits kaufen</div>
+            <div class="card-desc">Sicher per Telegram Stars</div>
+          </div>
         </div>
       </div>
     </div>
@@ -156,6 +164,22 @@
     const API_BASE = window.location.origin;
     let currentPath = 'root';
 
+    function loadUserCredits() {
+      if (!tg?.initData) return;
+      fetch(API_BASE + '/api/user_info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ init_data: tg.initData })
+      }).then(r => r.json()).then(res => {
+        if (res.ok && res.credits != null) {
+          const el = document.getElementById('credits-badge');
+          const cnt = document.getElementById('credits-count');
+          if (el && cnt) { el.style.display = 'inline-flex'; cnt.textContent = res.credits; }
+        }
+      }).catch(() => {});
+    }
+    loadUserCredits();
+
     function escapeHtml(s) {
       if (s == null || s === '') return '';
       const div = document.createElement('div');
@@ -165,6 +189,11 @@
 
     function initFromUrl() {
       const params = new URLSearchParams(window.location.search);
+      const view = params.get('view');
+      if (view === 'shop') {
+        sendAction('cmd_shop');
+        return;
+      }
       const path = params.get('path');
       if (path && path !== 'root') {
         fetch(API_BASE + '/api/models?path=' + encodeURIComponent(path))
@@ -186,20 +215,33 @@
       const payload2 = { action, ...payload };
       const hasInitData = tg?.initData;
       if (hasInitData) payload2.init_data = tg.initData;
+      const noClose = action.startsWith('set_lang_');
       if (hasInitData) {
         fetch(API_BASE + '/api/webapp_action', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload2)
         }).then(r => r.json()).then(res => {
-          if (res.ok && tg?.close) tg.close();
-        }).catch(() => {
-          if (tg?.sendData) tg.sendData(JSON.stringify({ action }));
-          else if (tg?.close) tg.close();
+          if (res.ok && !noClose && tg?.close) tg.close();
+          else if (!res.ok && !noClose) showError(res.error || 'Fehler');
+        }).catch((err) => {
+          if (!noClose) {
+            if (tg?.sendData) tg.sendData(JSON.stringify({ action }));
+            else if (tg?.close) tg.close();
+            else showError('Verbindungsfehler');
+          }
         });
-      } else if (tg?.sendData) {
+      } else if (!noClose && tg?.sendData) {
         tg.sendData(JSON.stringify({ action }));
-      } else if (tg?.close) tg.close();
+      } else if (!noClose && tg?.close) tg.close();
+    }
+
+    function showError(msg) {
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;bottom:20px;left:16px;right:16px;padding:12px;background:#c33;color:#fff;border-radius:8px;text-align:center;z-index:9999;';
+      el.textContent = '⚠️ ' + msg + ' – Bitte im Chat /start nutzen.';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 4000);
     }
 
     document.querySelectorAll('.card[data-action]').forEach(card => {
@@ -284,11 +326,11 @@
           let btnHtml = '';
           if (isText) {
             btnHtml = `<div class="chat-mode-btns">
-              <button class="btn-start" data-action="chat_mode_yes_${escapeHtml(key)}">✅ Chat starten</button>
-              <button class="btn-secondary" data-action="chat_mode_no_${escapeHtml(key)}">❌ Einmaliger Prompt</button>
+              <button type="button" class="btn-start" data-action="chat_mode_yes_${escapeHtml(key)}">✅ Chat starten</button>
+              <button type="button" class="btn-secondary" data-action="chat_mode_no_${escapeHtml(key)}">❌ Einmaliger Prompt</button>
             </div>`;
           } else {
-            btnHtml = `<button class="btn-start" data-action="start_gen_${escapeHtml(key)}">🚀 Start (${costLabel})</button>`;
+            btnHtml = `<button type="button" class="btn-start" data-action="start_gen_${escapeHtml(key)}">🚀 Start (${costLabel})</button>`;
           }
           document.getElementById('detail-content').innerHTML = `
             <div class="header">
@@ -301,8 +343,13 @@
             ${btnHtml}
           `;
           document.getElementById('detail-content').querySelectorAll('[data-action]').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
               const action = btn.getAttribute('data-action');
+              if (!action) return;
+              btn.disabled = true;
+              if (btn.classList.contains('btn-start')) btn.textContent = '⏳ …';
               sendAction(action);
             });
           });
