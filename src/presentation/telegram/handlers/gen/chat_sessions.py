@@ -31,11 +31,18 @@ def _format_msg_for_display(m: Dict) -> str:
 def build_chat_prompt_from_messages(
     messages: List[Dict], new_user_message: str, system_prompt: str = None, current_user_name: str = None
 ) -> str:
-    """Baut einen Prompt mit [SYSTEM]/[HISTORY]-Block. current_user_name für die aktuelle Nachricht (Gruppen)."""
+    """Baut einen Prompt mit [SYSTEM]/[HISTORY]-Block. current_user_name für die aktuelle Nachricht (Gruppen).
+    Die letzte User-Nachricht wird explizit angehängt – wenn sie bereits in messages ist (nach append), nicht doppelt einbauen."""
     default_system = "Du bist ein hilfreicher Chatbot. Unten steht der bisherige Dialog (History). Beantworte nur die letzte Nachricht des Users."
     sys_block = (system_prompt or default_system).strip()
     lines = ["[SYSTEM]", sys_block, "\n[HISTORY]"]
-    for m in messages:
+    new_msg_stripped = (new_user_message or "").strip()
+    msgs_to_show = messages
+    if messages and messages[-1].get("role") == "user":
+        last_content = (messages[-1].get("content") or "").strip()
+        if last_content == new_msg_stripped:
+            msgs_to_show = messages[:-1]
+    for m in msgs_to_show:
         line = _format_msg_for_display(m)
         if line:
             lines.append(line)
