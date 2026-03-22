@@ -18,7 +18,7 @@ from telebot import TeleBot, types
 from src.config.settings import config
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.common import set_context
-from src.utils.strings import get_text
+from src.utils.strings import get_text, get_welcome
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +238,8 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
         from src.presentation.telegram.handlers.common import clear_context
         clear_context(user_id)
         all_models = db.get_all_models()
-        text = get_text("welcome", lang)
+        user_name = db.get_user_username_or_name(user_id) or ""
+        text = get_welcome(lang, user_name)
         menu_mode = db.get_bot_setting("menu_mode", "commands")
         if menu_mode == "keyboard":
             main_kbd = keyboards.get_main_reply_keyboard(lang)

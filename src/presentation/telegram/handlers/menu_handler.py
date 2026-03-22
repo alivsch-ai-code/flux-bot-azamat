@@ -10,7 +10,7 @@ from src.presentation.telegram.handlers.common import clear_context, get_context
 from src.presentation.telegram.handlers.gen.nav_handlers import send_model_detail_view
 from src.presentation.telegram.handlers.gen.start_handler import do_start_gen_flow
 from src.presentation.telegram.handlers.payment_handler import show_shop_logic
-from src.utils.strings import get_text
+from src.utils.strings import get_text, get_welcome
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,8 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
         except Exception as e:
             logger.warning("WebApp-Markup (process_webapp_action) fehlgeschlagen: %s", e)
     if action == "nav_main":
-        welcome_text = get_text("welcome", lang)
+        user_name = getattr(db, "get_user_username_or_name", lambda u: None)(user_id) or ""
+        welcome_text = get_welcome(lang, user_name)
         markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
         bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="HTML")
         bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
@@ -212,7 +213,8 @@ def register(bot: TeleBot, generation_service, db) -> None:
                 if act_type == "nav_main":
                     clear_context(user_id)
                     db.set_user_chat_mode(user_id, None, active=False)
-                    welcome_text = get_text("welcome", lang)
+                    un = (message.from_user and message.from_user.first_name) or ""
+                    welcome_text = get_welcome(lang, un)
                     markup = keyboards.get_main_reply_keyboard(lang)
                     bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
                 elif act_type == "nav_path":
@@ -244,7 +246,8 @@ def register(bot: TeleBot, generation_service, db) -> None:
         clear_context(user_id)
         db.set_user_chat_mode(user_id, None, active=False)
         if action == "nav_main":
-            welcome_text = get_text("welcome", lang)
+            un = (message.from_user and message.from_user.first_name) or ""
+            welcome_text = get_welcome(lang, un)
             markup = keyboards.get_main_reply_keyboard(lang)
             bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
         elif action.startswith("nav_path_"):
@@ -352,7 +355,8 @@ def register(bot: TeleBot, generation_service, db) -> None:
         bot.send_message(user_id, transparency_text, parse_mode='HTML')
 
 
-        welcome_text = get_text("welcome", lang)
+        user_name = (message.from_user and message.from_user.first_name) or ""
+        welcome_text = get_welcome(lang, user_name)
         all_models = db.get_all_models()
 
         remove_kbd = types.ReplyKeyboardRemove(selective=False)
@@ -401,7 +405,8 @@ def register(bot: TeleBot, generation_service, db) -> None:
         new_markup = None
         
         if target == "main":
-            new_text = get_text("welcome", lang)
+            user_name = db.get_user_username_or_name(user_id) or ""
+            new_text = get_welcome(lang, user_name)
             all_models = db.get_all_models()
             clear_context(user_id)
             remove_kbd = types.ReplyKeyboardRemove(selective=False)

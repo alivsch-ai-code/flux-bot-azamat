@@ -59,7 +59,8 @@ def register(bot: TeleBot, generation_service, db) -> None:
         db.add_group_if_not_exists(chat_id, db.get_group_language(chat_id))
         _try_send_one_time_greeting(bot, db, generation_service, user_id, msg.from_user.first_name or msg.from_user.username, get_group_lang(chat_id))
         lang = get_group_lang(chat_id)
-        text = get_text("grp_welcome", lang)
+        name = msg.from_user.first_name or msg.from_user.username or "there"
+        text = get_text("grp_welcome", lang).format(name=name)
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(types.InlineKeyboardButton(get_text("grp_btn_credits", lang), callback_data="grp_shop"))
         markup.add(types.InlineKeyboardButton(get_text("grp_btn_lang", lang), callback_data="grp_lang_menu"))
@@ -178,8 +179,9 @@ def register(bot: TeleBot, generation_service, db) -> None:
         if new_lang in ("de", "en", "ru", "kk"):
             db.set_group_language(chat_id, new_lang)
             bot.answer_callback_query(call.id, get_text("grp_lang_changed", new_lang))
-            # Zurück zum Willkommen
-            text = get_text("grp_welcome", new_lang)
+            # Zurück zum Willkommen (ohne Namen bei Sprachwechsel – "there"/"du" etc.)
+            name = call.from_user.first_name or call.from_user.username or "there"
+            text = get_text("grp_welcome", new_lang).format(name=name)
             markup = types.InlineKeyboardMarkup(row_width=1)
             markup.add(types.InlineKeyboardButton(get_text("grp_btn_credits", new_lang), callback_data="grp_shop"))
             markup.add(types.InlineKeyboardButton(get_text("grp_btn_lang", new_lang), callback_data="grp_lang_menu"))

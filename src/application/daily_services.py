@@ -138,7 +138,8 @@ class DailyService:
                 try:
                     settings = self.db.get_user_settings(user_id)
                     lang = settings.get("lang", "en")
-                    text = get_random_daily_fallback(lang)
+                    user_name = self.db.get_user_username_or_name(user_id) or ""
+                    text = get_random_daily_fallback(lang, user_name)
                     self.bot.send_message(user_id, text, parse_mode="HTML")
                     success += 1
                     time.sleep(0.05)

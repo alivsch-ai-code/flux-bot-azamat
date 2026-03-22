@@ -48,13 +48,17 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
 
             if is_text_model:
                 try:
+                    user_name = (msg.from_user and msg.from_user.first_name) or "User"
                     messages = append_with_summary_if_needed(
                         db,
                         user_id,
                         model_key,
-                        {"role": "user", "content": msg.text},
+                        {"role": "user", "content": msg.text, "user_name": user_name},
                     )
-                    full_prompt = build_chat_prompt_from_messages(messages, msg.text)
+                    lang = get_lang(user_id)
+                    sys_prompt = get_text("azamat_private_chat_prompt", lang)
+                    sys_prompt = f"{sys_prompt}\n\n{get_text('azamat_user_name_hint', lang).format(name=user_name)}"
+                    full_prompt = build_chat_prompt_from_messages(messages, msg.text, system_prompt=sys_prompt, current_user_name=user_name)
                     run_generation(user_id, model_key, full_prompt, media_files=None, is_chat=True)
                 except Exception:
                     run_generation(user_id, model_key, msg.text, media_files=None, is_chat=True)
@@ -70,13 +74,17 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                 model = db.get_model_by_key(default_model_key)
                 if model and model.type and "text" in model.type:
                     db.set_user_chat_mode(user_id, default_model_key, active=True)
+                    user_name = (msg.from_user and msg.from_user.first_name) or "User"
                     messages = append_with_summary_if_needed(
                         db,
                         user_id,
                         default_model_key,
-                        {"role": "user", "content": msg.text},
+                        {"role": "user", "content": msg.text, "user_name": user_name},
                     )
-                    full_prompt = build_chat_prompt_from_messages(messages, msg.text)
+                    lang = get_lang(user_id)
+                    sys_prompt = get_text("azamat_private_chat_prompt", lang)
+                    sys_prompt = f"{sys_prompt}\n\n{get_text('azamat_user_name_hint', lang).format(name=user_name)}"
+                    full_prompt = build_chat_prompt_from_messages(messages, msg.text, system_prompt=sys_prompt, current_user_name=user_name)
                     run_generation(user_id, default_model_key, full_prompt, media_files=None, is_chat=True)
                     return
             except Exception:
