@@ -99,16 +99,23 @@ def register(bot: TeleBot, generation_service, db) -> None:
             bot.send_message(chat_id, "⚠️ Gemini nicht verfügbar.", parse_mode="HTML")
             return
 
-        # Session pro Gruppe (chat_id als user_id-Ersatz)
+        # Session pro Gruppe: bis zu 20 Nachrichten, dann Summary (mit User-Namen)
         session_id = -abs(chat_id)
         model_key = f"{GEMINI_GROUP_MODEL}_group"
         system_prompt = get_text("azamat_system_prompt", lang)
+        user_name = msg.from_user.first_name or msg.from_user.username or "User"
 
         try:
-            messages = append_with_summary_if_needed(db, session_id, model_key, {"role": "user", "content": msg.text})
-            full_prompt = build_chat_prompt_from_messages(messages, msg.text, system_prompt=system_prompt)
+            messages = append_with_summary_if_needed(
+                db, session_id, model_key,
+                {"role": "user", "content": msg.text, "user_name": user_name},
+                max_messages=20, summarize_at=20
+            )
+            full_prompt = build_chat_prompt_from_messages(
+                messages, msg.text, system_prompt=system_prompt, current_user_name=user_name
+            )
         except Exception:
-            full_prompt = f"[SYSTEM]\n{system_prompt}\n\n[HISTORY]\nUser: {msg.text}\nAssistant:"
+            full_prompt = f"[SYSTEM]\n{system_prompt}\n\n[HISTORY]\n{user_name}: {msg.text}\nAssistant:"
 
         success, result = generation_service.process_request(
             user_id, model, full_prompt, media_files=None, group_chat_id=chat_id
@@ -116,9 +123,12 @@ def register(bot: TeleBot, generation_service, db) -> None:
         if not success:
             bot.send_message(chat_id, str(result), parse_mode="HTML")
             return
-        # Assistant-Antwort in Session speichern für Kontext
+        # Assistant-Antwort in Session speichern (20er-Puffer)
         try:
-            append_with_summary_if_needed(db, session_id, model_key, {"role": "assistant", "content": str(result)})
+            append_with_summary_if_needed(
+                db, session_id, model_key, {"role": "assistant", "content": str(result)},
+                max_messages=20, summarize_at=20
+            )
         except Exception:
             pass
         bot.send_message(chat_id, str(result), parse_mode="HTML")

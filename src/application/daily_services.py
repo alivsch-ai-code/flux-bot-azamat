@@ -248,6 +248,12 @@ class DailyService:
         content_type = random.choice(["joke", "info"])
         key = "azamat_random_joke_prompt" if content_type == "joke" else "azamat_random_info_prompt"
         prompt_tpl = get_text(key, lang)
+        user_name = ""
+        if target_type == "user":
+            user_name = self.db.get_user_username_or_name(target_id)
+        if target_type == "user" and user_name and user_name != "User":
+            mention_tpl = get_text("azamat_random_mention_name", lang)
+            prompt_tpl = f"{prompt_tpl}\n\n{mention_tpl}: {user_name}"
         prompt = f"{prompt_tpl}\n\nOutput ONLY the generated text, nothing else."
 
         # process_request braucht user_id (no_charge) – bei Gruppen: beliebiger Abonnent
