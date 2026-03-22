@@ -19,8 +19,8 @@ GEMINI_GROUP_MODEL = "google-gemini-2-5-flash"
 
 
 def _is_group(msg_or_call) -> bool:
-    """Prüft ob die Nachricht/Callback aus einer Gruppe kommt."""
-    chat = msg_or_call.chat
+    """Prüft ob die Nachricht/Callback aus einer Gruppe kommt. CallbackQuery hat .message.chat, Message hat .chat."""
+    chat = msg_or_call.message.chat if hasattr(msg_or_call, "message") else msg_or_call.chat
     return str(chat.type) in ("group", "supergroup")
 
 
