@@ -113,6 +113,19 @@
     .btn-secondary:active { opacity: 0.8; }
     .chat-mode-btns { display: flex; gap: 10px; margin-top: 16px; }
     .chat-mode-btns .btn-start { flex: 1; margin: 0; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; margin-bottom: 8px; background: var(--card-bg); border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+    .toggle-label { font-size: 1rem; }
+    .toggle-switch { width: 52px; height: 28px; background: rgba(255,255,255,0.2); border-radius: 14px; cursor: pointer; position: relative; transition: background 0.2s; }
+    .toggle-switch.on { background: var(--accent); }
+    .toggle-switch::after { content: ''; position: absolute; width: 22px; height: 22px; background: #fff; border-radius: 50%; top: 3px; left: 3px; transition: left 0.2s; }
+    .toggle-switch.on::after { left: 27px; }
+    .shop-package { display: flex; justify-content: space-between; align-items: center; padding: 16px; margin-bottom: 12px; background: var(--card-bg); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; }
+    .shop-package:active { opacity: 0.9; }
+    .shop-package .pkg-desc { font-weight: 600; }
+    .shop-package .pkg-price { color: var(--accent); font-weight: 600; }
+    .profile-info { padding: 16px; background: var(--card-bg); border-radius: 12px; margin-bottom: 12px; }
+    .profile-info p { margin: 8px 0; }
+    .ref-link { word-break: break-all; font-size: 0.9rem; color: var(--accent); }
   </style>
 </head>
 <body>
@@ -165,6 +178,10 @@
           <div class="card-icon">⚙️</div>
           <div class="card-label" data-t="webapp_settings">Einstellungen</div>
         </div>
+        <div class="card" data-action="nav_profile" style="grid-column: span 2;">
+          <div class="card-icon">👤</div>
+          <div class="card-label" data-t="menu_profile">Profil</div>
+        </div>
       </div>
     </div>
     <div id="models-view" class="hidden">
@@ -186,6 +203,37 @@
         <button class="lang-btn" data-lang="ru">🇷🇺 Русский</button>
         <button class="lang-btn" data-lang="kk">🇰🇿 Қазақша</button>
       </div>
+      <div class="section">
+        <div class="section-title" data-t="webapp_prompt_magic">Prompt Magie</div>
+        <div class="toggle-row">
+          <span class="toggle-label" id="toggle-opt-label">✨ Prompt Magic</span>
+          <div class="toggle-switch" id="toggle-opt" data-setting="auto_opt"></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-title" data-t="webapp_daily_news">Tägliche News</div>
+        <div class="toggle-row">
+          <span class="toggle-label" id="toggle-daily-label">📰 Daily News</span>
+          <div class="toggle-switch" id="toggle-daily" data-setting="daily_msg"></div>
+        </div>
+      </div>
+    </div>
+    <div id="shop-view" class="hidden">
+      <div class="back-btn" id="shop-back-btn">← <span data-t="webapp_back">Zurück</span></div>
+      <div class="header">
+        <h1 id="shop-title" data-t="webapp_shop_title">💳 Guthaben aufladen</h1>
+        <p id="shop-credits"></p>
+      </div>
+      <div id="shop-packages" class="section"></div>
+    </div>
+    <div id="profile-view" class="hidden">
+      <div class="back-btn" id="profile-back-btn">← <span data-t="webapp_back">Zurück</span></div>
+      <div class="header">
+        <h1>👤 Profil</h1>
+      </div>
+      <div class="section">
+        <div class="profile-info" id="profile-info"></div>
+      </div>
     </div>
     <div id="detail-view" class="detail-view hidden">
       <div class="back-btn" id="detail-back-btn">← <span data-t="webapp_back">Zurück</span></div>
@@ -204,7 +252,7 @@
     const API_BASE = window.location.origin;
 
     const state = {
-      user: { username: 'User', credits: 0, lang: 'de' },
+      user: { username: 'User', credits: 0, lang: 'de', auto_opt: true, daily_msg: true, bot_username: '' },
       strings: {},
       currentPath: 'root'
     };
@@ -249,7 +297,11 @@
         });
         const data = await res.json();
         if (data.ok) {
-          state.user = { username: data.username || 'User', credits: data.credits || 0, lang: data.lang || 'de' };
+          state.user = {
+            user_id: data.user_id, username: data.username || 'User', credits: data.credits || 0, lang: data.lang || 'de',
+            auto_opt: data.auto_opt !== false, daily_msg: data.daily_msg !== false,
+            bot_username: data.bot_username || ''
+          };
         }
       } catch (e) { console.warn('user_info failed', e); }
     }
@@ -272,7 +324,16 @@
 
     function initFromUrl() {
       const params = new URLSearchParams(window.location.search);
+      const view = params.get('view');
+      const model = params.get('model');
       const path = params.get('path');
+      if (view === 'shop') { showShop(); return; }
+      if (view === 'settings') { showSettings(); return; }
+      if (view === 'profile') { showProfile(); return; }
+      if (model) {
+        showModelDetail(model);
+        return;
+      }
       if (path && path !== 'root') {
         fetch(API_BASE + '/api/models?path=' + encodeURIComponent(path) + '&lang=' + encodeURIComponent(state.user.lang))
           .then(r => r.json())
@@ -293,7 +354,7 @@
       const payload2 = { action, ...payload };
       const hasInitData = tg?.initData;
       if (hasInitData) payload2.init_data = tg.initData;
-      const noClose = action.startsWith('set_lang_');
+      const noClose = action.startsWith('set_lang_') || action === 'toggle_opt' || action === 'toggle_daily';
       if (hasInitData) {
         fetch(API_BASE + '/api/webapp_action', {
           method: 'POST',
@@ -329,6 +390,14 @@
           showSettings();
           return;
         }
+        if (action === 'cmd_shop') {
+          showShop();
+          return;
+        }
+        if (action === 'nav_profile') {
+          showProfile();
+          return;
+        }
         if (action.startsWith('nav_path_')) {
           const path = action.replace('nav_path_', '');
           fetch(API_BASE + '/api/models?path=' + encodeURIComponent(path) + '&lang=' + encodeURIComponent(state.user.lang))
@@ -355,6 +424,8 @@
       document.getElementById('models-view').classList.remove('hidden');
       document.getElementById('settings-view').classList.add('hidden');
       document.getElementById('detail-view').classList.add('hidden');
+      document.getElementById('shop-view').classList.add('hidden');
+      document.getElementById('profile-view').classList.add('hidden');
       document.getElementById('models-title').textContent = title;
       const list = document.getElementById('models-list');
       const folderHtml = (folders || []).map(f => {
@@ -398,10 +469,66 @@
       document.getElementById('main-view').classList.add('hidden');
       document.getElementById('models-view').classList.add('hidden');
       document.getElementById('detail-view').classList.add('hidden');
+      document.getElementById('shop-view').classList.add('hidden');
+      document.getElementById('profile-view').classList.add('hidden');
       document.getElementById('settings-view').classList.remove('hidden');
       document.querySelectorAll('.lang-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.lang === state.user.lang);
       });
+      document.getElementById('toggle-opt').classList.toggle('on', state.user.auto_opt);
+      document.getElementById('toggle-daily').classList.toggle('on', state.user.daily_msg);
+      document.getElementById('toggle-opt-label').textContent = state.user.auto_opt ? (t('btn_opt_on') || '✨ Prompt Magic: ON') : (t('btn_opt_off') || '✨ Prompt Magic: OFF');
+      document.getElementById('toggle-daily-label').textContent = state.user.daily_msg ? (t('btn_daily_on') || '📰 Daily News: ON') : (t('btn_daily_off') || '🔕 Daily News: OFF');
+      updateTopBar();
+    }
+
+    function showShop() {
+      document.getElementById('main-view').classList.add('hidden');
+      document.getElementById('models-view').classList.add('hidden');
+      document.getElementById('settings-view').classList.add('hidden');
+      document.getElementById('detail-view').classList.add('hidden');
+      document.getElementById('profile-view').classList.add('hidden');
+      document.getElementById('shop-view').classList.remove('hidden');
+      document.getElementById('shop-title').textContent = t('webapp_shop_title') || '💳 Guthaben aufladen';
+      document.getElementById('shop-credits').textContent = (t('webapp_credits_remaining') || 'Credits') + ': ' + state.user.credits + ' ⭐';
+      fetch(API_BASE + '/api/shop_packages')
+        .then(r => r.json())
+        .then(data => {
+          const pkgs = data.packages || [];
+          const html = pkgs.map(p => {
+            const label = t('webapp_shop_package').replace('{desc}', p.desc).replace('{price}', p.price) || (p.desc + ' – ' + p.price + ' ⭐');
+            return `<div class="shop-package" data-credits="${p.credits}" data-price="${p.price}">
+              <span class="pkg-desc">💎 ${escapeHtml(p.desc)}</span>
+              <span class="pkg-price">${p.price} ⭐</span>
+            </div>`;
+          }).join('');
+          document.getElementById('shop-packages').innerHTML = html;
+          document.querySelectorAll('.shop-package').forEach(el => {
+            el.addEventListener('click', () => {
+              const credits = el.getAttribute('data-credits');
+              const price = el.getAttribute('data-price');
+              if (credits && price) sendAction('buy_credits_' + credits + '_' + price);
+            });
+          });
+        })
+        .catch(() => { document.getElementById('shop-packages').innerHTML = '<p class="loading">Laden...</p>'; });
+      updateTopBar();
+    }
+
+    function showProfile() {
+      document.getElementById('main-view').classList.add('hidden');
+      document.getElementById('models-view').classList.add('hidden');
+      document.getElementById('settings-view').classList.add('hidden');
+      document.getElementById('detail-view').classList.add('hidden');
+      document.getElementById('shop-view').classList.add('hidden');
+      document.getElementById('profile-view').classList.remove('hidden');
+      const bot = state.user.bot_username || 'your_bot';
+      const refLink = 'https://t.me/' + bot + '?start=' + (state.user.user_id || '');
+      document.getElementById('profile-info').innerHTML = `
+        <p><b>${t('webapp_user') || 'User'}:</b> ${escapeHtml(state.user.username || 'User')}</p>
+        <p><b>${t('webapp_credits_remaining') || 'Credits'}:</b> ${state.user.credits} ⭐</p>
+        <p><b>Einladungslink:</b><br><span class="ref-link">${escapeHtml(refLink)}</span></p>
+      `;
       updateTopBar();
     }
 
@@ -416,6 +543,28 @@
       });
     });
 
+    document.getElementById('toggle-opt').addEventListener('click', () => {
+      state.user.auto_opt = !state.user.auto_opt;
+      document.getElementById('toggle-opt').classList.toggle('on', state.user.auto_opt);
+      document.getElementById('toggle-opt-label').textContent = state.user.auto_opt ? (t('btn_opt_on') || '✨ ON') : (t('btn_opt_off') || '✨ OFF');
+      sendAction('toggle_opt');
+    });
+    document.getElementById('toggle-daily').addEventListener('click', () => {
+      state.user.daily_msg = !state.user.daily_msg;
+      document.getElementById('toggle-daily').classList.toggle('on', state.user.daily_msg);
+      document.getElementById('toggle-daily-label').textContent = state.user.daily_msg ? (t('btn_daily_on') || '📰 ON') : (t('btn_daily_off') || '🔕 OFF');
+      sendAction('toggle_daily');
+    });
+
+    document.getElementById('shop-back-btn').addEventListener('click', () => {
+      document.getElementById('shop-view').classList.add('hidden');
+      document.getElementById('main-view').classList.remove('hidden');
+    });
+    document.getElementById('profile-back-btn').addEventListener('click', () => {
+      document.getElementById('profile-view').classList.add('hidden');
+      document.getElementById('main-view').classList.remove('hidden');
+    });
+
     function showModelDetail(key) {
       fetch(API_BASE + '/api/model?key=' + encodeURIComponent(key))
         .then(r => r.json())
@@ -424,6 +573,8 @@
           document.getElementById('main-view').classList.add('hidden');
           document.getElementById('models-view').classList.add('hidden');
           document.getElementById('settings-view').classList.add('hidden');
+          document.getElementById('shop-view').classList.add('hidden');
+          document.getElementById('profile-view').classList.add('hidden');
           document.getElementById('detail-view').classList.remove('hidden');
           const isText = Array.isArray(data.model_type) && data.model_type.includes('text');
           const costLabel = data.final_cost <= 0 ? 'FREE' : data.final_cost + ' ⭐';

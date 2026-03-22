@@ -111,6 +111,23 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
         if not model or not model.is_active:
             bot.answer_callback_query(call.id, get_text("err_model_maintenance", lang) or "⚠️ Inactive.")
             return
+
+        menu_mode = db.get_bot_setting("menu_mode", "commands")
+        if menu_mode == "webapp" and config.APP_URL and config.APP_URL.startswith("https://"):
+            webapp_url = config.APP_URL.rstrip("/") + "/webapp?model=" + quote(key, safe="")
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=webapp_url)))
+            text = get_text("webapp_open_model", lang).format(name=model.name)
+            try:
+                bot.edit_message_text(text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+            except Exception:
+                bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+            try:
+                bot.answer_callback_query(call.id)
+            except Exception:
+                pass
+            return
+
         prev = get_context(user_id) or {}
         set_context(user_id, {
             "model_key": key,
@@ -148,7 +165,6 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
         text = f"{preview_link}🤖 <b>{model.name}</b>\n{model.description}{example_block}\n\n💰 <b>Kosten: {final_cost} Credits</b>"
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(types.InlineKeyboardButton(f"🚀 Start ({final_cost} Credits)", callback_data=f"start_gen_{key}"))
-        # Settings-Button vorerst deaktiviert, bis ein echtes Settings-UI existiert.
         markup.add(types.InlineKeyboardButton(get_text("btn_back", lang), callback_data=f"nav_path_{model.menu_path}"))
         bot.edit_message_text(text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=False)
 

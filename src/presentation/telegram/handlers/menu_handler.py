@@ -70,12 +70,29 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
             cat_name = target_path.split("/")[-1].capitalize()
             display_name = get_text(f"menu_{cat_name.lower()}", lang)
             title_text = f"📂 <b>{display_name if not display_name.startswith('menu_') else cat_name}</b>"
-        markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, target_path)
+        if webapp_only_markup:
+            from urllib.parse import quote
+            path_url = app_url + "/webapp?path=" + quote(target_path, safe="")
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=path_url)))
+        else:
+            markup = keyboards.get_dynamic_model_menu(all_models, lang, target_path)
         bot.send_message(user_id, title_text, reply_markup=markup, parse_mode="HTML")
         bot.send_message(user_id, ".", reply_markup=remove_kbd)  # Punkt: Telegram lehnt Leerzeichen/Zero-Width ab
     elif action.startswith("sel_"):
         model_key = action.replace("sel_", "")
-        send_model_detail_view(bot, user_id, model_key, db, get_lang)
+        if webapp_only_markup:
+            from urllib.parse import quote
+            model = db.get_model_by_key(model_key)
+            model_name = model.name if model else model_key
+            model_url = app_url + "/webapp?model=" + quote(model_key, safe="")
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=model_url)))
+            text = get_text("webapp_open_model", lang).format(name=model_name)
+            bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+            bot.send_message(user_id, ".", reply_markup=remove_kbd)
+        else:
+            send_model_detail_view(bot, user_id, model_key, db, get_lang)
     elif action.startswith("start_gen_"):
         model_key = action.replace("start_gen_", "")
         bot.send_message(user_id, ".", reply_markup=remove_kbd)
@@ -95,12 +112,38 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
         bot.send_message(user_id, ".", reply_markup=remove_kbd)
         do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
     elif action == "cmd_shop":
-        fake = type('Msg', (), {'chat': type('C', (), {'id': user_id})()})()
-        show_shop_logic(bot, fake, db, lang)
+        if webapp_only_markup:
+            shop_url = app_url + "/webapp?view=shop"
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=shop_url)))
+            text = get_text("webapp_open_shop", lang)
+            bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+            bot.send_message(user_id, ".", reply_markup=remove_kbd)
+        else:
+            fake = type('Msg', (), {'chat': type('C', (), {'id': user_id})()})()
+            show_shop_logic(bot, fake, db, lang)
     elif action.startswith("set_lang_"):
         new_lang = action.replace("set_lang_", "")
         if new_lang in ("de", "en", "ru", "kk"):
             db.update_setting(user_id, "language", new_lang)
+    elif action == "toggle_opt":
+        settings = db.get_user_settings(user_id)
+        new_val = 0 if settings.get("auto_opt", True) else 1
+        db.update_setting(user_id, "auto_opt", new_val)
+    elif action == "toggle_daily":
+        settings = db.get_user_settings(user_id)
+        new_val = 0 if settings.get("daily_msg", True) else 1
+        db.update_setting(user_id, "daily_msg", new_val)
+    elif action.startswith("buy_credits_"):
+        parts = action.replace("buy_credits_", "").split("_")
+        if len(parts) >= 2:
+            try:
+                credits = int(parts[0])
+                price = int(parts[1])
+                from src.presentation.telegram.handlers.payment_handler import send_invoice_to_user
+                send_invoice_to_user(bot, user_id, credits, price, lang)
+            except (ValueError, IndexError) as e:
+                logger.warning("Invalid buy_credits action %r: %s", action, e)
 
 
 def register(bot: TeleBot, generation_service, db) -> None:
@@ -413,29 +456,47 @@ def register(bot: TeleBot, generation_service, db) -> None:
             return
 
         elif target == "settings":
-            settings = db.get_user_settings(user_id)
-            new_text = get_text("settings_title", lang)
-            new_markup = keyboards.get_settings_menu(settings, lang)
+            if _is_webapp_mode(db) and config.APP_URL and config.APP_URL.startswith("https://"):
+                webapp_url = (config.APP_URL or "").rstrip("/") + "/webapp?view=settings"
+                new_text = get_text("webapp_open_settings", lang)
+                new_markup = types.InlineKeyboardMarkup()
+                new_markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=webapp_url)))
+            else:
+                settings = db.get_user_settings(user_id)
+                new_text = get_text("settings_title", lang)
+                new_markup = keyboards.get_settings_menu(settings, lang)
 
         elif target == "lang":
             new_text = "🌐 <b>Select Language / Sprache wählen:</b>"
             new_markup = keyboards.get_language_menu(lang)
             
         elif target == "profile":
-            creds = db.get_user_credits(user_id)
-            new_text = get_text("profile_text", lang).format(
-                name=call.from_user.first_name,
-                creds=creds,
-                user_id=user_id
-            )
-            new_markup = keyboards.get_back_menu(lang, target="nav_main") 
+            if _is_webapp_mode(db) and config.APP_URL and config.APP_URL.startswith("https://"):
+                webapp_url = (config.APP_URL or "").rstrip("/") + "/webapp?view=profile"
+                new_text = get_text("webapp_open_profile", lang)
+                new_markup = types.InlineKeyboardMarkup()
+                new_markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=webapp_url)))
+            else:
+                creds = db.get_user_credits(user_id)
+                new_text = get_text("profile_text", lang).format(
+                    name=call.from_user.first_name,
+                    creds=creds,
+                    user_id=user_id
+                )
+                new_markup = keyboards.get_back_menu(lang, target="nav_main")
 
         elif target == "referral":
-            bot_name = bot.get_me().username
-            link = f"https://t.me/{bot_name}?start={user_id}"
-            new_text = get_text("share_menu_title", lang).format(ref_link=link)
-            share_text = get_text("share_text_template", lang).format(ref_link=link)
-            new_markup = keyboards.get_share_menu(link, share_text, lang)
+            if _is_webapp_mode(db) and config.APP_URL and config.APP_URL.startswith("https://"):
+                webapp_url = (config.APP_URL or "").rstrip("/") + "/webapp?view=profile"
+                new_text = get_text("webapp_open_profile", lang)
+                new_markup = types.InlineKeyboardMarkup()
+                new_markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=webapp_url)))
+            else:
+                bot_name = bot.get_me().username
+                link = f"https://t.me/{bot_name}?start={user_id}"
+                new_text = get_text("share_menu_title", lang).format(ref_link=link)
+                share_text = get_text("share_text_template", lang).format(ref_link=link)
+                new_markup = keyboards.get_share_menu(link, share_text, lang)
 
         elif target == "support":
              new_text = get_text("support_text", lang)

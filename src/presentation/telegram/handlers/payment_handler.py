@@ -22,9 +22,50 @@ def get_user_lang(msg) -> str:
         return "de"
 
 
+def send_invoice_to_user(bot: TeleBot, user_id: int, credits: int, price: int, lang: str = "de") -> None:
+    """Sendet eine Invoice an den User. Nutzbar von Callback und WebApp-Action."""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    pay_text = f"⭐️ {price} XTR bezahlen" if lang == "de" else f"Pay ⭐️ {price} XTR"
+    pay_btn = types.InlineKeyboardButton(text=pay_text, pay=True)
+    cancel_text = "❌ Abbrechen" if lang == "de" else "❌ Cancel"
+    cancel_btn = types.InlineKeyboardButton(text=cancel_text, callback_data="cancel_invoice")
+    markup.add(pay_btn)
+    markup.add(cancel_btn)
+    bot.send_invoice(
+        user_id,
+        title=f"{credits} AI Credits",
+        description="Aufladung für Bild- und Videogenerierung",
+        invoice_payload=f"credits_{credits}",
+        provider_token="",
+        currency="XTR",
+        prices=[types.LabeledPrice(label="Credits", amount=int(price))],
+        start_parameter="buy_credits",
+        reply_markup=markup,
+    )
+
+
 def show_shop_logic(bot: TeleBot, message, db, lang: str = "de") -> None:
-    """Zeigt den Shop (Credits kaufen). Aufrufbar aus Callback oder Tastatur-Button."""
+    """Zeigt den Shop (Credits kaufen). Bei menu_mode=webapp: WebApp-Button statt Inline-Pakete."""
+    from src.config.settings import config
+
     clear_context(message.chat.id)
+    user_id = message.chat.id
+    menu_mode = db.get_bot_setting("menu_mode", "commands")
+
+    if menu_mode == "webapp" and config.APP_URL and config.APP_URL.startswith("https://"):
+        app_url = config.APP_URL.rstrip("/")
+        shop_url = app_url + "/webapp?view=shop"
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton(
+            get_text("menu_mode_webapp", lang),
+            web_app=types.WebAppInfo(url=shop_url)
+        ))
+        text = get_text("webapp_open_shop", lang)
+        try:
+            bot.edit_message_text(text, user_id, message.message_id, reply_markup=markup, parse_mode="HTML")
+        except Exception:
+            bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+        return
 
     markup = types.InlineKeyboardMarkup(row_width=1)
     for label, desc, price, credits in CREDIT_PACKAGES:
@@ -34,7 +75,7 @@ def show_shop_logic(bot: TeleBot, message, db, lang: str = "de") -> None:
     back_text = get_text("btn_back", lang)
     markup.add(types.InlineKeyboardButton(back_text, callback_data="nav_main"))
 
-    current_credits = db.get_user_credits(message.chat.id)
+    current_credits = db.get_user_credits(user_id)
 
     text = (
         f"<b>💳 Guthaben aufladen</b>\n\n"
@@ -45,11 +86,11 @@ def show_shop_logic(bot: TeleBot, message, db, lang: str = "de") -> None:
 
     try:
         bot.edit_message_text(
-            text, message.chat.id, message.message_id,
+            text, user_id, message.message_id,
             reply_markup=markup, parse_mode="HTML",
         )
     except Exception:
-        bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode="HTML")
+        bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
 
 
 def register(bot: TeleBot, db) -> None:
@@ -71,27 +112,7 @@ def register(bot: TeleBot, db) -> None:
         try:
             _, credits, price = call.data.split('_')
             lang = get_user_lang(call.from_user)
-            
-            markup = types.InlineKeyboardMarkup(row_width=1)
-            pay_text = f"⭐️ {price} XTR bezahlen" if lang == "de" else f"Pay ⭐️ {price} XTR"
-            pay_btn = types.InlineKeyboardButton(text=pay_text, pay=True)
-            cancel_text = "❌ Abbrechen" if lang == "de" else "❌ Cancel"
-            cancel_btn = types.InlineKeyboardButton(text=cancel_text, callback_data="cancel_invoice")
-            
-            markup.add(pay_btn)
-            markup.add(cancel_btn)
-            
-            bot.send_invoice(
-                call.message.chat.id,
-                title=f"{credits} AI Credits",
-                description=f"Aufladung für Bild- und Videogenerierung",
-                invoice_payload=f"credits_{credits}",
-                provider_token="", 
-                currency="XTR",    
-                prices=[types.LabeledPrice(label="Credits", amount=int(price))], 
-                start_parameter="buy_credits",
-                reply_markup=markup
-            )
+            send_invoice_to_user(bot, call.message.chat.id, int(credits), int(price), lang)
             try:
                 bot.answer_callback_query(call.id)
             except Exception:

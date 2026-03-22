@@ -12,6 +12,8 @@ import os
 import time
 import uuid
 
+from telebot import types
+
 from src.infrastructure.metrics import record_timing
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.common import get_context, set_context
@@ -72,6 +74,25 @@ def register_media_handlers(bot, db, get_lang, run_generation) -> None:
         }
         set_context(user_id, ctx)
 
+        menu_mode = db.get_bot_setting("menu_mode", "commands")
+        if menu_mode == "webapp":
+            from src.config.settings import config
+            if config.APP_URL and config.APP_URL.startswith("https://"):
+                from urllib.parse import quote
+                app_url = config.APP_URL.rstrip("/")
+                webapp_url = app_url + "/webapp?path=" + quote(category, safe="")
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton(
+                    get_text("menu_mode_webapp", lang),
+                    web_app=types.WebAppInfo(url=webapp_url)
+                ))
+                bot.send_message(
+                    user_id,
+                    get_text("webapp_media_choose", lang),
+                    reply_markup=markup,
+                    parse_mode="HTML",
+                )
+                return
         all_models = db.get_all_models()
         markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path=category)
         bot.send_message(

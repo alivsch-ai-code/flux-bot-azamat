@@ -140,8 +140,10 @@ def create_run_generation(bot, db, generation_service, get_lang):
                             next_markup = keyboards.get_path_reply_keyboard(all_models, lang, menu_path)
                         elif menu_mode == "webapp":
                             from src.config.settings import config
+                            from urllib.parse import quote
                             if config.APP_URL:
-                                webapp_url = config.APP_URL.rstrip("/") + "/webapp"
+                                base = config.APP_URL.rstrip("/") + "/webapp"
+                                webapp_url = base + ("?path=" + quote(menu_path, safe="") if menu_path and menu_path != "root" else "")
                                 next_markup = types.InlineKeyboardMarkup()
                                 next_markup.add(types.InlineKeyboardButton(
                                     get_text("menu_mode_webapp", lang),

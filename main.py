@@ -95,7 +95,20 @@ def api_user_info():
         user = _db_instance.get_user(user_id)
         settings = _db_instance.get_user_settings(user_id)
         credits = _db_instance.get_user_credits(user_id)
-        return jsonify(ok=True, user_id=user_id, username=user.username or "User", credits=credits, lang=settings["lang"])
+        bot_username = ""
+        if _bot_instance:
+            try:
+                me = _bot_instance.get_me()
+                bot_username = getattr(me, "username", "") or ""
+            except Exception:
+                pass
+        return jsonify(
+            ok=True, user_id=user_id, username=user.username or "User",
+            credits=credits, lang=settings["lang"],
+            auto_opt=bool(settings.get("auto_opt", True)),
+            daily_msg=bool(settings.get("daily_msg", True)),
+            bot_username=bot_username,
+        )
     except Exception as e:
         logger.exception("api_user_info error: %s", e)
         return jsonify(ok=False, error=str(e)), 500
@@ -144,6 +157,21 @@ def api_model():
     except Exception as e:
         logger.warning("api_model error: %s", e)
         return jsonify(ok=False, error=str(e)), 500
+
+
+@app.route('/api/shop_packages')
+def api_shop_packages():
+    """WebApp: Credit-Pakete für den Shop."""
+    try:
+        from src.presentation.telegram.handlers.payment_handler import CREDIT_PACKAGES
+        packages = [
+            {"label": lbl, "desc": desc, "price": price, "credits": credits}
+            for lbl, desc, price, credits in CREDIT_PACKAGES
+        ]
+        return jsonify(ok=True, packages=packages)
+    except Exception as e:
+        logger.warning("api_shop_packages error: %s", e)
+        return jsonify(ok=True, packages=[])
 
 
 @app.route('/api/models')
