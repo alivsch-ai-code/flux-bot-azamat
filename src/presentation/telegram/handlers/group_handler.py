@@ -24,6 +24,26 @@ def _is_group(msg_or_call) -> bool:
     return str(chat.type) in ("group", "supergroup")
 
 
+def _try_send_one_time_greeting(bot: TeleBot, db, generation_service, user_id: int, user_name: str, lang: str) -> None:
+    """Sendet einmalig eine von Gemini generierte Willkommens-DM. Wird in DB vermerkt."""
+    if db.has_group_greeting_been_sent(user_id) or db.has_group_greeting_been_attempted(user_id):
+        return
+    db.mark_group_greeting_attempted(user_id)
+    model = db.get_model_by_key(GEMINI_GROUP_MODEL)
+    if not model or "text" not in (model.type or []):
+        return
+    prompt_template = get_text("grp_greeting_prompt", lang)
+    prompt = f"{prompt_template}\n\nName der Person: {user_name or 'User'}"
+    success, result = generation_service.process_request(user_id, model, prompt, media_files=None, no_charge=True)
+    if not success or not result:
+        return
+    try:
+        bot.send_message(user_id, str(result), parse_mode="HTML")
+        db.mark_group_greeting_sent(user_id)
+    except Exception as e:
+        logger.debug("Could not send group greeting DM to %s: %s", user_id, e)
+
+
 def register(bot: TeleBot, generation_service, db) -> None:
     """Registriert Gruppen-Handler. Muss VOR menu_handler und gen_handler registriert werden."""
 
@@ -34,6 +54,9 @@ def register(bot: TeleBot, generation_service, db) -> None:
     @bot.message_handler(commands=["start"], func=lambda m: _is_group(m))
     def group_start(msg):
         chat_id = msg.chat.id
+        user_id = msg.from_user.id
+        db.add_user_if_not_exists(user_id, msg.from_user.username)
+        _try_send_one_time_greeting(bot, db, generation_service, user_id, msg.from_user.first_name or msg.from_user.username, get_group_lang(chat_id))
         lang = get_group_lang(chat_id)
         text = get_text("grp_welcome", lang)
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -48,10 +71,11 @@ def register(bot: TeleBot, generation_service, db) -> None:
         user_id = msg.from_user.id
         lang = get_group_lang(chat_id)
         db.add_user_if_not_exists(user_id, msg.from_user.username)
+        _try_send_one_time_greeting(bot, db, generation_service, user_id, msg.from_user.first_name or msg.from_user.username, lang)
         try:
             bot.send_message(chat_id, get_text("grp_credits_sent", lang))
             fake_msg = type("Msg", (), {"chat": type("C", (), {"id": user_id})(), "message_id": None})()
-            show_shop_logic(bot, fake_msg, db, lang)
+            show_shop_logic(bot, fake_msg, db, lang, force_inline=True)
         except Exception as e:
             logger.warning("Group shop DM failed: %s", e)
             bot.send_message(chat_id, get_text("grp_credits_start_first", lang), parse_mode="HTML")
@@ -65,6 +89,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
         user_id = msg.from_user.id
         db.add_user_if_not_exists(user_id, msg.from_user.username)
         lang = get_group_lang(chat_id)
+        _try_send_one_time_greeting(bot, db, generation_service, user_id, msg.from_user.first_name or msg.from_user.username, lang)
 
         model = db.get_model_by_key(GEMINI_GROUP_MODEL)
         if not model or "text" not in (model.type or []):
@@ -100,10 +125,11 @@ def register(bot: TeleBot, generation_service, db) -> None:
         user_id = call.from_user.id
         lang = get_group_lang(chat_id)
         db.add_user_if_not_exists(user_id, call.from_user.username)
+        _try_send_one_time_greeting(bot, db, generation_service, user_id, call.from_user.first_name or call.from_user.username, lang)
         try:
             bot.answer_callback_query(call.id, get_text("grp_credits_sent", lang))
             fake_msg = type("Msg", (), {"chat": type("C", (), {"id": user_id})(), "message_id": None})()
-            show_shop_logic(bot, fake_msg, db, lang)
+            show_shop_logic(bot, fake_msg, db, lang, force_inline=True)
         except Exception as e:
             logger.warning("Group shop DM failed: %s", e)
             bot.answer_callback_query(call.id, get_text("grp_credits_start_first", lang))

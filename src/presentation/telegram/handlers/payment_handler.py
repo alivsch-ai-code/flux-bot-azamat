@@ -44,15 +44,15 @@ def send_invoice_to_user(bot: TeleBot, user_id: int, credits: int, price: int, l
     )
 
 
-def show_shop_logic(bot: TeleBot, message, db, lang: str = "de") -> None:
-    """Zeigt den Shop (Credits kaufen). Bei menu_mode=webapp: WebApp-Button statt Inline-Pakete."""
+def show_shop_logic(bot: TeleBot, message, db, lang: str = "de", force_inline: bool = False) -> None:
+    """Zeigt den Shop (Credits kaufen). Bei menu_mode=webapp: WebApp-Button – außer force_inline=True (z.B. Gruppen)."""
     from src.config.settings import config
 
     clear_context(message.chat.id)
     user_id = message.chat.id
     menu_mode = db.get_bot_setting("menu_mode", "commands")
 
-    if menu_mode == "webapp" and config.APP_URL and config.APP_URL.startswith("https://"):
+    if not force_inline and menu_mode == "webapp" and config.APP_URL and config.APP_URL.startswith("https://"):
         app_url = config.APP_URL.rstrip("/")
         shop_url = app_url + "/webapp?view=shop"
         markup = types.InlineKeyboardMarkup()

@@ -20,6 +20,7 @@ class GenerationService:
         model: AIModel,
         prompt: str,
         media_files: Optional[List[MediaFile]] = None,
+        no_charge: bool = False,
     ):
         start = time.perf_counter()
         try:
@@ -28,10 +29,11 @@ class GenerationService:
                 return False, "⚠️ Deine Eingabe wurde aus Sicherheitsgründen abgelehnt."
             prompt = InputValidator.sanitize_prompt(prompt or "")
 
-            # 1. User & Credits Check
-            user_credits = self.repo.get_user_credits(user_id)
-            if user_credits < model.cost:
-                return False, "Zu wenig Guthaben! Bitte aufladen."
+            # 1. User & Credits Check (überspringen bei no_charge, z.B. Willkommens-Gruß)
+            if not no_charge:
+                user_credits = self.repo.get_user_credits(user_id)
+                if user_credits < model.cost:
+                    return False, "Zu wenig Guthaben! Bitte aufladen."
 
             # Erste Bild-Datei für Pipelines (Backward-Kompatibilität)
             first_image_path = None
@@ -56,14 +58,16 @@ class GenerationService:
                 success, result_list = self._run_premium_pipeline(prompt, first_image_path)
                 if not success:
                     return False, result_list
-                self.repo.update_credits(user_id, -model.cost, reason="premium_pipeline")
+                if not no_charge:
+                    self.repo.update_credits(user_id, -model.cost, reason="premium_pipeline")
                 return True, result_list
 
             elif model.key == "ultimate-headshot-pipeline":
                 success, result_url = self._run_single_pipeline(prompt, first_image_path)
                 if not success:
                     return False, result_url
-                self.repo.update_credits(user_id, -model.cost, reason="ultimate_pipeline")
+                if not no_charge:
+                    self.repo.update_credits(user_id, -model.cost, reason="ultimate_pipeline")
                 return True, result_url
 
             # --- Standard-Modelle (Unified Client) ---
@@ -71,7 +75,8 @@ class GenerationService:
                 result = self.ai.generate(model, prompt, media_files=media_files)
                 if not result.success:
                     return False, f"Fehler: {result.error}"
-                self.repo.update_credits(user_id, -model.cost, reason=f"gen_{model.key}")
+                if not no_charge:
+                    self.repo.update_credits(user_id, -model.cost, reason=f"gen_{model.key}")
                 return True, result.data
 
         except Exception as e:
