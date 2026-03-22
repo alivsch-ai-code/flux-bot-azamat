@@ -19,8 +19,8 @@ GEMINI_GROUP_MODEL = "google-gemini-2-5-flash"
 
 
 def _is_group(msg_or_call) -> bool:
-    """Prüft ob die Nachricht/Callback aus einer Gruppe kommt."""
-    chat = msg_or_call.chat
+    """Prüft ob die Nachricht/Callback aus einer Gruppe kommt. CallbackQuery hat .message.chat, Message hat .chat."""
+    chat = msg_or_call.message.chat if hasattr(msg_or_call, "message") else msg_or_call.chat
     return str(chat.type) in ("group", "supergroup")
 
 
@@ -75,7 +75,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
         try:
             bot.send_message(chat_id, get_text("grp_credits_sent", lang))
             fake_msg = type("Msg", (), {"chat": type("C", (), {"id": user_id})(), "message_id": None})()
-            show_shop_logic(bot, fake_msg, db, lang, force_inline=True)
+            show_shop_logic(bot, fake_msg, db, lang, force_inline=True, group_chat_id=chat_id)
         except Exception as e:
             logger.warning("Group shop DM failed: %s", e)
             bot.send_message(chat_id, get_text("grp_credits_start_first", lang), parse_mode="HTML")
@@ -107,7 +107,9 @@ def register(bot: TeleBot, generation_service, db) -> None:
         except Exception:
             full_prompt = f"[SYSTEM]\n{system_prompt}\n\n[HISTORY]\nUser: {msg.text}\nAssistant:"
 
-        success, result = generation_service.process_request(user_id, model, full_prompt, media_files=None)
+        success, result = generation_service.process_request(
+            user_id, model, full_prompt, media_files=None, group_chat_id=chat_id
+        )
         if not success:
             bot.send_message(chat_id, str(result), parse_mode="HTML")
             return
@@ -129,7 +131,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
         try:
             bot.answer_callback_query(call.id, get_text("grp_credits_sent", lang))
             fake_msg = type("Msg", (), {"chat": type("C", (), {"id": user_id})(), "message_id": None})()
-            show_shop_logic(bot, fake_msg, db, lang, force_inline=True)
+            show_shop_logic(bot, fake_msg, db, lang, force_inline=True, group_chat_id=chat_id)
         except Exception as e:
             logger.warning("Group shop DM failed: %s", e)
             bot.answer_callback_query(call.id, get_text("grp_credits_start_first", lang))

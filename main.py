@@ -223,6 +223,8 @@ def main():
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+    # 409-Konflikte bei Deploy/Restart: TeleBot loggt sonst jeden Polling-Loop als ERROR
+    logging.getLogger("TeleBot").setLevel(logging.WARNING)
     logger.info("Initialisiere Bot System...")
 
     # SCHRITT A: Datenbank verbinden
@@ -255,15 +257,20 @@ def main():
     # SCHRITT F: Status-Log-Loop im Hauptprozess starten (separater Log-Bot)
     start_log_status_loop()
 
-    # SCHRITT G: Bot starten (mit Retry bei Timeout/Netzwerk)
+    # SCHRITT G: Bot starten (mit Retry bei Timeout/409-Konflikt)
     logger.info("Bot ist bereit (Umgebung: %s)", config.APP_ENV)
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=30)
         except Exception as e:
-            if "timed out" in str(e).lower() or "timeout" in str(e).lower():
+            err_str = str(e).lower()
+            if "timed out" in err_str or "timeout" in err_str:
                 logger.warning("Telegram Polling Timeout – starte in 5s neu: %s", e)
                 time.sleep(5)
+            elif "409" in err_str or "conflict" in err_str or "getupdates" in err_str:
+                # Mehrere Instanzen oder Rollout: alte Instanz beendet sich, wir warten und retry
+                logger.warning("Telegram 409 Conflict (anderer Poller aktiv) – warte 15s, retry: %s", e)
+                time.sleep(15)
             else:
                 logger.critical("Kritischer Absturz: %s", e)
                 sys.exit(1)
