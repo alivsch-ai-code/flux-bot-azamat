@@ -24,6 +24,18 @@ def _is_group(msg_or_call) -> bool:
     return str(chat.type) in ("group", "supergroup")
 
 
+def get_group_menu_markup(db, chat_id: int, user_name: str = "") -> tuple:
+    """Liefert (text, markup) für das Gruppenmenü – nur Credits + Sprache. Für private Chats nicht nutzen."""
+    db.add_group_if_not_exists(chat_id, db.get_group_language(chat_id))
+    lang = db.get_group_language(chat_id)
+    name = (user_name or "").strip() or "there"
+    text = get_text("grp_welcome", lang).format(name=name)
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(types.InlineKeyboardButton(get_text("grp_btn_credits", lang), callback_data="grp_shop"))
+    markup.add(types.InlineKeyboardButton(get_text("grp_btn_lang", lang), callback_data="grp_lang_menu"))
+    return text, markup
+
+
 def _try_send_one_time_greeting(bot: TeleBot, db, generation_service, user_id: int, user_name: str, lang: str) -> None:
     """Sendet einmalig eine von Gemini generierte Willkommens-DM. Wird in DB vermerkt."""
     if db.has_group_greeting_been_sent(user_id) or db.has_group_greeting_been_attempted(user_id):

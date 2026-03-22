@@ -7,9 +7,11 @@ from telebot import TeleBot, types
 from src.config.settings import config
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.common import clear_context, get_context, set_context
+from src.presentation.telegram.handlers.group_handler import _is_group, get_group_menu_markup
 from src.presentation.telegram.handlers.gen.nav_handlers import send_model_detail_view
 from src.presentation.telegram.handlers.gen.start_handler import do_start_gen_flow
 from src.presentation.telegram.handlers.payment_handler import show_shop_logic
+from src.presentation.telegram.welcome_utils import send_welcome_with_video
 from src.utils.strings import get_text, get_welcome
 
 logger = logging.getLogger(__name__)
@@ -47,8 +49,13 @@ def _remove_reply_keyboard_silently(bot: TeleBot, user_id: int) -> None:
         pass
 
 
-def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
-    """Führt eine Web-App-Aktion aus. Nutzbar von web_app_data-Handler und API."""
+def process_webapp_action(bot: TeleBot, user_id: int, action: str, db, is_group: bool = False) -> None:
+    """Führt eine Web-App-Aktion aus. Nutzbar von web_app_data-Handler und API.
+    Bei is_group=True (Gruppenchat): nur Credits + Sprache, kein volles Menü."""
+    if is_group:
+        text, markup = get_group_menu_markup(db, user_id, "")
+        bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+        return
     def get_lang(uid):
         return db.get_user_settings(uid)["lang"]
     lang = get_lang(user_id)
@@ -71,7 +78,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db) -> None:
         user_name = getattr(db, "get_user_username_or_name", lambda u: None)(user_id) or ""
         welcome_text = get_welcome(lang, user_name)
         markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
-        bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="HTML")
+        send_welcome_with_video(bot, user_id, welcome_text, markup)
         _remove_reply_keyboard_silently(bot, user_id)
     elif action.startswith("nav_path_"):
         target_path = action.replace("nav_path_", "")
@@ -226,7 +233,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
                     un = (message.from_user and message.from_user.first_name) or ""
                     welcome_text = get_welcome(lang, un)
                     markup = keyboards.get_main_reply_keyboard(lang)
-                    bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+                    send_welcome_with_video(bot, user_id, welcome_text, markup)
                 elif act_type == "nav_path":
                     clear_context(user_id)
                     db.set_user_chat_mode(user_id, None, active=False)
@@ -259,7 +266,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
             un = (message.from_user and message.from_user.first_name) or ""
             welcome_text = get_welcome(lang, un)
             markup = keyboards.get_main_reply_keyboard(lang)
-            bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+            send_welcome_with_video(bot, user_id, welcome_text, markup)
         elif action.startswith("nav_path_"):
             target_path = action.replace("nav_path_", "")
             set_context(user_id, {"keyboard_path": target_path})
@@ -322,11 +329,12 @@ def register(bot: TeleBot, generation_service, db) -> None:
         except (json.JSONDecodeError, TypeError, AttributeError):
             return
         user_id = message.chat.id
+        is_group = str(message.chat.type) in ("group", "supergroup")
         try:
             bot.delete_message(user_id, message.message_id)
         except Exception:
             pass
-        process_webapp_action(bot, user_id, action, db)
+        process_webapp_action(bot, user_id, action, db, is_group=is_group)
 
     # 1. START COMMAND (nur private Chats – Gruppen werden von group_handler bedient)
     @bot.message_handler(commands=['start'], func=lambda m: str(m.chat.type) == 'private')
@@ -371,7 +379,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
 
         if _is_keyboard_mode(db):
             reply_kbd = keyboards.get_main_reply_keyboard(lang)
-            bot.send_message(user_id, welcome_text, reply_markup=reply_kbd, parse_mode='HTML')
+            send_welcome_with_video(bot, user_id, welcome_text, reply_kbd)
         elif _is_webapp_mode(db) and config.APP_URL:
             webapp_url = (config.APP_URL or "").rstrip("/")
             if webapp_url.startswith("https://"):
@@ -382,27 +390,41 @@ def register(bot: TeleBot, generation_service, db) -> None:
                         get_text("menu_mode_webapp", lang),
                         web_app=types.WebAppInfo(url=webapp_url)
                     ))
-                    bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+                    send_welcome_with_video(bot, user_id, welcome_text, markup)
                     _remove_reply_keyboard_silently(bot, user_id)
                 except Exception as e:
                     logger.warning("WebApp-Button fehlgeschlagen, Fallback zu Inline-Menü: %s", e)
                     markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
-                    bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+                    send_welcome_with_video(bot, user_id, welcome_text, markup)
                     _remove_reply_keyboard_silently(bot, user_id)
             else:
                 markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
-                bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+                send_welcome_with_video(bot, user_id, welcome_text, markup)
                 _remove_reply_keyboard_silently(bot, user_id)
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
-            bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode='HTML')
+            send_welcome_with_video(bot, user_id, welcome_text, markup)
             _remove_reply_keyboard_silently(bot, user_id)
 
     # 2. NAVIGATION (Static Menus)
     # WICHTIG: Wir ignorieren hier 'nav_path_', damit gen_handler diese übernehmen kann!
     @bot.callback_query_handler(func=lambda call: call.data.startswith('nav_') and not call.data.startswith('nav_path_'))
     def handle_navigation(call):
-        user_id = call.message.chat.id
+        chat_id = call.message.chat.id
+        chat_type = str(call.message.chat.type)
+        if chat_type in ("group", "supergroup"):
+            text, markup = get_group_menu_markup(db, chat_id, (call.from_user.first_name or call.from_user.username or "") if call.from_user else "")
+            try:
+                bot.edit_message_text(text, chat_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+            except Exception:
+                bot.send_message(chat_id, text, reply_markup=markup, parse_mode="HTML")
+            try:
+                bot.answer_callback_query(call.id)
+            except Exception:
+                pass
+            return
+
+        user_id = chat_id
         lang = get_lang(user_id)
         
         try:
@@ -424,7 +446,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
                     bot.delete_message(user_id, call.message.message_id)
                 except Exception:
                     pass
-                bot.send_message(user_id, new_text, reply_markup=main_kbd, parse_mode="HTML")
+                send_welcome_with_video(bot, user_id, new_text, main_kbd)
             elif _is_webapp_mode(db) and config.APP_URL:
                 webapp_url = (config.APP_URL or "").rstrip("/")
                 if webapp_url.startswith("https://"):
@@ -436,31 +458,35 @@ def register(bot: TeleBot, generation_service, db) -> None:
                             web_app=types.WebAppInfo(url=webapp_url)
                         ))
                         try:
-                            bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
+                            bot.delete_message(user_id, call.message.message_id)
                         except Exception:
-                            bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
+                            pass
+                        send_welcome_with_video(bot, user_id, new_text, new_markup)
                         _remove_reply_keyboard_silently(bot, user_id)
                     except Exception as e:
                         logger.warning("WebApp-Button (nav_main) fehlgeschlagen, Fallback: %s", e)
                         new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                         try:
-                            bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
+                            bot.delete_message(user_id, call.message.message_id)
                         except Exception:
-                            bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
+                            pass
+                        send_welcome_with_video(bot, user_id, new_text, new_markup)
                         _remove_reply_keyboard_silently(bot, user_id)
                 else:
                     new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                     try:
-                        bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
+                        bot.delete_message(user_id, call.message.message_id)
                     except Exception:
-                        bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
+                        pass
+                    send_welcome_with_video(bot, user_id, new_text, new_markup)
                     _remove_reply_keyboard_silently(bot, user_id)
             else:
                 new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                 try:
-                    bot.edit_message_text(new_text, user_id, call.message.message_id, reply_markup=new_markup, parse_mode="HTML")
+                    bot.delete_message(user_id, call.message.message_id)
                 except Exception:
-                    bot.send_message(user_id, new_text, reply_markup=new_markup, parse_mode="HTML")
+                    pass
+                send_welcome_with_video(bot, user_id, new_text, new_markup)
                 _remove_reply_keyboard_silently(bot, user_id)
             try:
                 bot.answer_callback_query(call.id)

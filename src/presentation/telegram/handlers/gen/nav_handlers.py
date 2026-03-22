@@ -18,6 +18,8 @@ from telebot import TeleBot, types
 from src.config.settings import config
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.common import set_context
+from src.presentation.telegram.handlers.group_handler import get_group_menu_markup
+from src.presentation.telegram.welcome_utils import send_welcome_with_video
 from src.utils.strings import get_text, get_welcome
 
 logger = logging.getLogger(__name__)
@@ -61,8 +63,27 @@ def send_model_detail_view(bot: TeleBot, user_id: int, model_key: str, db, get_l
 def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
     """Registriert alle Navigations- und Modell-Click-Handler."""
 
+    def _show_group_menu_if_group(call):
+        chat_type = str(call.message.chat.type)
+        if chat_type in ("group", "supergroup"):
+            chat_id = call.message.chat.id
+            name = (call.from_user.first_name or call.from_user.username or "") if call.from_user else ""
+            text, markup = get_group_menu_markup(db, chat_id, name)
+            try:
+                bot.edit_message_text(text, chat_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+            except Exception:
+                bot.send_message(chat_id, text, reply_markup=markup, parse_mode="HTML")
+            try:
+                bot.answer_callback_query(call.id)
+            except Exception:
+                pass
+            return True
+        return False
+
     @bot.callback_query_handler(func=lambda c: c.data.startswith('nav_path_'))
     def handle_path_nav(call):
+        if _show_group_menu_if_group(call):
+            return
         user_id = call.message.chat.id
         lang = get_lang(user_id)
         target_path = call.data.replace("nav_path_", "")
@@ -103,6 +124,8 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith('sel_'))
     def handle_model_click(call):
+        if _show_group_menu_if_group(call):
+            return
         from src.presentation.telegram.handlers.common import get_context, set_context
         user_id = call.message.chat.id
         lang = get_lang(user_id)
@@ -170,6 +193,8 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith('chat_mode_'))
     def handle_chat_decision(call):
+        if _show_group_menu_if_group(call):
+            return
         user_id = call.message.chat.id
         lang = get_lang(user_id)
         data = call.data
@@ -201,6 +226,8 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
     @bot.callback_query_handler(func=lambda c: c.data == 'stop_chat')
     def handle_stop_chat(call):
         """Fragt beim Beenden des Chats, ob der Verlauf gelöscht werden soll."""
+        if _show_group_menu_if_group(call):
+            return
         user_id = call.message.chat.id
         lang = get_lang(user_id)
         try:
@@ -222,6 +249,8 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
     @bot.callback_query_handler(func=lambda c: c.data in ("stop_chat_clear", "stop_chat_keep"))
     def handle_stop_chat_decision(call):
         """Verarbeitet die Entscheidung des Users zum Chatverlauf."""
+        if _show_group_menu_if_group(call):
+            return
         user_id = call.message.chat.id
         lang = get_lang(user_id)
         action = call.data
@@ -241,24 +270,18 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
         user_name = db.get_user_username_or_name(user_id) or ""
         text = get_welcome(lang, user_name)
         menu_mode = db.get_bot_setting("menu_mode", "commands")
+        try:
+            bot.delete_message(user_id, call.message.message_id)
+        except Exception:
+            pass
         if menu_mode == "keyboard":
             main_kbd = keyboards.get_main_reply_keyboard(lang)
-            try:
-                bot.delete_message(user_id, call.message.message_id)
-            except Exception:
-                pass
-            bot.send_message(user_id, text, reply_markup=main_kbd, parse_mode="HTML")
+            send_welcome_with_video(bot, user_id, text, main_kbd)
         elif menu_mode == "webapp" and config.APP_URL and config.APP_URL.startswith("https://"):
             webapp_url = config.APP_URL.rstrip("/") + "/webapp"
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=webapp_url)))
-            try:
-                bot.edit_message_text(text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
-            except Exception:
-                bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+            send_welcome_with_video(bot, user_id, text, markup)
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
-            try:
-                bot.edit_message_text(text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
-            except Exception:
-                bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+            send_welcome_with_video(bot, user_id, text, markup)

@@ -3,10 +3,10 @@
 STRINGS = {
     # --- NAVIGATION & MENUS ---
     "welcome": {
-        "en": "👋 <b>Yo {name}! AZAMAT AI here – from Kazakhstan!</b>\n\n<i>Yeah, you're in the right place. Images, videos, chat – I've got it all. Don't be shy.</i>\n\n<b>What you can do:</b>\n• 🎨 Images & Art\n• 🎬 Videos\n• 🎙️ Audio\n• 📝 Text & Chat\n• 🛠️ Tools\n\n🎥 <a href='https://www.youtube.com/watch?v=dQw4w9WgXcQ'>Demo Video</a>\n\n<b>Pick something below – let's go!</b>",
-        "de": "👋 <b>Yo {name}! AZAMAT AI hier – aus Kasachstan!</b>\n\n<i>Ja, du bist richtig. Bilder, Videos, Chat – ich hab alles. Kein Grund schüchtern zu sein.</i>\n\n<b>Möglichkeiten:</b>\n• 🎨 Bilder & Kunst\n• 🎬 Videos\n• 🎙️ Audio\n• 📝 Text & Chat\n• 🛠️ Werkzeuge\n\n🎥 <a href='https://www.youtube.com/watch?v=dQw4w9WgXcQ'>Demo-Video</a>\n\n<b>Wähl was aus – los geht's!</b>",
-        "ru": "👋 <b>Йо, {name}! AZAMAT AI тут – из Казахстана!</b>\n\n<i>Да, ты в нужном месте. Картинки, видео, чат – всё есть. Не стесняйся.</i>\n\n🎥 <a href='https://www.youtube.com/watch?v=dQw4w9WgXcQ'>Демо-видео</a>\n\nВыбери категорию – погнали!",
-        "kk": "👋 <b>Йо, {name}! AZAMAT AI осында – Қазақстаннан!</b>\n\n<i>Иә, дұрыс жердесің. Суреттер, бейнелер, чат – барлығы бар. Ұялма.</i>\n\n🎥 <a href='https://www.youtube.com/watch?v=dQw4w9WgXcQ'>Бейне ролик</a>\n\nСанат таңда – кеттік!"
+        "en": "👋 <b>Yo {name}! AZAMAT AI here – from Kazakhstan!</b>\n\n<i>Yeah, you're in the right place. Images, videos, chat – I've got it all. Don't be shy.</i>\n\n<b>What you can do:</b>\n• 🎨 Images & Art\n• 🎬 Videos\n• 🎙️ Audio\n• 📝 Text & Chat\n• 🛠️ Tools\n\n🎥 Demo Video 👇\n\n<b>Pick something below – let's go!</b>",
+        "de": "👋 <b>Yo {name}! AZAMAT AI hier – aus Kasachstan!</b>\n\n<i>Ja, du bist richtig. Bilder, Videos, Chat – ich hab alles. Kein Grund schüchtern zu sein.</i>\n\n<b>Möglichkeiten:</b>\n• 🎨 Bilder & Kunst\n• 🎬 Videos\n• 🎙️ Audio\n• 📝 Text & Chat\n• 🛠️ Werkzeuge\n\n🎥 Demo-Video 👇\n\n<b>Wähl was aus – los geht's!</b>",
+        "ru": "👋 <b>Йо, {name}! AZAMAT AI тут – из Казахстана!</b>\n\n<i>Да, ты в нужном месте. Картинки, видео, чат – всё есть. Не стесняйся.</i>\n\n🎥 Демо-видео 👇\n\nВыбери категорию – погнали!",
+        "kk": "👋 <b>Йо, {name}! AZAMAT AI осында – Қазақстаннан!</b>\n\n<i>Иә, дұрыс жердесің. Суреттер, бейнелер, чат – барлығы бар. Ұялма.</i>\n\n🎥 Бейне ролик 👇\n\nСанат таңда – кеттік!"
     },
     "transparency_msg": {
         "en": "<b>🛡️ We believe in transparency</b>\n\n<i>Many bots online are full of hidden costs. With us:</i>\n• Pay per generation\n• No subscriptions\n• Use Replicate directly for more savings\n\n<i>Have fun with AZAMAT AI!</i> 🚀",
