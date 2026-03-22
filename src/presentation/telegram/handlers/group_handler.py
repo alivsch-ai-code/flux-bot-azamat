@@ -75,7 +75,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
         try:
             bot.send_message(chat_id, get_text("grp_credits_sent", lang))
             fake_msg = type("Msg", (), {"chat": type("C", (), {"id": user_id})(), "message_id": None})()
-            show_shop_logic(bot, fake_msg, db, lang, force_inline=True)
+            show_shop_logic(bot, fake_msg, db, lang, force_inline=True, group_chat_id=chat_id)
         except Exception as e:
             logger.warning("Group shop DM failed: %s", e)
             bot.send_message(chat_id, get_text("grp_credits_start_first", lang), parse_mode="HTML")
@@ -107,7 +107,9 @@ def register(bot: TeleBot, generation_service, db) -> None:
         except Exception:
             full_prompt = f"[SYSTEM]\n{system_prompt}\n\n[HISTORY]\nUser: {msg.text}\nAssistant:"
 
-        success, result = generation_service.process_request(user_id, model, full_prompt, media_files=None)
+        success, result = generation_service.process_request(
+            user_id, model, full_prompt, media_files=None, group_chat_id=chat_id
+        )
         if not success:
             bot.send_message(chat_id, str(result), parse_mode="HTML")
             return
@@ -129,7 +131,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
         try:
             bot.answer_callback_query(call.id, get_text("grp_credits_sent", lang))
             fake_msg = type("Msg", (), {"chat": type("C", (), {"id": user_id})(), "message_id": None})()
-            show_shop_logic(bot, fake_msg, db, lang, force_inline=True)
+            show_shop_logic(bot, fake_msg, db, lang, force_inline=True, group_chat_id=chat_id)
         except Exception as e:
             logger.warning("Group shop DM failed: %s", e)
             bot.answer_callback_query(call.id, get_text("grp_credits_start_first", lang))

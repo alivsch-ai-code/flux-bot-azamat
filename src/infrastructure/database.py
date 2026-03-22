@@ -112,6 +112,15 @@ class DatabaseManager:
                         user_id BIGINT PRIMARY KEY
                     )
                 ''')
+                # Gruppen-spezifische Credits pro User (Kauf über Gruppen-Button)
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS group_user_credits (
+                        user_id BIGINT NOT NULL,
+                        chat_id BIGINT NOT NULL,
+                        credits INTEGER DEFAULT 0,
+                        PRIMARY KEY (user_id, chat_id)
+                    )
+                ''')
                 
                 conn.commit()
                 conn.close()
@@ -164,6 +173,12 @@ class DatabaseManager:
                 """)
                 c.execute("""
                     CREATE TABLE IF NOT EXISTS group_greeting_attempted (user_id BIGINT PRIMARY KEY)
+                """)
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS group_user_credits (
+                        user_id BIGINT NOT NULL, chat_id BIGINT NOT NULL,
+                        credits INTEGER DEFAULT 0, PRIMARY KEY (user_id, chat_id)
+                    )
                 """)
 
                 conn.commit()
@@ -292,6 +307,79 @@ class DatabaseManager:
             c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, amount, reason))
             conn.commit()
             conn.close()
+
+    def get_group_user_credits(self, user_id: int, chat_id: int) -> int:
+        """Credits eines Users für eine bestimmte Gruppe (Kauf über Gruppen-Button)."""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute(
+                "SELECT credits FROM group_user_credits WHERE user_id = %s AND chat_id = %s",
+                (user_id, chat_id)
+            )
+            res = c.fetchone()
+            conn.close()
+            return res[0] if res else 0
+
+    def update_group_user_credits(self, user_id: int, chat_id: int, amount: int, reason: str = "usage") -> None:
+        """Credits für (user, group) hinzufügen. Nur für positive Beträge (Kauf)."""
+        if amount <= 0:
+            return
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO group_user_credits (user_id, chat_id, credits)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id, chat_id) DO UPDATE SET credits = group_user_credits.credits + %s
+            """, (user_id, chat_id, amount, amount))
+            c.execute(
+                "INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)",
+                (user_id, amount, f"{reason}_grp_{chat_id}")
+            )
+            conn.commit()
+            conn.close()
+
+    def get_effective_credits_for_group(self, user_id: int, chat_id: int) -> int:
+        """Gesamt-Credits für Gruppen-Nutzung: Gruppen-Credits + User-Credits (Fallback)."""
+        group_creds = self.get_group_user_credits(user_id, chat_id)
+        user_creds = self.get_user_credits(user_id)
+        return group_creds + user_creds
+
+    def deduct_credits_for_group(self, user_id: int, chat_id: int, amount: int, reason: str = "usage") -> bool:
+        """Zieht Credits ab: zuerst von Gruppen-Kontingent, Rest von User. Returns True wenn genug da war."""
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            c.execute(
+                "SELECT credits FROM group_user_credits WHERE user_id = %s AND chat_id = %s",
+                (user_id, chat_id)
+            )
+            row = c.fetchone()
+            group_creds = row[0] if row else 0
+            c.execute("SELECT credits FROM users WHERE user_id = %s", (user_id,))
+            urow = c.fetchone()
+            user_creds = urow[0] if urow else 0
+            if group_creds + user_creds < amount:
+                conn.close()
+                return False
+            from_group = min(amount, group_creds)
+            from_user = amount - from_group
+            if from_group > 0:
+                c.execute(
+                    "UPDATE group_user_credits SET credits = credits - %s WHERE user_id = %s AND chat_id = %s",
+                    (from_group, user_id, chat_id)
+                )
+                c.execute(
+                    "INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)",
+                    (user_id, -from_group, f"{reason}_grp_{chat_id}")
+                )
+            if from_user > 0:
+                c.execute("UPDATE users SET credits = credits - %s WHERE user_id = %s", (from_user, user_id))
+                c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, -from_user, reason))
+            conn.commit()
+            conn.close()
+            return True
 
     def get_user_settings(self, user_id):
         with self.lock:

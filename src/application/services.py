@@ -21,6 +21,7 @@ class GenerationService:
         prompt: str,
         media_files: Optional[List[MediaFile]] = None,
         no_charge: bool = False,
+        group_chat_id: Optional[int] = None,
     ):
         start = time.perf_counter()
         try:
@@ -31,7 +32,10 @@ class GenerationService:
 
             # 1. User & Credits Check (überspringen bei no_charge, z.B. Willkommens-Gruß)
             if not no_charge:
-                user_credits = self.repo.get_user_credits(user_id)
+                if group_chat_id is not None:
+                    user_credits = self.repo.get_effective_credits_for_group(user_id, group_chat_id)
+                else:
+                    user_credits = self.repo.get_user_credits(user_id)
                 if user_credits < model.cost:
                     return False, "Zu wenig Guthaben! Bitte aufladen."
 
@@ -54,12 +58,21 @@ class GenerationService:
                     pass
 
             # 3. Routing nach Modelltyp
+            def _charge(reason_suffix: str) -> bool:
+                if group_chat_id is not None:
+                    return self.repo.deduct_credits_for_group(user_id, group_chat_id, model.cost, reason=reason_suffix)
+                self.repo.update_credits(user_id, -model.cost, reason=reason_suffix)
+                return True  # User-Credits wurden oben bereits geprüft
+
             if model.key == "premium-headshot-pipeline":
                 success, result_list = self._run_premium_pipeline(prompt, first_image_path)
                 if not success:
                     return False, result_list
                 if not no_charge:
-                    self.repo.update_credits(user_id, -model.cost, reason="premium_pipeline")
+                    if group_chat_id is not None:
+                        self.repo.deduct_credits_for_group(user_id, group_chat_id, model.cost, reason="premium_pipeline")
+                    else:
+                        self.repo.update_credits(user_id, -model.cost, reason="premium_pipeline")
                 return True, result_list
 
             elif model.key == "ultimate-headshot-pipeline":
@@ -67,7 +80,10 @@ class GenerationService:
                 if not success:
                     return False, result_url
                 if not no_charge:
-                    self.repo.update_credits(user_id, -model.cost, reason="ultimate_pipeline")
+                    if group_chat_id is not None:
+                        self.repo.deduct_credits_for_group(user_id, group_chat_id, model.cost, reason="ultimate_pipeline")
+                    else:
+                        self.repo.update_credits(user_id, -model.cost, reason="ultimate_pipeline")
                 return True, result_url
 
             # --- Standard-Modelle (Unified Client) ---
@@ -75,8 +91,8 @@ class GenerationService:
                 result = self.ai.generate(model, prompt, media_files=media_files)
                 if not result.success:
                     return False, f"Fehler: {result.error}"
-                if not no_charge:
-                    self.repo.update_credits(user_id, -model.cost, reason=f"gen_{model.key}")
+                if not no_charge and not _charge(f"gen_{model.key}"):
+                    return False, "Zu wenig Guthaben! Bitte aufladen."
                 return True, result.data
 
         except Exception as e:
