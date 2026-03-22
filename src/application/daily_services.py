@@ -7,6 +7,8 @@ from datetime import datetime
 
 import feedparser
 
+from telebot import types
+
 from src.utils.strings import get_random_daily_fallback, get_text
 
 # Google News RSS für AI-Themen
@@ -149,7 +151,9 @@ class DailyService:
                     lang = settings.get("lang", "en")
                     user_name = self.db.get_user_username_or_name(user_id) or ""
                     text = get_random_daily_fallback(lang, user_name)
-                    self.bot.send_message(user_id, text, parse_mode="HTML")
+                    markup = types.InlineKeyboardMarkup()
+                    markup.add(types.InlineKeyboardButton(get_text("kb_main", lang), callback_data="nav_main"))
+                    self.bot.send_message(user_id, text, parse_mode="HTML", reply_markup=markup)
                     success += 1
                     time.sleep(0.05)
                 except Exception:

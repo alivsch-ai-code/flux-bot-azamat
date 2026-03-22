@@ -334,34 +334,34 @@ STRINGS = {
     # --- DAILY FALLBACK (AZAMAT-Style: frech, mit Namen) ---
     "daily_fallback": [
         {
-            "en": "👋 Yo {name}! AZAMAT here from Kazakhstan. Bored? Hit /start and let's make something crazy!",
-            "de": "👋 Yo {name}! AZAMAT hier, aus Kasachstan. Langweilig? /start drücken und was Crazy bauen!",
-            "ru": "👋 Йо, {name}! AZAMAT из Казахстана. Скучно? Жми /start – сделаем что-то огонь!",
-            "kk": "👋 Йо, {name}! AZAMAT Қазақстаннан. Жалықтың ба? /start басып, бір нәрсе жасайық!"
+            "en": "👋 Yo {name}! AZAMAT here from Kazakhstan. Bored? 👇 Menü below – let's make something crazy!",
+            "de": "👋 Yo {name}! AZAMAT hier, aus Kasachstan. Langweilig? 👇 Menü unten – was Crazy bauen!",
+            "ru": "👋 Йо, {name}! AZAMAT из Казахстана. Скучно? 👇 Меню внизу – сделаем что-то огонь!",
+            "kk": "👋 Йо, {name}! AZAMAT Қазақстаннан. Жалықтың ба? 👇 Мәзір төменде – бір нәрсе жасайық!"
         },
         {
-            "en": "🌟 Good morning, {name}! AZAMAT says: /start = AI magic. Don't disappoint me.",
-            "de": "🌟 Guten Morgen, {name}! AZAMAT sagt: /start = KI-Magie. Enttäusch mich nicht.",
-            "ru": "🌟 Доброе утро, {name}! AZAMAT говорит: /start = ИИ-магия. Не подведи.",
-            "kk": "🌟 Қайырлы таң, {name}! AZAMAT айтады: /start = AI сиқыры. Ұят болма."
+            "en": "🌟 Good morning, {name}! AZAMAT says: 👇 Menü = AI magic. Don't disappoint me.",
+            "de": "🌟 Guten Morgen, {name}! AZAMAT sagt: 👇 Menü unten = KI-Magie. Enttäusch mich nicht.",
+            "ru": "🌟 Доброе утро, {name}! AZAMAT говорит: 👇 Меню внизу = ИИ-магия. Не подведи.",
+            "kk": "🌟 Қайырлы таң, {name}! AZAMAT айтады: 👇 Мәзір = AI сиқыры. Ұят болма."
         },
         {
-            "en": "✨ Hey {name}! AZAMAT from Kazakhstan is waiting. /start – let's go!",
-            "de": "✨ Hey {name}! AZAMAT aus Kasachstan wartet. /start – los geht's!",
-            "ru": "✨ Эй, {name}! AZAMAT из Казахстана ждёт. /start – поехали!",
-            "kk": "✨ Эй, {name}! AZAMAT Қазақстаннан күтеді. /start – кеттік!"
+            "en": "✨ Hey {name}! AZAMAT from Kazakhstan is waiting. 👇 Menü – let's go!",
+            "de": "✨ Hey {name}! AZAMAT aus Kasachstan wartet. 👇 Menü unten – los geht's!",
+            "ru": "✨ Эй, {name}! AZAMAT из Казахстана ждёт. 👇 Меню внизу – поехали!",
+            "kk": "✨ Эй, {name}! AZAMAT Қазақстаннан күтеді. 👇 Мәзір – кеттік!"
         },
         {
-            "en": "🚀 New day, {name}. Same old you? Spice it up – /start and create something that impresses even me.",
-            "de": "🚀 Neuer Tag, {name}. Gleicher alter du? Würz auf – /start und mach was, das sogar mich beeindruckt.",
-            "ru": "🚀 Новый день, {name}. Тот же ты? Добавь перца – /start и создай то, что впечатлит даже меня.",
-            "kk": "🚀 Жаңа күн, {name}. Ескі сен? Тәуекел жаса – /start басып, маған да әсер ететін нәрсе жаса."
+            "en": "🚀 New day, {name}. Same old you? Spice it up – 👇 Menü and create something that impresses even me.",
+            "de": "🚀 Neuer Tag, {name}. Gleicher alter du? Würz auf – 👇 Menü unten und mach was, das sogar mich beeindruckt.",
+            "ru": "🚀 Новый день, {name}. Тот же ты? Добавь перца – 👇 Меню внизу и создай то, что впечатлит даже меня.",
+            "kk": "🚀 Жаңа күн, {name}. Ескі сен? Тәуекел жаса – 👇 Мәзір төменде, маған да әсер ететін нәрсе жаса."
         },
         {
-            "en": "💡 AZAMAT here, {name}. You still haven't tried /start? C'mon, don't be shy – or boring.",
-            "de": "💡 AZAMAT hier, {name}. Du hast /start noch nicht probiert? Komm schon, sei nicht schüchtern – oder langweilig.",
-            "ru": "💡 AZAMAT тут, {name}. Ты ещё не попробовал /start? Да ладно, не стесняйся – и не будь скучным.",
-            "kk": "💡 AZAMAT осында, {name}. /start әлі сынамадың ба? Жүр, ұялма – және жалықтырма."
+            "en": "💡 AZAMAT here, {name}. You still haven't tried 👇 Menü? C'mon, don't be shy – or boring.",
+            "de": "💡 AZAMAT hier, {name}. Du hast 👇 Menü unten noch nicht probiert? Komm schon, sei nicht schüchtern – oder langweilig.",
+            "ru": "💡 AZAMAT тут, {name}. Ты ещё не попробовал 👇 Меню внизу? Да ладно, не стесняйся – и не будь скучным.",
+            "kk": "💡 AZAMAT осында, {name}. 👇 Мәзір әлі сынамадың ба? Жүр, ұялма – және жалықтырма."
         },
     ]
 }
