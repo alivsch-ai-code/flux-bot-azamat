@@ -315,8 +315,8 @@ def register(bot: TeleBot, generation_service, db) -> None:
             pass
         process_webapp_action(bot, user_id, action, db)
 
-    # 1. START COMMAND
-    @bot.message_handler(commands=['start'])
+    # 1. START COMMAND (nur private Chats – Gruppen werden von group_handler bedient)
+    @bot.message_handler(commands=['start'], func=lambda m: str(m.chat.type) == 'private')
     def send_welcome(message):
         user_id = message.chat.id
         db.add_user_if_not_exists(user_id, message.from_user.username)

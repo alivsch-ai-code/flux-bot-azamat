@@ -391,6 +391,7 @@ class DatabaseManager:
         with self.lock:
             conn = self._get_connection()
             c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS group_settings (chat_id BIGINT PRIMARY KEY, language TEXT DEFAULT 'de')")
             c.execute("SELECT language FROM group_settings WHERE chat_id = %s", (chat_id,))
             res = c.fetchone()
             conn.close()
@@ -403,6 +404,7 @@ class DatabaseManager:
         with self.lock:
             conn = self._get_connection()
             c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS group_settings (chat_id BIGINT PRIMARY KEY, language TEXT DEFAULT 'de')")
             c.execute(
                 "INSERT INTO group_settings (chat_id, language) VALUES (%s, %s) ON CONFLICT (chat_id) DO UPDATE SET language = %s",
                 (chat_id, lang, lang)

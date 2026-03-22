@@ -20,7 +20,7 @@ from src.presentation.telegram.handlers.gen.ux import smart_update_status
 from src.utils.strings import get_text
 
 
-def do_start_gen_flow(bot, user_id: int, model_key: str, db, get_lang, edit_message_id: int | None = None) -> bool:
+def do_start_gen_flow(bot, user_id: int, model_key: str, db, get_lang, edit_message_id: Optional[int] = None) -> bool:
     """
     Startet den Generierungs-Flow (Context setzen, Prompt/Media anfordern).
     edit_message_id: Falls gesetzt, wird die Nachricht editiert; sonst wird neu gesendet.
