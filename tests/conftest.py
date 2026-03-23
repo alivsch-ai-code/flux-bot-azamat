@@ -1,4 +1,5 @@
 """Pytest-Konfiguration und gemeinsame Fixtures."""
+import os
 import sys
 from pathlib import Path
 
@@ -6,8 +7,6 @@ from pathlib import Path
 root = Path(__file__).resolve().parent.parent
 if str(root) not in sys.path:
     sys.path.insert(0, str(root))
-
-import os
 
 # Env-Vars VOR dem Import von Modulen setzen, die config laden
 os.environ.setdefault("TELEGRAM_TOKEN", "test_fake_token_for_ci_12345")
