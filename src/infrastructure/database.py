@@ -1,3 +1,4 @@
+import logging
 import psycopg2
 import threading
 import os
@@ -8,6 +9,7 @@ from dotenv import load_dotenv
 from src.domain.entities import User, AIModel
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     def __init__(self):
@@ -332,6 +334,7 @@ class DatabaseManager:
             c.execute("UPDATE users SET credits = credits + %s WHERE user_id = %s", (amount, user_id))
             c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, amount, reason))
             conn.commit()
+            logger.info("Transaction recorded: user_id=%s amount=%s reason=%s", user_id, amount, reason)
             conn.close()
 
     def get_group_user_credits(self, user_id: int, chat_id: int) -> int:
@@ -400,9 +403,11 @@ class DatabaseManager:
                     "INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)",
                     (user_id, -from_group, f"{reason}_grp_{chat_id}")
                 )
+                logger.info("Transaction recorded (group): user_id=%s amount=%s reason=%s", user_id, -from_group, f"{reason}_grp_{chat_id}")
             if from_user > 0:
                 c.execute("UPDATE users SET credits = credits - %s WHERE user_id = %s", (from_user, user_id))
                 c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, -from_user, reason))
+                logger.info("Transaction recorded (user): user_id=%s amount=%s reason=%s", user_id, -from_user, reason)
             conn.commit()
             conn.close()
             return True
