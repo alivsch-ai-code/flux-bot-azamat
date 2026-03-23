@@ -1,4 +1,12 @@
 """Pytest-Konfiguration und gemeinsame Fixtures."""
+import sys
+from pathlib import Path
+
+# Projekt-Root in Python-Pfad (für GitHub Actions / CI, wo src nicht installiert ist)
+root = Path(__file__).resolve().parent.parent
+if str(root) not in sys.path:
+    sys.path.insert(0, str(root))
+
 import os
 
 # Env-Vars VOR dem Import von Modulen setzen, die config laden
