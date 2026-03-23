@@ -339,17 +339,35 @@ def main():
 
     # SCHRITT G: Bot starten (mit Retry bei Timeout/409-Konflikt)
     logger.info("Bot ist bereit (Umgebung: %s)", config.APP_ENV)
+
+    # Webhook entfernen (falls aktiv) – sonst 409 bei getUpdates
+    try:
+        bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Webhook entfernt (falls vorhanden).")
+    except Exception as e:
+        logger.warning("delete_webhook fehlgeschlagen (nicht kritisch): %s", e)
+
+    # Initiale Wartezeit: alte Instanz (Deploy/Restart) soll getUpdates freigeben
+    poll_delay = int(os.getenv("TELEGRAM_POLL_START_DELAY", "25"))
+    if poll_delay > 0:
+        logger.info("Warte %ds vor erstem Polling (alte Instanz freigeben)...", poll_delay)
+        time.sleep(poll_delay)
+
+    retry_delay_409 = int(os.getenv("TELEGRAM_409_RETRY_DELAY", "30"))
     while True:
         try:
-            bot.infinity_polling(timeout=60, long_polling_timeout=30)
+            bot.infinity_polling(timeout=60, long_polling_timeout=30, skip_pending=True)
         except Exception as e:
             err_str = str(e).lower()
             if "timed out" in err_str or "timeout" in err_str:
                 logger.warning("Telegram Polling Timeout – starte in 5s neu: %s", e)
                 time.sleep(5)
             elif "409" in err_str or "conflict" in err_str or "getupdates" in err_str:
-                logger.warning("Telegram 409 Conflict (anderer Poller aktiv) – warte 15s, retry: %s", e)
-                time.sleep(15)
+                logger.warning(
+                    "Telegram 409 Conflict (anderer Poller aktiv) – warte %ds, retry: %s",
+                    retry_delay_409, e,
+                )
+                time.sleep(retry_delay_409)
             else:
                 logger.critical("Kritischer Absturz: %s", e)
                 sys.exit(1)
