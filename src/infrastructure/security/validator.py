@@ -1,3 +1,6 @@
+import re
+
+
 class InputValidator:
     """
     Zentrale Sicherheits-Validierung für User-Inputs (Prompts).
@@ -47,10 +50,9 @@ class InputValidator:
         if len(lowered) > InputValidator.MAX_PROMPT_LEN:
             return False
 
-        # Blacklist-Muster
+        # Blacklist-Muster (Regex für Varianten wie "ignore (all )?previous instructions")
         for pattern in InputValidator._FORBIDDEN_PATTERNS:
-            # einfache substring-Prüfung reicht hier
-            if pattern.lower() in lowered:
+            if re.search(pattern, lowered, re.IGNORECASE):
                 return False
 
         return True
