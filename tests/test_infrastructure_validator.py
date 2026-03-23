@@ -39,6 +39,12 @@ class TestValidateSafety:
     def test_forbidden_pattern_api_key(self):
         assert InputValidator.validate_safety("my replicate_api_token is secret") is False
 
+    def test_forbidden_pattern_password(self):
+        assert InputValidator.validate_safety("enter your password here") is False
+
+    def test_forbidden_pattern_rm_rf(self):
+        assert InputValidator.validate_safety("run rm -rf /") is False
+
     def test_too_long_unsafe(self):
         long = "a" * (InputValidator.MAX_PROMPT_LEN + 100)
         assert InputValidator.validate_safety(long) is False

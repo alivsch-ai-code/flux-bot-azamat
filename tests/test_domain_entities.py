@@ -31,6 +31,14 @@ class TestAIModel:
         assert model.cost == model.final_cost == 30
 
 
+class TestMediaType:
+    def test_enum_values(self):
+        assert MediaType.IMAGE.value == "image"
+        assert MediaType.VIDEO.value == "video"
+        assert MediaType.AUDIO.value == "audio"
+        assert MediaType.DOCUMENT.value == "document"
+
+
 class TestMediaFile:
     def test_extension_from_path(self):
         m = MediaFile(path="/tmp/image.jpg", media_type=MediaType.IMAGE)
@@ -39,6 +47,10 @@ class TestMediaFile:
     def test_extension_uppercase(self):
         m = MediaFile(path="/tmp/photo.PNG", media_type=MediaType.IMAGE)
         assert m.extension == ".png"
+
+    def test_extension_no_extension_returns_empty(self):
+        m = MediaFile(path="/tmp/noext", media_type=MediaType.IMAGE)
+        assert m.extension == ""
 
 
 class TestUser:
