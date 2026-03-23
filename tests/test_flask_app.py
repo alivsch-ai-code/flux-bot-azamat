@@ -39,3 +39,23 @@ class TestApiStrings:
     def test_strings_invalid_lang_fallback_de(self, client):
         r = client.get("/api/strings?lang=xy")
         assert r.status_code == 200
+
+
+class TestApiShopPackages:
+    """GET /api/shop_packages – Credit-Pakete für WebApp."""
+
+    def test_shop_packages_returns_200_and_list(self, client):
+        r = client.get("/api/shop_packages")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data is not None
+        assert "packages" in data
+        assert isinstance(data["packages"], list)
+
+    def test_shop_packages_structure(self, client):
+        r = client.get("/api/shop_packages")
+        data = r.get_json()
+        for pkg in data.get("packages", []):
+            assert "label" in pkg
+            assert "credits" in pkg
+            assert "price" in pkg
