@@ -62,6 +62,25 @@ Unter **Environment** diese Variablen setzen:
 
 ---
 
+## 409 Conflict („terminated by other getUpdates“)
+
+Beim Deploy/Restart kann kurzzeitig ein **409 Conflict** auftreten: Zwei Instanzen versuchen gleichzeitig zu pollen. Der Bot behebt das automatisch:
+
+- **delete_webhook** – Entfernt ggf. aktiven Webhook vor dem Polling.
+- **Initiale Wartezeit (25 s)** – Gibt der alten Instanz Zeit, `getUpdates` freizugeben.
+- **Retry bei 409** – 30 s warten, dann erneut pollen.
+
+**Env-Vars (optional):**
+
+| Variable | Standard | Beschreibung |
+|----------|----------|--------------|
+| `TELEGRAM_POLL_START_DELAY` | 25 | Sekunden warten vor erstem Polling (0 = aus) |
+| `TELEGRAM_409_RETRY_DELAY` | 30 | Sekunden warten bei 409 vor Retry |
+
+**Wenn 409 dauerhaft bleibt:** Prüfen, ob der gleiche Bot-Token noch woanders läuft (z.B. lokal, zweiter Render-Service, anderer Host).
+
+---
+
 ## Wichtige Punkte
 
 - **Port:** Render setzt `PORT` automatisch (meist 10000). Der Code verwendet bereits `os.getenv("PORT", 5000)`.
