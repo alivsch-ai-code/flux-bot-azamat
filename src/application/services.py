@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 import replicate
@@ -5,6 +6,8 @@ from PIL import Image
 from typing import List, Optional
 
 from src.domain.entities import AIModel, GenerationResult, MediaFile
+
+logger = logging.getLogger(__name__)
 from src.infrastructure.ai.replicate_concurrency import replicate_run_slot
 from src.infrastructure.metrics import record_timing
 from src.infrastructure.security.validator import InputValidator
@@ -90,13 +93,14 @@ class GenerationService:
             else:
                 result = self.ai.generate(model, prompt, media_files=media_files)
                 if not result.success:
+                    logger.warning("Generation FAILED (no charge): user_id=%s model=%s error=%s", user_id, model.key, result.error)
                     return False, f"Fehler: {result.error}"
                 if not no_charge and not _charge(f"gen_{model.key}"):
                     return False, "Zu wenig Guthaben! Bitte aufladen."
                 return True, result.data
 
         except Exception as e:
-            print(f"CRITICAL ERROR in Service: {e}")
+            logger.exception("CRITICAL ERROR in GenerationService: %s", e)
             return False, f"Systemfehler: {str(e)}"
         finally:
             record_timing("generation_service.process_request", time.perf_counter() - start)

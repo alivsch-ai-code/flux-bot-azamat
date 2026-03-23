@@ -11,7 +11,7 @@ Vollständige technische Dokumentation des Test-Setups mit exakten Pfaden, Ablä
 | **Framework** | pytest 7.4+ |
 | **Linting** | ruff (nur `tests/`) |
 | **CI** | GitHub Actions (`.github/workflows/ci.yml`) |
-| **Testanzahl** | 68 Unit-Tests in 9 Dateien |
+| **Testanzahl** | 72 Unit-Tests in 11 Dateien |
 | **Coverage** | Optional via `pytest-cov` |
 
 ---
@@ -25,7 +25,9 @@ flux-bot-azamat/
 ├── requirements.txt                   # Enthält: pytest, pytest-cov
 └── tests/
     ├── conftest.py                    # Globale Fixtures + Env-Vars
+    ├── test_database_transactions.py  # DatabaseManager update_credits → transactions
     ├── test_db_memory_repo.py         # InMemoryUserRepo
+    ├── test_generation_service_transactions.py  # GenerationService ruft update_credits bei Erfolg
     ├── test_domain_entities.py        # AIModel, MediaFile, User, GenerationResult
     ├── test_error_checks.py           # error_checks (URI, Rate-Limit, Technical)
     ├── test_flask_app.py              # Flask / und /api/strings
@@ -397,10 +399,22 @@ def client():
 | test_db_memory_repo | Keine |
 | test_error_checks | telebot (via gen/__init__.py) |
 | test_flask_app | TELEGRAM_TOKEN, REPLICATE_API_TOKEN (für main → config) |
+| test_generation_service_transactions | Keine (Mock) |
+| test_database_transactions | Mock psycopg2 |
 
 ---
 
-## 8. Bekannte Einschränkungen
+## 8. Transaktionen (Neon)
+
+Die Tests `test_generation_service_transactions` und `test_database_transactions` prüfen, dass jede erfolgreiche Generierung eine Zeile in der `transactions`-Tabelle erzeugt. Bei jeder Abbuchung loggt `database.py`:
+
+`Transaction recorded: user_id=X amount=Y reason=Z`
+
+Falls keine Transaktion erscheint: Render-Logs prüfen – ist diese Zeile vorhanden? Wenn ja, aber keine Zeile in Neon: DATABASE_URL oder Neon-Branch prüfen. Wenn nicht: anderer Code-Pfad (z.B. no_charge) oder vorzeitiger Abbruch.
+
+---
+
+## 9. Bekannte Einschränkungen
 
 - **Ruff:** Es wird nur `tests/` gelintet, nicht das gesamte Projekt.
 - **Coverage:** Es gibt keinen Mindest-Coverage-Wert; der Report dient der Orientierung.

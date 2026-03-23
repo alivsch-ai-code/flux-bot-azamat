@@ -1,3 +1,4 @@
+import logging
 import psycopg2
 import threading
 import os
@@ -8,6 +9,7 @@ from dotenv import load_dotenv
 from src.domain.entities import User, AIModel
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     def __init__(self):
@@ -326,13 +328,21 @@ class DatabaseManager:
     def update_credits(self, user_id, amount, reason="usage"):
         with self.lock:
             conn = self._get_connection()
-            c = conn.cursor()
-            # User anlegen falls nicht existiert (mit Default 150 Credits)
-            c.execute("INSERT INTO users (user_id, username) VALUES (%s, 'Unknown') ON CONFLICT (user_id) DO NOTHING", (user_id,))
-            c.execute("UPDATE users SET credits = credits + %s WHERE user_id = %s", (amount, user_id))
-            c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, amount, reason))
-            conn.commit()
-            conn.close()
+            try:
+                c = conn.cursor()
+                # User anlegen falls nicht existiert (mit Default 150 Credits)
+                c.execute("INSERT INTO users (user_id, username) VALUES (%s, 'Unknown') ON CONFLICT (user_id) DO NOTHING", (user_id,))
+                c.execute("UPDATE users SET credits = credits + %s WHERE user_id = %s", (amount, user_id))
+                c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, amount, reason))
+                conn.commit()
+                # WARNING-Level: sichtbar in Railway/Cloud-Logs; wichtiger Audit-Trail
+                logger.warning("TRANSACTION_RECORDED user_id=%s amount=%s reason=%s", user_id, amount, reason)
+            except Exception as e:
+                conn.rollback()
+                logger.exception("update_credits FAILED user_id=%s amount=%s reason=%s: %s", user_id, amount, reason, e)
+                raise
+            finally:
+                conn.close()
 
     def get_group_user_credits(self, user_id: int, chat_id: int) -> int:
         """Credits eines Users für eine bestimmte Gruppe (Kauf über Gruppen-Button)."""
@@ -400,9 +410,11 @@ class DatabaseManager:
                     "INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)",
                     (user_id, -from_group, f"{reason}_grp_{chat_id}")
                 )
+                logger.warning("TRANSACTION_RECORDED (group) user_id=%s amount=%s reason=%s", user_id, -from_group, f"{reason}_grp_{chat_id}")
             if from_user > 0:
                 c.execute("UPDATE users SET credits = credits - %s WHERE user_id = %s", (from_user, user_id))
                 c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, -from_user, reason))
+                logger.warning("TRANSACTION_RECORDED (user) user_id=%s amount=%s reason=%s", user_id, -from_user, reason)
             conn.commit()
             conn.close()
             return True
