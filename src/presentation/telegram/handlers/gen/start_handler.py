@@ -32,8 +32,9 @@ def do_start_gen_flow(bot, user_id: int, model_key: str, db, get_lang, edit_mess
     lang = get_lang(user_id)
     prev = get_context(user_id) or {}
     existing_media = prev.get("media_paths") or []
+    generation_options = prev.get("generation_options") or {}
     has_media = bool(existing_media)
-    needs_media = schema_requires_media(model.input_schema)
+    needs_media = schema_requires_media(model.input_schema, model=model)
     step = "waiting_for_prompt" if has_media else ("waiting_for_media" if needs_media else "waiting_for_prompt")
 
     set_context(
@@ -42,6 +43,7 @@ def do_start_gen_flow(bot, user_id: int, model_key: str, db, get_lang, edit_mess
             "model_key": model_key,
             "step": step,
             "media_paths": existing_media if has_media else [],
+            "generation_options": generation_options,
             "last_bot_msg_id": edit_message_id,
             "menu_path": model.menu_path,
         },

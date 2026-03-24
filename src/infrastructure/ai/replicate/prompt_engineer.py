@@ -1,5 +1,8 @@
 import os
 import replicate
+import logging
+
+logger = logging.getLogger(__name__)
 
 # --- CONFIG ---
 # Wir nutzen Gemini 2.5 Flash für maximale Geschwindigkeit und Präzision
@@ -23,7 +26,7 @@ def optimize_prompt_via_llm(user_prompt: str):
     api_token = os.getenv("REPLICATE_API_TOKEN")
     
     if not api_token:
-        print("⚠️ REPLICATE_API_TOKEN nicht gefunden.")
+        logger.warning("REPLICATE_API_TOKEN nicht gefunden.")
         return user_prompt
 
     try:
@@ -60,7 +63,7 @@ def optimize_prompt_via_llm(user_prompt: str):
         return full_response
 
     except Exception as e:
-        print(f"⚠️ Gemini Prompt Optimierung fehlgeschlagen: {e}")
+        logger.warning("Gemini Prompt Optimierung fehlgeschlagen: %s", e)
         return user_prompt # Fallback: Original zurückgeben
 
 
@@ -111,7 +114,7 @@ def summarize_conversation_via_llm(conversation_text: str) -> str:
             return _truncate_fallback(conversation_text)
         return full_response
     except Exception as e:
-        print(f"⚠️ Gemini Summarization fehlgeschlagen: {e}")
+        logger.warning("Gemini Summarization fehlgeschlagen: %s", e)
         return _truncate_fallback(conversation_text)
 
 

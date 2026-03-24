@@ -49,7 +49,14 @@ def _remove_reply_keyboard_silently(bot: TeleBot, user_id: int) -> None:
         pass
 
 
-def process_webapp_action(bot: TeleBot, user_id: int, action: str, db, is_group: bool = False) -> None:
+def process_webapp_action(
+    bot: TeleBot,
+    user_id: int,
+    action: str,
+    db,
+    is_group: bool = False,
+    payload: dict | None = None,
+) -> None:
     """Führt eine Web-App-Aktion aus. Nutzbar von web_app_data-Handler und API.
     Bei is_group=True (Gruppenchat): nur Credits + Sprache, kein volles Menü."""
     if is_group:
@@ -113,6 +120,24 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db, is_group:
             send_model_detail_view(bot, user_id, model_key, db, get_lang)
     elif action.startswith("start_gen_"):
         model_key = action.replace("start_gen_", "")
+        options = {}
+        if isinstance(payload, dict):
+            raw_opts = payload.get("generation_options")
+            if isinstance(raw_opts, dict):
+                options = raw_opts
+        if options:
+            existing = get_context(user_id) or {}
+            existing["generation_options"] = options
+            ref_images = options.get("reference_images") or []
+            if isinstance(ref_images, list) and ref_images:
+                existing["media_paths"] = [
+                    {"path": str(u), "type": "image"}
+                    for u in ref_images
+                    if isinstance(u, str) and (u.startswith("http://") or u.startswith("https://"))
+                ]
+            else:
+                existing["media_paths"] = []
+            set_context(user_id, existing)
         _remove_reply_keyboard_silently(bot, user_id)
         do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
     elif action.startswith("chat_mode_yes_"):

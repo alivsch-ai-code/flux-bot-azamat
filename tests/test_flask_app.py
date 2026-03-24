@@ -1,5 +1,6 @@
 """Tests für Flask-Endpoints (main.app)."""
 import pytest
+from unittest.mock import MagicMock
 
 
 @pytest.fixture
@@ -59,3 +60,47 @@ class TestApiShopPackages:
             assert "label" in pkg
             assert "credits" in pkg
             assert "price" in pkg
+
+
+class TestApiModelOptionsSchema:
+    """GET /api/model – generation_options_schema wird aus input_schema abgeleitet."""
+
+    def test_api_model_includes_generation_options_schema(self, client, monkeypatch):
+        import main as main_module
+        from src.domain.entities import AIModel
+
+        model = AIModel(
+            key="google-veo-3-1",
+            replicate_id="google/veo-3.1",
+            name="Veo 3.1",
+            description="Video model",
+            internal_cost=200,
+            custom_price=None,
+        )
+        model.input_schema = {
+            "properties": {
+                "duration": {"type": "integer", "default": 5, "enum": [5, 6, 7, 8]},
+                "resolution": {"type": "string", "default": "1080p", "enum": ["720p", "1080p"]},
+                "aspect_ratio": {"type": "string", "default": "16:9", "enum": ["16:9", "9:16"]},
+                "reference_images": {"type": "array"},
+                "generate_audio": {"type": "boolean", "default": True},
+            }
+        }
+
+        fake_db = MagicMock()
+        fake_db.get_model_by_key.return_value = model
+        monkeypatch.setattr(main_module, "_db_instance", fake_db)
+
+        r = client.get("/api/model?key=google-veo-3-1")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["ok"] is True
+        gos = data["generation_options_schema"]
+        assert gos["duration"]["enabled"] is True
+        assert gos["duration"]["default"] == 5
+        assert gos["resolution"]["enabled"] is True
+        assert gos["aspect_ratio"]["enabled"] is True
+        assert gos["reference_images"]["enabled"] is True
+        assert gos["generate_audio"]["enabled"] is True
+        assert "input_schema" in data
+        assert "properties" in data["input_schema"]

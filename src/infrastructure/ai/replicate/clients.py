@@ -2,6 +2,7 @@ import replicate
 import random
 import time
 from typing import List, Optional
+import logging
 
 from replicate.exceptions import ReplicateError
 
@@ -9,6 +10,9 @@ from src.domain.entities import AIModel, GenerationResult, MediaFile
 from src.domain.interfaces import AIProvider
 from src.infrastructure.ai.dynamic_adapter import DynamicSchemaAdapter
 from src.infrastructure.ai.replicate_concurrency import replicate_run_slot
+from src.presentation.telegram.handlers.gen.media_helpers import model_requires_image_for_video
+
+logger = logging.getLogger(__name__)
 
 
 class ReplicateClient(AIProvider):
@@ -31,12 +35,25 @@ class ReplicateClient(AIProvider):
         try:
             # model.input_schema ist dank database.py jetzt ein Dict
             inputs = self.adapter.build_input_payload(
-                model_schema=model.input_schema, 
+                model_schema=model.input_schema,
                 user_prompt=prompt,
                 file_urls=file_urls,
                 **kwargs
             )
-            print(f"⏳ Replicate Request für '{model.key}': {inputs}")
+
+            # Image-to-Video-only Modelle (z.B. Kling v1.6 Pro): mind. ein Bild nötig
+            if model_requires_image_for_video(model):
+                has_img = any(
+                    k in inputs and inputs[k]
+                    for k in ("start_image", "end_image", "reference_images")
+                )
+                if not has_img:
+                    return GenerationResult(
+                        success=False,
+                        error="Dieses Modell benötigt ein Startbild (Image-to-Video). Bitte lade zuerst ein Bild hoch.",
+                    )
+
+            logger.info("Replicate Request für '%s' vorbereitet", model.key)
             
         except Exception as e:
             return GenerationResult(success=False, error=f"Input Mapping Error: {str(e)}")
@@ -57,7 +74,7 @@ class ReplicateClient(AIProvider):
             except ReplicateError as e:
                 if "rate limit" in str(e).lower():
                     wait_time = (base_wait * (2 ** attempt)) + random.uniform(0, 1)
-                    print(f"⚠️ Rate Limit! Warte {wait_time:.1f}s...")
+                    logger.warning("Rate Limit! Warte %.1fs...", wait_time)
                     time.sleep(wait_time)
                     continue
                 else:

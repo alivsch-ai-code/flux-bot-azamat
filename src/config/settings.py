@@ -38,7 +38,7 @@ class Settings:
         self.APP_ENV = os.getenv("APP_ENV", "development")
         self.START_CREDITS = 50
         # Max. parallele Replicate-Predictions (replicate.run). 1 = streng nacheinander.
-        self.REPLICATE_MAX_CONCURRENT = max(5, int(os.getenv("REPLICATE_MAX_CONCURRENT", "1")))
+        self.REPLICATE_MAX_CONCURRENT = max(1, int(os.getenv("REPLICATE_MAX_CONCURRENT", "1")))
         # URL für Mini App – nur HTTPS!
         # Railway: APP_URL manuell oder RAILWAY_PUBLIC_DOMAIN; Render: RENDER_EXTERNAL_URL
         raw = os.getenv("APP_URL") or os.getenv("RENDER_EXTERNAL_URL") or ""

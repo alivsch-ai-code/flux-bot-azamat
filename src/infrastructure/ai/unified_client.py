@@ -2,6 +2,7 @@ import os
 import replicate
 import time
 from typing import List, Optional
+import logging
 
 from openai import OpenAI
 
@@ -9,6 +10,8 @@ from src.config.settings import config
 from src.domain.entities import AIModel, GenerationResult, MediaFile
 from src.infrastructure.ai.dynamic_adapter import DynamicSchemaAdapter
 from src.infrastructure.ai.replicate_concurrency import replicate_run_slot
+
+logger = logging.getLogger(__name__)
 
 
 def _is_http_url(s: str) -> bool:
@@ -82,16 +85,17 @@ class UnifiedAIClient:
         model: AIModel,
         prompt: str,
         media_files: Optional[List[MediaFile]] = None,
+        generation_params: Optional[dict] = None,
     ) -> GenerationResult:
         """
         Verteilt die Anfrage an den richtigen Provider (Replicate, OpenAI, Kling etc.)
         """
-        print(f"⏳ UnifiedClient: Starte Request für {model.name} (Provider: {model.provider})...")
+        logger.info("UnifiedClient startet Request für %s (Provider: %s)", model.name, model.provider)
         
         try:
             # --- 1. REPLICATE ---
             if model.provider == "replicate":
-                return self._run_replicate(model, prompt, media_files)
+                return self._run_replicate(model, prompt, media_files, generation_params=generation_params or {})
 
             elif model.provider == "openai":
                 img_path = _first_image_path(media_files)
@@ -114,12 +118,12 @@ class UnifiedAIClient:
                 return GenerationResult(success=False, error=f"Unbekannter Provider: {model.provider}")
 
         except Exception as e:
-            print(f"❌ API Error ({model.provider}): {e}")
+            logger.exception("API Error (%s): %s", model.provider, e)
             return GenerationResult(success=False, error=str(e))
 
     # --- PROVIDER IMPLEMENTIERUNGEN ---
 
-    def _run_replicate(self, model, prompt, media_files):
+    def _run_replicate(self, model, prompt, media_files, generation_params=None):
         with replicate_run_slot():
             file_paths = [mf.path for mf in (media_files or []) if mf.path] if media_files else []
             file_urls = file_paths
@@ -141,6 +145,20 @@ class UnifiedAIClient:
                 input_data["safety_tolerance"] = 5
             if "minimax" in (model.key or ""):
                 input_data["prompt_optimizer"] = True
+            # Optional model runtime params coming from WebApp.
+            if isinstance(generation_params, dict):
+                for k, v in generation_params.items():
+                    if v is None:
+                        continue
+                    # prompt wird ausschließlich aus Chat/Prompt-Flow gesetzt
+                    if k == "prompt":
+                        continue
+                    # Leere Listen/Strings nicht überschreiben
+                    if isinstance(v, list) and not v:
+                        continue
+                    if isinstance(v, str) and v.strip() == "":
+                        continue
+                    input_data[k] = v
             output = replicate.run(model.replicate_id, input=input_data)
 
             return self._normalize_replicate_output(output)

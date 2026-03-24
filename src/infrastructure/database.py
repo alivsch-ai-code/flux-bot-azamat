@@ -1,5 +1,6 @@
 import logging
 import psycopg2
+from psycopg2 import pool as psycopg2_pool
 import threading
 import os
 import json
@@ -11,19 +12,55 @@ from src.domain.entities import User, AIModel
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+
+class _PooledConnectionProxy:
+    """Gibt Connection beim close() an den Pool zurück."""
+
+    def __init__(self, conn, owner):
+        self._conn = conn
+        self._owner = owner
+
+    def __getattr__(self, item):
+        return getattr(self._conn, item)
+
+    def close(self):
+        self._owner._release_connection(self._conn)
+
 class DatabaseManager:
     def __init__(self):
         self.db_url = os.getenv("DATABASE_URL")
         self.lock = threading.Lock()
+        self._pool = None
         
         if self.db_url:
+            self._pool = psycopg2_pool.ThreadedConnectionPool(
+                minconn=1,
+                maxconn=int(os.getenv("DB_MAX_POOL_SIZE", "20")),
+                dsn=self.db_url,
+                sslmode="require",
+            )
             self._init_db()
             self._migrate_db()
         else:
-            print("⚠️ DATABASE_URL fehlt in .env")
+            logger.warning("DATABASE_URL fehlt in .env")
 
     def _get_connection(self):
+        if self._pool is not None:
+            conn = self._pool.getconn()
+            return _PooledConnectionProxy(conn, self)
         return psycopg2.connect(self.db_url, sslmode='require')
+
+    def _release_connection(self, conn):
+        if self._pool is not None:
+            try:
+                self._pool.putconn(conn)
+                return
+            except Exception:
+                pass
+        try:
+            conn.close()
+        except Exception:
+            pass
 
     def _init_db(self):
         with self.lock:
@@ -142,7 +179,7 @@ class DatabaseManager:
                 conn.commit()
                 conn.close()
             except Exception as e:
-                print(f"❌ DB Init Error: {e}")
+                logger.exception("DB Init Error: %s", e)
 
     def _migrate_db(self):
         """Fügt neue Spalten hinzu, falls sie in alten Tabellen fehlen."""
@@ -211,7 +248,7 @@ class DatabaseManager:
 
                 conn.commit()
             except Exception as e:
-                print(f"⚠️ Migration Warning: {e}")
+                logger.warning("Migration Warning: %s", e)
                 conn.rollback()
             finally:
                 conn.close()
@@ -527,7 +564,7 @@ class DatabaseManager:
                 conn.commit()
                 conn.close()
             except Exception as e:
-                print(f"⚠️ add_group_if_not_exists: {e}")
+                logger.warning("add_group_if_not_exists failed: %s", e)
 
     def get_all_tracked_groups(self) -> list:
         """Alle bekannten Gruppen-Chat-IDs (group_settings)."""
@@ -571,7 +608,7 @@ class DatabaseManager:
                 conn.commit()
                 conn.close()
             except Exception as e:
-                print(f"⚠️ increment_azamat_random_count: {e}")
+                logger.warning("increment_azamat_random_count failed: %s", e)
 
     def get_group_language(self, chat_id: int) -> str:
         """Sprache für eine Gruppe. Default: en."""
@@ -703,7 +740,7 @@ class DatabaseManager:
                 conn.commit()
                 conn.close()
             except Exception as e:
-                print(f"⚠️ mark_azamat_greeting_sent: {e}")
+                logger.warning("mark_azamat_greeting_sent failed: %s", e)
 
     def get_user_username_or_name(self, user_id: int) -> str:
         """Holt username oder user_id als Fallback für Begrüßungen."""
@@ -732,7 +769,7 @@ class DatabaseManager:
                 conn.commit()
                 conn.close()
             except Exception as e:
-                print(f"⚠️ Fehler beim Speichern von generation_error: {e}")
+                logger.warning("Fehler beim Speichern von generation_error: %s", e)
 
     def cleanup_old_generation_errors(self):
         """Löscht Einträge älter als 7 Tage."""
@@ -745,9 +782,9 @@ class DatabaseManager:
                 conn.commit()
                 conn.close()
                 if deleted:
-                    print(f"🧹 generation_errors: {deleted} Einträge älter als 7 Tage gelöscht.")
+                    logger.info("generation_errors cleanup: %s Einträge älter als 7 Tage gelöscht.", deleted)
             except Exception as e:
-                print(f"⚠️ generation_errors Cleanup: {e}")
+                logger.warning("generation_errors Cleanup failed: %s", e)
 
     # --- CHAT SESSIONS (eine Zeile pro User+Modell) ---
 
