@@ -82,3 +82,75 @@ def test_once_off_writes_user_and_assistant_to_chat_history(monkeypatch):
     assert "Hello" in sent_prompt
     assert "Assistant:" in sent_prompt
 
+
+def test_persistent_only_appends_assistant(monkeypatch):
+    from src.presentation.telegram.handlers.gen import runner as runner_module
+
+    bot = MagicMock()
+    bot.send_chat_action = MagicMock()
+    bot.delete_message = MagicMock()
+
+    monkeypatch.setattr(runner_module, "parse_and_deliver", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner_module, "smart_update_status", lambda *args, **kwargs: 1)
+    monkeypatch.setattr(runner_module, "get_context", lambda _uid: {})
+    monkeypatch.setattr(runner_module, "get_random_tip", lambda _lang: "tip")
+
+    def fake_get_text(key, _lang):
+        return "{tip}" if key == "status_generating" else "OK"
+
+    monkeypatch.setattr(runner_module, "get_text", fake_get_text)
+
+    # In der persistenten Chat-Logik wurde der User bereits hinzugefügt.
+    # Wir simulieren, dass in der DB schon eine User-Message existiert.
+    history = [
+        {"role": "user", "content": "Hello", "user_name": "Alice"},
+    ]
+
+    def fake_get_chat_session(_uid, _model_key):
+        return list(history)
+
+    def fake_save_chat_session(_uid, _model_key, messages):
+        nonlocal history
+        history = list(messages)
+
+    db = MagicMock()
+    model = MagicMock()
+    model.type = ["text"]
+    model.custom_price = None
+    model.internal_cost = 1
+    model.replicate_id = ""
+    model.key = "m1"
+    model.menu_path = "root"
+    model.name = "Test model"
+    model.is_active = True
+    db.get_model_by_key.return_value = model
+    db.get_user_credits.return_value = 10
+    db.get_fallback_model.return_value = None
+    db.get_chat_session.side_effect = fake_get_chat_session
+    db.save_chat_session = MagicMock(side_effect=fake_save_chat_session)
+    db.get_user_username_or_name.return_value = "Alice"
+
+    generation_service = MagicMock()
+    generation_service.process_request.return_value = (True, "assistant answer")
+
+    run_generation = runner_module.create_run_generation(bot, db, generation_service, lambda _uid: "de")
+
+    prebuilt_prompt = "PREBUILT HISTORY PROMPT"
+    run_generation(
+        user_id=123,
+        model_key="m1",
+        prompt=prebuilt_prompt,
+        media_files=None,
+        is_chat=True,
+        chat_history_mode="persistent",
+        chat_user_name="Alice",
+    )
+
+    # Persistent: nur Assistant wird hinzugefügt (kein weiteres User-Duplizieren).
+    assert any(m.get("role") == "user" and m.get("content") == "Hello" for m in history)
+    assert any(m.get("role") == "assistant" and m.get("content") == "assistant answer" for m in history)
+    assert len([m for m in history if m.get("role") == "user" and m.get("content") == "Hello"]) == 1
+
+    sent_prompt = generation_service.process_request.call_args_list[0].args[2]
+    assert sent_prompt == prebuilt_prompt
+
