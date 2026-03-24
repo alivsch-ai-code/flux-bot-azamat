@@ -28,7 +28,10 @@ from src.presentation.telegram.handlers.gen import (
     parse_and_deliver,
     smart_update_status,
 )
-from src.presentation.telegram.handlers.gen.chat_sessions import append_with_summary_if_needed
+from src.presentation.telegram.handlers.gen.chat_sessions import (
+    append_with_summary_if_needed,
+    build_chat_prompt_from_messages,
+)
 from src.utils.gimmicks import get_random_tip
 from src.utils.strings import get_text
 
@@ -41,7 +44,15 @@ def create_run_generation(bot, db, generation_service, get_lang):
     Gibt eine Funktion (user_id, model_key, prompt, media_files, is_chat=False) zurück.
     """
 
-    def run_generation(user_id, model_key, prompt, media_files, is_chat=False):
+    def run_generation(
+        user_id,
+        model_key,
+        prompt,
+        media_files,
+        is_chat=False,
+        chat_history_mode: str | None = None,
+        chat_user_name: str | None = None,
+    ):
         ctx = get_context(user_id)
         lang = get_lang(user_id)
         model = db.get_model_by_key(model_key)
@@ -52,6 +63,34 @@ def create_run_generation(bot, db, generation_service, get_lang):
             base_cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
             generation_options = (ctx or {}).get("generation_options") or {}
             cost = base_cost
+            is_text_model = bool(model.type and "text" in model.type)
+            prompt_for_generation = prompt
+
+            # once_off: History berücksichtigen und User-Nachricht in die DB schreiben.
+            if chat_history_mode == "once_off" and is_text_model:
+                try:
+                    user_name = (
+                        chat_user_name
+                        or getattr(db, "get_user_username_or_name", lambda _u: None)(user_id)
+                        or "User"
+                    )
+                    messages = append_with_summary_if_needed(
+                        db,
+                        user_id,
+                        model_key,
+                        {"role": "user", "content": prompt or "", "user_name": user_name},
+                    )
+                    sys_prompt = get_text("azamat_private_chat_prompt", lang)
+                    sys_prompt = f"{sys_prompt}\n\n{get_text('azamat_user_name_hint', lang).format(name=user_name)}"
+                    prompt_for_generation = build_chat_prompt_from_messages(
+                        messages,
+                        prompt or "",
+                        system_prompt=sys_prompt,
+                        current_user_name=user_name,
+                    )
+                except Exception:
+                    # Fallback: ohne History generieren (trotzdem antworten)
+                    prompt_for_generation = prompt
             # Veo 3.1 pricing: base price is for 5s. Longer duration scales linearly.
             rid = (model.replicate_id or "").lower()
             if "google/veo-3.1" in rid:
@@ -65,12 +104,12 @@ def create_run_generation(bot, db, generation_service, get_lang):
                 smart_update_status(bot, user_id, get_text("err_no_credits", lang), ctx)
                 return
             wait_msg_id = smart_update_status(bot, user_id, get_text("status_generating", lang).format(tip=get_random_tip(lang)), ctx)
-            bot.send_chat_action(user_id, 'typing' if is_chat else 'upload_photo')
+            bot.send_chat_action(user_id, 'typing' if (is_chat or is_text_model) else 'upload_photo')
 
             success, result = generation_service.process_request(
                 user_id,
                 model,
-                prompt,
+                prompt_for_generation,
                 media_files,
                 generation_params=generation_options,
                 charge_cost=cost,
@@ -83,7 +122,7 @@ def create_run_generation(bot, db, generation_service, get_lang):
                 success, result = generation_service.process_request(
                     user_id,
                     model,
-                    prompt,
+                    prompt_for_generation,
                     media_files,
                     generation_params=generation_options,
                     charge_cost=cost,
@@ -97,7 +136,7 @@ def create_run_generation(bot, db, generation_service, get_lang):
                     success, result = generation_service.process_request(
                         user_id,
                         fallback_model,
-                        prompt,
+                        prompt_for_generation,
                         media_files,
                         generation_params=generation_options,
                         charge_cost=cost,
@@ -113,16 +152,20 @@ def create_run_generation(bot, db, generation_service, get_lang):
             if success:
                 parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, prompt, keyboards)
 
-                # Chat-Historie für Textmodelle persistent speichern (mit Auto-Summary)
-                if is_chat and model.type and "text" in model.type:
+                # Chat-Historie für Textmodelle speichern.
+                # - persistent: User wurde vorher bereits in der Chat-Flow-Logik eingefügt
+                #   (wir speichern hier nur Assistant).
+                # - once_off: User wird hier oben eingefügt und wir speichern hier auch Assistant.
+                if model.type and "text" in model.type and chat_history_mode in ("once_off", "persistent"):
                     try:
                         raw = result[0] if isinstance(result, list) and result else result
-                        if isinstance(raw, str):
+                        assistant_text = raw if isinstance(raw, str) else str(raw)
+                        if assistant_text.strip():
                             append_with_summary_if_needed(
                                 db,
                                 user_id,
                                 model_key,
-                                {"role": "assistant", "content": raw},
+                                {"role": "assistant", "content": assistant_text},
                             )
                     except Exception:
                         pass

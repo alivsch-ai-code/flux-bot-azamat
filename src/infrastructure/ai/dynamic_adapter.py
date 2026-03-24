@@ -1,6 +1,5 @@
-import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 class DynamicSchemaAdapter:
     def __init__(self):
@@ -168,9 +167,10 @@ class DynamicSchemaAdapter:
         
         # A. Liste
         if isinstance(raw_output, list):
-            if not raw_output: return None
+            if not raw_output:
+                return None
             if isinstance(raw_output[0], str):
-                return raw_output[0] 
+                return raw_output[0]
             return raw_output[0]
 
         # B. Dictionary

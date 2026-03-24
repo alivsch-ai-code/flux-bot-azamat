@@ -5,7 +5,7 @@ import replicate
 from PIL import Image
 from typing import List, Optional
 
-from src.domain.entities import AIModel, GenerationResult, MediaFile
+from src.domain.entities import AIModel, MediaFile
 
 logger = logging.getLogger(__name__)
 from src.infrastructure.ai.replicate_concurrency import replicate_run_slot
@@ -200,7 +200,8 @@ class GenerationService:
         
         # 1. Bild generieren
         res_step1 = self.ai.generate(flux_model, user_prompt, media_files=None)
-        if not res_step1.success: return False, res_step1.error
+        if not res_step1.success:
+            return False, res_step1.error
         base_url = str(res_step1.data)
         
         time.sleep(5) 

@@ -1,4 +1,6 @@
 """Tests für Flask-Endpoints (main.app)."""
+import io
+
 import pytest
 from unittest.mock import MagicMock
 
@@ -104,3 +106,86 @@ class TestApiModelOptionsSchema:
         assert gos["generate_audio"]["enabled"] is True
         assert "input_schema" in data
         assert "properties" in data["input_schema"]
+
+
+class TestWebappUploadReference:
+    """POST /api/webapp_upload_reference – Multipart, init_data, Replicate-Upload."""
+
+    def test_no_db_returns_400(self, client):
+        import main as main_module
+
+        prev = main_module._db_instance
+        main_module._db_instance = None
+        try:
+            r = client.post(
+                "/api/webapp_upload_reference",
+                data={"init_data": "x"},
+                content_type="multipart/form-data",
+            )
+            assert r.status_code == 400
+            assert r.get_json()["error"] == "no_db"
+        finally:
+            main_module._db_instance = prev
+
+    def test_missing_init_data(self, client, monkeypatch):
+        import main as main_module
+
+        monkeypatch.setattr(main_module, "_db_instance", MagicMock())
+        r = client.post("/api/webapp_upload_reference", data={}, content_type="multipart/form-data")
+        assert r.status_code == 400
+        body = r.get_json()
+        assert body["ok"] is False
+        assert body["error"] == "missing_init_data"
+
+    def test_no_files(self, client, monkeypatch):
+        import main as main_module
+
+        monkeypatch.setattr(main_module, "_db_instance", MagicMock())
+        monkeypatch.setattr(
+            "src.presentation.telegram.handlers.menu_handler._is_webapp_mode",
+            lambda _db: True,
+        )
+        monkeypatch.setattr(
+            "src.utils.telegram_init_data.validate_init_data",
+            lambda _d, _t: 1,
+        )
+        r = client.post(
+            "/api/webapp_upload_reference",
+            data={"init_data": "ok"},
+            content_type="multipart/form-data",
+        )
+        assert r.get_json()["error"] == "no_files"
+
+    def test_success_returns_urls(self, client, monkeypatch):
+        import main as main_module
+
+        monkeypatch.setattr(main_module, "_db_instance", MagicMock())
+        monkeypatch.setattr(
+            "src.presentation.telegram.handlers.menu_handler._is_webapp_mode",
+            lambda _db: True,
+        )
+        monkeypatch.setattr(
+            "src.utils.telegram_init_data.validate_init_data",
+            lambda _d, _t: 1,
+        )
+
+        fake_resp = MagicMock()
+        fake_resp.url = "https://replicate.delivery/presigned/test.jpg"
+        fake_client = MagicMock()
+        fake_client.files.create.return_value = fake_resp
+
+        monkeypatch.setattr("replicate.Client", lambda **kwargs: fake_client)
+
+        r = client.post(
+            "/api/webapp_upload_reference",
+            data={
+                "init_data": "ok",
+                "files": (io.BytesIO(b"\xff\xd8\xff\xe0"), "shot.jpg"),
+            },
+            content_type="multipart/form-data",
+        )
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["ok"] is True
+        assert data["urls"] == ["https://replicate.delivery/presigned/test.jpg"]
+        fake_client.files.create.assert_called_once()

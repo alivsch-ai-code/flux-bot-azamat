@@ -215,6 +215,85 @@ def api_model():
         return jsonify(ok=False, error=str(e)), 500
 
 
+def _replicate_file_url(resp) -> str | None:
+    url = getattr(resp, "url", None)
+    if not url and hasattr(resp, "urls") and isinstance(resp.urls, dict):
+        url = resp.urls.get("get")
+    return str(url) if url else None
+
+
+@app.route("/api/webapp_upload_reference", methods=["POST"])
+def api_webapp_upload_reference():
+    """
+    WebApp: Referenzbilder als Multipart hochladen → Replicate Files API → HTTPS-URLs
+    für generation_options.reference_images (wie manuell eingetragene URLs).
+    """
+    max_bytes = 10 * 1024 * 1024
+    max_files = 10
+    allowed_mime = frozenset({"image/jpeg", "image/png", "image/webp"})
+
+    if _db_instance is None:
+        return jsonify(ok=False, error="no_db"), 400
+    try:
+        import replicate
+        from src.utils.telegram_init_data import validate_init_data
+        from src.presentation.telegram.handlers.menu_handler import _is_webapp_mode
+
+        init_data = request.form.get("init_data", "")
+        if not init_data:
+            return jsonify(ok=False, error="missing_init_data"), 400
+        if not _is_webapp_mode(_db_instance):
+            return jsonify(ok=False, error="webapp_disabled"), 400
+
+        user_id = validate_init_data(init_data, config.TELEGRAM_TOKEN)
+        if not user_id:
+            return jsonify(ok=False, error="invalid_init_data"), 403
+
+        files = request.files.getlist("files")
+        if not files:
+            one = request.files.get("file")
+            files = [one] if one and getattr(one, "filename", None) else []
+        files = [f for f in files if f and getattr(f, "filename", None)]
+        if not files:
+            return jsonify(ok=False, error="no_files"), 400
+        if len(files) > max_files:
+            return jsonify(ok=False, error="too_many_files"), 400
+
+        def _mime_for_upload(fs) -> str:
+            ct = (fs.content_type or "").split(";")[0].strip().lower()
+            if ct in allowed_mime:
+                return ct
+            ext = (os.path.splitext(fs.filename or "")[1] or "").lower()
+            if ext in (".jpg", ".jpeg"):
+                return "image/jpeg"
+            if ext == ".png":
+                return "image/png"
+            if ext == ".webp":
+                return "image/webp"
+            return ""
+
+        client = replicate.Client(api_token=config.REPLICATE_API_TOKEN)
+        urls: list[str] = []
+        for fs in files:
+            raw = fs.read()
+            if len(raw) > max_bytes:
+                return jsonify(ok=False, error="file_too_large"), 400
+            mime = _mime_for_upload(fs)
+            if mime not in allowed_mime:
+                return jsonify(ok=False, error="invalid_type"), 400
+            fn = os.path.basename(fs.filename or "image.jpg") or "image.jpg"
+            resp = client.files.create(content=raw, filename=fn, type=mime)
+            url = _replicate_file_url(resp)
+            if not url or not (url.startswith("http://") or url.startswith("https://")):
+                return jsonify(ok=False, error="upload_failed"), 500
+            urls.append(url)
+
+        return jsonify(ok=True, urls=urls)
+    except Exception as e:
+        logger.exception("webapp_upload_reference error: %s", e)
+        return jsonify(ok=False, error=str(e)), 500
+
+
 @app.route('/api/shop_packages')
 def api_shop_packages():
     """WebApp: Credit-Pakete für den Shop."""

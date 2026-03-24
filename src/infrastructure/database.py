@@ -751,7 +751,7 @@ class DatabaseManager:
                 c.execute("SELECT username FROM users WHERE user_id = %s", (user_id,))
                 row = c.fetchone()
                 conn.close()
-                return (row[0] or f"User") if row else "User"
+                return (row[0] or "User") if row else "User"
             except Exception:
                 return "User"
 

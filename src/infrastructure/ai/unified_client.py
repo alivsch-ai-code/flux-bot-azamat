@@ -1,12 +1,10 @@
 import os
 import replicate
-import time
 from typing import List, Optional
 import logging
 
 from openai import OpenAI
 
-from src.config.settings import config
 from src.domain.entities import AIModel, GenerationResult, MediaFile
 from src.infrastructure.ai.dynamic_adapter import DynamicSchemaAdapter
 from src.infrastructure.ai.replicate_concurrency import replicate_run_slot

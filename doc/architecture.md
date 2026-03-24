@@ -69,3 +69,10 @@ TG_Server -- "Sendet Update Webhook/Polling" --> BotInstance[🤖 Deine Bot Inst
     class GenService application;
     class Interfaces,Entities,note_interfaces domain;
     class InMemoryDB,ReplicateClient infrastructure;
+
+---
+
+## Weiterführende Doku
+
+- **[use_cases_und_schnittstellen.md](use_cases_und_schnittstellen.md)** — Anwendungsfälle, Telegram-/HTTP-Schnittstellen, `GenerationService`, Chat-Debounce-API.
+- **[README](../README.md)** — Quick Start, Konfiguration, kompakte Use-Case- und Interface-Tabellen.

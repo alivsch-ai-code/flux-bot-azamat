@@ -1,5 +1,4 @@
 import os
-import random
 
 # --- PROMPT VORLAGEN FÜR VARIATION ---
 def get_premium_prompts(user_prompt):
@@ -55,22 +54,28 @@ def prepare_flux_base_input(full_prompt: str, image_url: str = None):
 # --- STANDARD ADAPTER (Bleiben erhalten) ---
 def prepare_standard_input(prompt: str, image_url: str = None):
     inputs = {}
-    if prompt and prompt != "Upscaling...": inputs["prompt"] = prompt
+    if prompt and prompt != "Upscaling...":
+        inputs["prompt"] = prompt
     if image_url:
-        if image_url.startswith("http"): inputs['image'] = image_url
-        elif os.path.exists(image_url): inputs['image'] = open(image_url, "rb")
+        if image_url.startswith("http"):
+            inputs["image"] = image_url
+        elif os.path.exists(image_url):
+            inputs["image"] = open(image_url, "rb")
     return inputs
 
 def prepare_upscale_esrgan_input(prompt: str, image_url: str = None):
     inputs = {"scale": 4, "face_enhance": True}
-    if image_url and os.path.exists(image_url): inputs['image'] = open(image_url, "rb")
+    if image_url and os.path.exists(image_url):
+        inputs["image"] = open(image_url, "rb")
     return inputs
 
 def prepare_gemini_input(prompt: str, image_url: str = None):
     inputs = {"prompt": prompt, "aspect_ratio": "match_input_image", "output_format": "jpg"}
     if image_url:
-        if image_url.startswith("http"): inputs['image_input'] = [image_url]
-        elif os.path.exists(image_url): inputs['image_input'] = [open(image_url, "rb")]
+        if image_url.startswith("http"):
+            inputs["image_input"] = [image_url]
+        elif os.path.exists(image_url):
+            inputs["image_input"] = [open(image_url, "rb")]
     return inputs
 
 def prepare_gemini_flash(prompt: str, image_url: str = None):
@@ -100,7 +105,7 @@ def prepare_gemini_flash_image(prompt: str, image_url: str = None):
     inputs = {
         "prompt": prompt,
         "image_input": [], # Initialisiere als leere Liste
-        "aspect_ration": "match_input_image",
+        "aspect_ratio": "match_input_image",
         "output_format": "jpg"
     }
 
@@ -117,8 +122,10 @@ def prepare_gemini_flash_image(prompt: str, image_url: str = None):
 def prepare_minimax_input(prompt: str, image_url: str = None):
     inputs = {"prompt": prompt, "prompt_optimizer": True}
     if image_url:
-        if image_url.startswith("http"): inputs['first_frame_image'] = image_url
-        elif os.path.exists(image_url): inputs['first_frame_image'] = open(image_url, "rb")
+        if image_url.startswith("http"):
+            inputs["first_frame_image"] = image_url
+        elif os.path.exists(image_url):
+            inputs["first_frame_image"] = open(image_url, "rb")
     return inputs
 
 # --- MAPPING ---
@@ -138,5 +145,6 @@ def get_input_params(model_id: str, prompt: str, image_url: str = None):
     
     # Der Fehler passierte hier, weil adapter_func mit 2 Args aufgerufen wurde,
     # aber prepare_flux_base_input nur 1 Arg akzeptierte. Jetzt ist es gefixt!
-    if adapter_func: return adapter_func(prompt, image_url)
+    if adapter_func:
+        return adapter_func(prompt, image_url)
     return prepare_standard_input(prompt, image_url)

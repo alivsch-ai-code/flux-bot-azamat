@@ -1,0 +1,5 @@
+# Imports nach sys.path / load_dotenv — absichtlich nicht ganz oben
+[lint.per-file-ignores]
+"main.py" = ["E402"]
+"src/application/services.py" = ["E402"]
+"src/tools/main_gui.py" = ["E402"]

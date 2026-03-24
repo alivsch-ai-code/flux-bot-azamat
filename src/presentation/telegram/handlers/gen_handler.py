@@ -23,6 +23,7 @@ GENUTZTE MODULE (handlers/gen/):
 
 from telebot import TeleBot
 
+from src.presentation.telegram.handlers.menu_handler import set_webapp_run_generation
 from src.presentation.telegram.handlers.gen.nav_handlers import register_nav_handlers
 from src.presentation.telegram.handlers.gen.start_handler import register_start_gen_handler
 from src.presentation.telegram.handlers.gen.runner import create_run_generation
@@ -37,6 +38,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
         return db.get_user_settings(uid)["lang"]
 
     run_generation = create_run_generation(bot, db, generation_service, get_lang)
+    set_webapp_run_generation(run_generation)
 
     register_nav_handlers(bot, db, get_lang)
     register_start_gen_handler(bot, db, get_lang)
