@@ -570,8 +570,8 @@ def client():
 | Getestet | Nicht getestet (z.B. wegen externer Dependencies) |
 |----------|---------------------------------------------------|
 | utils (strings, gimmicks, media_utils, temp_cleanup, telegram_init_data) | main.py (nur app-Flask), handlers (nur common, error_checks) |
-| domain.entities, infrastructure.validator, metrics, db.memory_repo | replicate.clients, unified_client, kling_client, sonauto_client |
-| application.services (GenerationService) | payment_handler, menu_handler, gen_handlers |
+| domain.entities, infrastructure.validator, metrics, db.memory_repo | replicate.clients, kling_client, sonauto_client |
+| application.services (GenerationService), unified_client (generation_params) | payment_handler, menu_handler, gen_handlers |
 | config.settings, dynamic_adapter, prompt_engineer._truncate_fallback | database.DatabaseManager (nur update_credits gemockt) |
 
 ---

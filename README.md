@@ -1,6 +1,6 @@
 # 🤖 AZAMAT AI Hub — All-in-One Telegram Bot for AI Image, Video & Audio Generation
 
-> **The ultimate Telegram bot** for generating AI images, videos, music, and chat — powered by **Flux**, **DALL·E 3**, **Kling**, **HunyuanVideo**, **Gemini**, and more. One bot, dozens of models, Telegram Stars payments.
+> **The ultimate Telegram bot** for generating AI images, videos, music, and chat — powered by **Flux**, **DALL·E 3**, **Kling (via Replicate models)**, **HunyuanVideo**, **Gemini**, and more. One bot, dozens of models, Telegram Stars payments.
 
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
 [![Telegram](https://img.shields.io/badge/Telegram-Bot-2CA5E0?logo=telegram)](https://core.telegram.org/bots)
@@ -23,7 +23,7 @@ Perfect for developers who want a **ready-made AI bot** for Telegram, or anyone 
 | Feature | Description |
 |---------|-------------|
 | 🎨 **AI Image Generation** | **Flux**, **Flux Pro**, **DALL·E 3**, **Stable Diffusion** — text-to-image, image-to-image, inpainting |
-| 🎬 **AI Video Generation** | **Kling**, **Wan**, **HunyuanVideo** — create videos from prompts or images |
+| 🎬 **AI Video Generation** | **Kling (via Replicate model integrations)**, **Wan**, **HunyuanVideo** — create videos from prompts or images |
 | 🎙️ **AI Audio & Voice** | Music generation, voice cloning, text-to-speech |
 | 💬 **AI Chat & LLMs** | **Gemini** for group chat, full LLM support for direct messages |
 | 🌐 **Telegram Mini App** | Beautiful in-app web interface — browse models, buy credits, manage settings |
