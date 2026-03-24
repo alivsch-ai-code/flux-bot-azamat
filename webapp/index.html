@@ -144,6 +144,13 @@
     }
     .gen-row textarea { min-height: 70px; resize: vertical; }
     .gen-hint { font-size: 0.75rem; color: rgba(255,255,255,0.55); margin-top: -4px; margin-bottom: 6px; }
+    .ref-upload-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .btn-ref-upload {
+      padding: 8px 14px; font-size: 0.85rem; border-radius: 8px; cursor: pointer;
+      background: rgba(255,255,255,0.12); color: inherit; border: 1px solid rgba(255,255,255,0.2);
+    }
+    .btn-ref-upload:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-ref-upload:active:not(:disabled) { opacity: 0.85; }
   </style>
 </head>
 <body>
@@ -688,8 +695,13 @@
                 </div>` : ''}
                 ${opt.reference_images && opt.reference_images.enabled ? `
                 <div class="gen-row">
-                  <label for="gen-reference-images">Reference Images (URLs, optional)</label>
-                  <textarea id="gen-reference-images" placeholder="https://...&#10;https://..."></textarea>
+                  <label for="gen-reference-images">Reference Images (URLs oder Upload)</label>
+                  <div class="ref-upload-toolbar">
+                    <input type="file" id="gen-reference-file" accept="image/jpeg,image/png,image/webp" multiple style="position:absolute;width:0;height:0;opacity:0;pointer-events:none">
+                    <button type="button" class="btn-ref-upload" id="gen-reference-upload-btn">📎 Bilder hochladen</button>
+                    <span id="gen-reference-upload-status" class="gen-hint" style="display:none;margin:0"></span>
+                  </div>
+                  <textarea id="gen-reference-images" placeholder="https://...&#10;oder URLs erscheinen nach Upload hier"></textarea>
                 </div>` : ''}
                 ${opt.generate_audio && opt.generate_audio.enabled ? `
                 <div class="gen-row">
@@ -736,6 +748,53 @@
               };
               durEl.addEventListener('change', updateCost);
               updateCost();
+            }
+            if (opt.reference_images && opt.reference_images.enabled) {
+              const refFile = document.getElementById('gen-reference-file');
+              const refBtn = document.getElementById('gen-reference-upload-btn');
+              const refStatus = document.getElementById('gen-reference-upload-status');
+              refBtn && refBtn.addEventListener('click', () => { refFile && refFile.click(); });
+              refFile && refFile.addEventListener('change', () => {
+                if (!refFile.files || !refFile.files.length) return;
+                const initData = tg && tg.initData;
+                if (!initData) {
+                  showError('Kein Telegram-Kontext (initData).');
+                  refFile.value = '';
+                  return;
+                }
+                const fd = new FormData();
+                fd.append('init_data', initData);
+                for (let i = 0; i < refFile.files.length; i++) fd.append('files', refFile.files[i]);
+                refBtn.disabled = true;
+                if (refStatus) { refStatus.style.display = 'inline'; refStatus.textContent = '⏳ Upload…'; }
+                fetch(API_BASE + '/api/webapp_upload_reference', { method: 'POST', body: fd })
+                  .then(r => r.json())
+                  .then(res => {
+                    refBtn.disabled = false;
+                    refFile.value = '';
+                    if (!res.ok || !Array.isArray(res.urls)) {
+                      if (refStatus) refStatus.textContent = res.error || 'Fehler';
+                      showError(res.error || 'Upload fehlgeschlagen');
+                      return;
+                    }
+                    const ta = document.getElementById('gen-reference-images');
+                    if (ta) {
+                      const cur = (ta.value || '').trim();
+                      const add = res.urls.join('\n');
+                      ta.value = cur ? cur + '\n' + add : add;
+                    }
+                    if (refStatus) {
+                      refStatus.textContent = '✓ ' + res.urls.length + ' URL(s)';
+                      setTimeout(() => { refStatus.style.display = 'none'; }, 2800);
+                    }
+                  })
+                  .catch(() => {
+                    refBtn.disabled = false;
+                    refFile.value = '';
+                    if (refStatus) refStatus.textContent = '';
+                    showError('Verbindungsfehler');
+                  });
+              });
             }
           }
           document.getElementById('detail-content').querySelectorAll('[data-action]').forEach(btn => {
