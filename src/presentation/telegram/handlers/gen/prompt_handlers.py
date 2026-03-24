@@ -59,9 +59,26 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                     sys_prompt = get_text("azamat_private_chat_prompt", lang)
                     sys_prompt = f"{sys_prompt}\n\n{get_text('azamat_user_name_hint', lang).format(name=user_name)}"
                     full_prompt = build_chat_prompt_from_messages(messages, msg.text, system_prompt=sys_prompt, current_user_name=user_name)
-                    run_generation(user_id, model_key, full_prompt, media_files=None, is_chat=True)
+                    run_generation(
+                        user_id,
+                        model_key,
+                        full_prompt,
+                        media_files=None,
+                        is_chat=True,
+                        chat_history_mode="persistent",
+                        chat_user_name=user_name,
+                    )
                 except Exception:
-                    run_generation(user_id, model_key, msg.text, media_files=None, is_chat=True)
+                    # Wenn History-Build scheitert: trotzdem antworten und History via runner neu aufbauen.
+                    run_generation(
+                        user_id,
+                        model_key,
+                        msg.text,
+                        media_files=None,
+                        is_chat=True,
+                        chat_history_mode="once_off",
+                        chat_user_name=(msg.from_user and msg.from_user.first_name) or "User",
+                    )
             else:
                 run_generation(user_id, model_key, msg.text, media_files=None, is_chat=True)
             return
@@ -85,13 +102,24 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                     sys_prompt = get_text("azamat_private_chat_prompt", lang)
                     sys_prompt = f"{sys_prompt}\n\n{get_text('azamat_user_name_hint', lang).format(name=user_name)}"
                     full_prompt = build_chat_prompt_from_messages(messages, msg.text, system_prompt=sys_prompt, current_user_name=user_name)
-                    run_generation(user_id, default_model_key, full_prompt, media_files=None, is_chat=True)
+                    run_generation(
+                        user_id,
+                        default_model_key,
+                        full_prompt,
+                        media_files=None,
+                        is_chat=True,
+                        chat_history_mode="persistent",
+                        chat_user_name=user_name,
+                    )
                     return
             except Exception:
                 # Fallback: Durchlaufen in den normalen Flow (z.B. Menü-Handler)
                 pass
         if ctx and ctx.get("step") == "waiting_for_prompt":
+            model = db.get_model_by_key(ctx["model_key"])
+            is_text_model = bool(model and model.type and "text" in model.type)
             settings = db.get_user_settings(user_id)
+            user_name = (msg.from_user and msg.from_user.first_name) or "User"
             if settings.get("auto_opt", True):
                 msg_wait = bot.send_message(user_id, get_text("optimizing_msg", get_lang(user_id)), parse_mode="HTML")
                 try:
@@ -105,9 +133,25 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                     )
                     bot.edit_message_text(get_text("opt_result_msg", get_lang(user_id)).format(original=msg.text, optimized=optimized), user_id, msg_wait.message_id, reply_markup=markup, parse_mode="HTML")
                 except Exception:
-                    run_generation(user_id, ctx["model_key"], msg.text, ctx_media_to_list(ctx))
+                    run_generation(
+                        user_id,
+                        ctx["model_key"],
+                        msg.text,
+                        ctx_media_to_list(ctx),
+                        is_chat=False,
+                        chat_history_mode="once_off" if is_text_model else None,
+                        chat_user_name=user_name,
+                    )
             else:
-                run_generation(user_id, ctx["model_key"], msg.text, ctx_media_to_list(ctx))
+                run_generation(
+                    user_id,
+                    ctx["model_key"],
+                    msg.text,
+                    ctx_media_to_list(ctx),
+                    is_chat=False,
+                    chat_history_mode="once_off" if is_text_model else None,
+                    chat_user_name=user_name,
+                )
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith('prompt_'))
     def on_prompt_decision(call):
@@ -117,7 +161,18 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
         if data:
             final_prompt = data["optimized"] if action == "accept" else data["original"]
             media_list = [path_to_mediafile(p) for p in data.get("media_files", [])]
-            run_generation(uid, data["model_key"], final_prompt, media_list)
+            model = db.get_model_by_key(data["model_key"])
+            is_text_model = bool(model and model.type and "text" in model.type)
+            user_name = (call.message.from_user and call.message.from_user.first_name) or "User"
+            run_generation(
+                uid,
+                data["model_key"],
+                final_prompt,
+                media_list,
+                is_chat=False,
+                chat_history_mode="once_off" if is_text_model else None,
+                chat_user_name=user_name,
+            )
             try:
                 bot.delete_message(uid, call.message.message_id)
             except Exception:

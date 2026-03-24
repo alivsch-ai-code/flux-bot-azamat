@@ -204,7 +204,16 @@ def process_webapp_action(
             pl = payload if isinstance(payload, dict) else {}
             prompt_trim = _trim_webapp_prompt(pl.get("prompt"))
             if prompt_trim and _webapp_run_generation:
-                _webapp_run_generation(user_id, model_key, prompt_trim, None, is_chat=True)
+                user_name = getattr(db, "get_user_username_or_name", lambda _u: None)(user_id) or "User"
+                _webapp_run_generation(
+                    user_id,
+                    model_key,
+                    prompt_trim,
+                    None,
+                    is_chat=True,
+                    chat_history_mode="once_off",
+                    chat_user_name=user_name,
+                )
     elif action.startswith("chat_mode_no_"):
         model_key = action.replace("chat_mode_no_", "")
         model = db.get_model_by_key(model_key)
@@ -219,7 +228,16 @@ def process_webapp_action(
                 "menu_path": model.menu_path or "root",
             }
             set_context(user_id, ctx_pre)
-            _webapp_run_generation(user_id, model_key, prompt_trim, None, is_chat=False)
+            user_name = getattr(db, "get_user_username_or_name", lambda _u: None)(user_id) or "User"
+            _webapp_run_generation(
+                user_id,
+                model_key,
+                prompt_trim,
+                None,
+                is_chat=False,
+                chat_history_mode="once_off",
+                chat_user_name=user_name,
+            )
             return
         do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
     elif action == "cmd_shop":
