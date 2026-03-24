@@ -128,6 +128,7 @@ In [`src/domain/interfaces.py`](../src/domain/interfaces.py):
 
 - **PostgreSQL** über `DatabaseManager` (`DATABASE_URL`): Nutzer, Credits, Modelle, Chat-Sessions, Gruppeneinstellungen, Transaktionen.
 - **Chat-Session-Keys:** privat `user_id` + `model_key`; Gruppe `session_id = -abs(chat_id)` mit Modell-Key-Suffix `_group` (siehe `group_handler`).
+- **`daily_posts`:** Pro Kalendertag höchstens ein Eintrag (`date_to_send` unique). `message_text` kann **einfacher HTML-Text** sein oder **JSON** mit Schlüsseln `de`, `en`, `ru`, `kk` — der `DailyService` wählt pro Abonnent die passende Sprache (`daily_services._resolve_daily_message_text`). Beispiel-Skript: `tools/seed_daily_alexa_plus_tomorrow.py`.
 
 ---
 

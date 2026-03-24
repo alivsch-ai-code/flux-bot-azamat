@@ -1,3 +1,4 @@
+import json
 import os
 import random
 import re
@@ -27,6 +28,30 @@ _last_errors_cleanup_date = None
 _last_azamat_slots_done = set()
 
 AZAMAT_GREETING_MODEL = "google-gemini-2-5-flash"
+
+
+def _resolve_daily_message_text(raw: str | None, lang: str) -> str:
+    """
+    Ein Post kann ein einfacher String sein oder JSON mit Sprachschlüsseln:
+    {"de":"...", "en":"...", "ru":"...", "kk":"..."} → passender Text pro User.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("{"):
+        try:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                for key in (lang, "en", "de", "ru", "kk"):
+                    val = data.get(key)
+                    if val is not None and str(val).strip():
+                        return str(val).strip()
+                for val in data.values():
+                    if val is not None and str(val).strip():
+                        return str(val).strip()
+        except json.JSONDecodeError:
+            pass
+    return raw
 
 
 class DailyService:
@@ -107,27 +132,41 @@ class DailyService:
             success_count = 0
             for user_id in users:
                 try:
+                    settings = self.db.get_user_settings(user_id)
+                    user_lang = settings.get("lang", "en") or "en"
+                    out_text = _resolve_daily_message_text(text, user_lang)
+                    sent = False
+
                     # Fall A: Nachricht mit Bild
                     if img_path and img_path.strip():
                         # Prüfen ob URL (http) oder lokaler Pfad
                         if img_path.startswith("http"):
-                            self.bot.send_photo(user_id, img_path, caption=text, parse_mode="HTML")
+                            self.bot.send_photo(
+                                user_id, img_path, caption=out_text or None, parse_mode="HTML"
+                            )
+                            sent = True
                         else:
                             # Prüfen ob lokale Datei existiert
                             try:
                                 with open(img_path, "rb") as f:
-                                    self.bot.send_photo(user_id, f, caption=text, parse_mode="HTML")
+                                    self.bot.send_photo(
+                                        user_id, f, caption=out_text or None, parse_mode="HTML"
+                                    )
+                                sent = True
                             except FileNotFoundError:
                                 # Fallback: Nur Text senden, wenn Bild fehlt und Text vorhanden ist
-                                if text and text.strip():
-                                    self.bot.send_message(user_id, text, parse_mode="HTML")
+                                if out_text:
+                                    self.bot.send_message(user_id, out_text, parse_mode="HTML")
+                                    sent = True
 
                     # Fall B: Nur Text, aber nur wenn Text auch Inhalt hat
-                    elif text and text.strip():
-                        self.bot.send_message(user_id, text, parse_mode="HTML")
-                    
-                    success_count += 1
-                    
+                    elif out_text:
+                        self.bot.send_message(user_id, out_text, parse_mode="HTML")
+                        sent = True
+
+                    if sent:
+                        success_count += 1
+
                     # Kurze Pause, um Telegram Limits (Rate Limits) nicht zu verletzen
                     time.sleep(0.05) 
                     
