@@ -268,15 +268,13 @@ def get_path_keyboard_action(
     if not text or not text.strip():
         return None
     t = text.strip()
-    back_text = get_text("btn_back", lang)
-    main_text = get_text("kb_main", lang)
-    for l in ("de", "en", "ru", "kk"):
-        if get_text("btn_back", l) == t:
+    for loc in ("de", "en", "ru", "kk"):
+        if get_text("btn_back", loc) == t:
             if "/" in current_path:
                 parent = current_path.rsplit("/", 1)[0]
                 return ("nav_path", parent)  # z.B. image/flux -> image
             return ("nav_main", "")  # image -> Hauptmenü
-        if get_text("kb_main", l) == t:
+        if get_text("kb_main", loc) == t:
             return ("nav_main", "")
 
     sub_categories = set()

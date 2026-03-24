@@ -17,7 +17,8 @@ from telebot import TeleBot, types
 
 from src.config.settings import config
 from src.presentation.telegram import keyboards
-from src.presentation.telegram.handlers.common import set_context
+from src.presentation.telegram.handlers.chat_debounce import cancel_pending_batch
+from src.presentation.telegram.handlers.common import get_context, set_context
 from src.presentation.telegram.handlers.group_handler import get_group_menu_markup
 from src.presentation.telegram.welcome_utils import send_welcome_with_video
 from src.utils.strings import get_text, get_welcome
@@ -126,7 +127,6 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
     def handle_model_click(call):
         if _show_group_menu_if_group(call):
             return
-        from src.presentation.telegram.handlers.common import get_context, set_context
         user_id = call.message.chat.id
         lang = get_lang(user_id)
         key = call.data.split('sel_')[1]
@@ -214,6 +214,7 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
             bot.edit_message_text(text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
         else:
             db.set_user_chat_mode(user_id, None, active=False)
+            cancel_pending_batch(user_id)
             set_context(user_id, {"model_key": key, "step": "waiting_for_prompt", "last_bot_msg_id": call.message.message_id, "menu_path": model.menu_path})
             prompt_text = get_text("model_req_prompt", lang)
             markup = keyboards.get_back_menu(lang, target=f"sel_{key}")
@@ -229,6 +230,7 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
         if _show_group_menu_if_group(call):
             return
         user_id = call.message.chat.id
+        cancel_pending_batch(user_id)
         lang = get_lang(user_id)
         try:
             bot.answer_callback_query(call.id)
@@ -260,6 +262,7 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
             except Exception:
                 pass
         db.set_user_chat_mode(user_id, None, active=False)
+        cancel_pending_batch(user_id)
         try:
             bot.answer_callback_query(call.id)
         except Exception:

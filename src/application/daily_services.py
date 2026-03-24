@@ -131,9 +131,8 @@ class DailyService:
                     # Kurze Pause, um Telegram Limits (Rate Limits) nicht zu verletzen
                     time.sleep(0.05) 
                     
-                except Exception as e:
+                except Exception:
                     # Optional: User deaktivieren bei "Bot was blocked by the user"
-                    # print(f"❌ Fehler beim Senden an {user_id}: {e}")
                     pass
 
             logger.info("Broadcast beendet. Erfolgreich: %s/%s", success_count, len(users))
@@ -227,7 +226,7 @@ class DailyService:
                 self.db.mark_azamat_greeting_sent(user_id, today, slot)
                 success += 1
                 time.sleep(0.08)
-            except Exception as e:
+            except Exception:
                 pass
         if success:
             logger.info("Azamat Greeting: %s/%s gesendet.", success, len(users))

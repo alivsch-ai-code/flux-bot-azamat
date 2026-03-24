@@ -28,6 +28,7 @@ Perfect for developers who want a **ready-made AI bot** for Telegram, or anyone 
 | 💬 **AI Chat & LLMs** | **Gemini** for group chat, full LLM support for direct messages |
 | 🌐 **Telegram Mini App** | Beautiful in-app web interface — browse models, buy credits, manage settings |
 | 👥 **Group Chat Mode** | Add the bot to groups: chat with Gemini, buy credits, set language per group |
+| ⏱️ **Chat message batching** | Private & group text chat: debounced replies (20s → 10s → 5s → 10s; flush on 5th message) so bursts get one coherent answer |
 | 💳 **Telegram Stars (XTR)** | Native payments — no external payment providers needed |
 | 🌍 **Multilingual** | German, English, Russian, Kazakh — full i18n |
 | 🔌 **Replicate + OpenAI + Gemini** | Pluggable AI backends, easy to add new models |
@@ -88,6 +89,7 @@ flux-bot-azamat/
 │   ├── presentation/       # Telegram handlers, keyboards
 │   │   └── telegram/handlers/
 │   │       ├── group_handler.py   # Groups: Gemini chat, credits, language
+│   │       ├── chat_debounce.py   # Batched text chat (timers, flush callback)
 │   │       ├── menu_handler.py    # Menu, settings, WebApp actions
 │   │       ├── payment_handler.py # Shop, Telegram Stars invoices
 │   │       └── gen/               # Generation, navigation, media
@@ -120,6 +122,33 @@ When added to a **group**:
 - **Credits:** Buy via inline buttons → DM with shop
 - **Language:** Set DE, EN, RU, KK per group
 - **Welcome:** One-time personalized greeting DM (AI-generated) for each new user
+- **Burst replies:** Multiple quick messages are merged: wait 20s after the first, then shorter windows after each new line (10s / 5s / 10s); the **5th message in a row** forces an immediate reply that addresses the whole batch (same behavior in private text chat mode)
+
+---
+
+## 📋 Use cases
+
+| Scenario | What happens |
+|----------|----------------|
+| **Creative generation** | User picks image/video/audio model → sends prompt (and optional media) → Stars are charged → result is delivered in chat. |
+| **Private LLM chat** | User enables chat for a text model or sends plain text from the home screen → history is stored (with periodic summarization) → answers respect the full thread; rapid multi-line typing is batched (see Group Mode). |
+| **Mini App** | User opens the Web App from the menu → browses models, buys packages, changes settings; actions call the Flask API with signed `init_data`. |
+| **Group collaboration** | Members talk to AZAMAT; each burst is one API call; credits use group-aware rules on the paying user. |
+| **Ops / admin** | Switch menu mode, reload models, optional cheat/test flows — see code and `ADMIN_ID`. |
+
+For a **German, detailed** breakdown (handlers, HTTP routes, `GenerationService`, debounce API), see **[doc/use_cases_und_schnittstellen.md](doc/use_cases_und_schnittstellen.md)**.
+
+---
+
+## 🔌 Interfaces (overview)
+
+| Layer | Interface | Notes |
+|-------|-----------|--------|
+| **Telegram** | pyTelegramBotAPI handlers | Order: `group_handler` → `menu_handler` → `payment_handler` → `gen_handler`. Group text is **not** handled by `prompt_handlers` (early return). |
+| **HTTP** | Flask routes in `main.py` | `/webapp`, `/api/webapp_action`, `/api/user_info`, `/api/strings`, `/api/model`, `/api/models`, `/api/shop_packages`, `/api/webapp_upload_reference` — see doc above. |
+| **Application** | `GenerationService.process_request(...)` | Credits, validation, routing by model type, Replicate/OpenAI/Gemini via `UnifiedAIClient`. |
+| **Domain** | `UserRepository`, `AIProvider` in `src/domain/interfaces.py` | Contracts; `DatabaseManager` + adapters implement behavior. |
+| **Chat batching** | `schedule_batched_text_message`, `cancel_pending_batch` | `src/presentation/telegram/handlers/chat_debounce.py` |
 
 ---
 

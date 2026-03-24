@@ -9,6 +9,7 @@ import logging
 
 from telebot import TeleBot, types
 
+from src.presentation.telegram.handlers.chat_debounce import schedule_batched_text_message
 from src.presentation.telegram.handlers.gen.chat_sessions import append_with_summary_if_needed, build_chat_prompt_from_messages
 from src.presentation.telegram.handlers.payment_handler import show_shop_logic
 from src.utils.strings import get_text
@@ -62,6 +63,70 @@ def register(bot: TeleBot, generation_service, db) -> None:
     def get_group_lang(chat_id: int) -> str:
         return db.get_group_language(chat_id)
 
+    def flush_group_batch(chat_id: int, batch: list) -> None:
+        """Nach Debounce: alle gesammelten User-Nachrichten an Gemini, eine Antwort in die Gruppe."""
+        if not batch:
+            return
+        last_uid, last_name, last_text = batch[-1]
+        model = db.get_model_by_key(GEMINI_GROUP_MODEL)
+        if not model or "text" not in (model.type or []):
+            try:
+                bot.send_message(chat_id, "⚠️ Gemini nicht verfügbar.", parse_mode="HTML")
+            except Exception:
+                pass
+            return
+
+        session_id = -abs(chat_id)
+        model_key = f"{GEMINI_GROUP_MODEL}_group"
+        lang = get_group_lang(chat_id)
+        system_prompt = get_text("azamat_system_prompt", lang)
+
+        try:
+            messages = None
+            for _uid, user_name, piece in batch:
+                messages = append_with_summary_if_needed(
+                    db,
+                    session_id,
+                    model_key,
+                    {"role": "user", "content": piece, "user_name": user_name},
+                    max_messages=20,
+                    summarize_at=20,
+                )
+            full_prompt = build_chat_prompt_from_messages(
+                messages,
+                last_text,
+                system_prompt=system_prompt,
+                current_user_name=last_name,
+            )
+        except Exception:
+            block = "\n".join(f"{n}: {t}" for _u, n, t in batch)
+            full_prompt = f"[SYSTEM]\n{system_prompt}\n\n[HISTORY]\n{block}\nAssistant:"
+
+        success, result = generation_service.process_request(
+            last_uid, model, full_prompt, media_files=None, group_chat_id=chat_id
+        )
+        if not success:
+            try:
+                bot.send_message(chat_id, str(result), parse_mode="HTML")
+            except Exception:
+                pass
+            return
+        try:
+            append_with_summary_if_needed(
+                db,
+                session_id,
+                model_key,
+                {"role": "assistant", "content": str(result)},
+                max_messages=20,
+                summarize_at=20,
+            )
+        except Exception:
+            pass
+        try:
+            bot.send_message(chat_id, str(result), parse_mode="HTML")
+        except Exception as e:
+            logger.warning("Group batch reply send failed: %s", e)
+
     # --- /start in Gruppe ---
     @bot.message_handler(commands=["start"], func=lambda m: _is_group(m))
     def group_start(msg):
@@ -112,39 +177,9 @@ def register(bot: TeleBot, generation_service, db) -> None:
             bot.send_message(chat_id, "⚠️ Gemini nicht verfügbar.", parse_mode="HTML")
             return
 
-        # Session pro Gruppe: bis zu 20 Nachrichten, dann Summary (mit User-Namen)
-        session_id = -abs(chat_id)
-        model_key = f"{GEMINI_GROUP_MODEL}_group"
-        system_prompt = get_text("azamat_system_prompt", lang)
         user_name = msg.from_user.first_name or msg.from_user.username or "User"
-
-        try:
-            messages = append_with_summary_if_needed(
-                db, session_id, model_key,
-                {"role": "user", "content": msg.text, "user_name": user_name},
-                max_messages=20, summarize_at=20
-            )
-            full_prompt = build_chat_prompt_from_messages(
-                messages, msg.text, system_prompt=system_prompt, current_user_name=user_name
-            )
-        except Exception:
-            full_prompt = f"[SYSTEM]\n{system_prompt}\n\n[HISTORY]\n{user_name}: {msg.text}\nAssistant:"
-
-        success, result = generation_service.process_request(
-            user_id, model, full_prompt, media_files=None, group_chat_id=chat_id
-        )
-        if not success:
-            bot.send_message(chat_id, str(result), parse_mode="HTML")
-            return
-        # Assistant-Antwort in Session speichern (20er-Puffer)
-        try:
-            append_with_summary_if_needed(
-                db, session_id, model_key, {"role": "assistant", "content": str(result)},
-                max_messages=20, summarize_at=20
-            )
-        except Exception:
-            pass
-        bot.send_message(chat_id, str(result), parse_mode="HTML")
+        item = (user_id, user_name, msg.text.strip())
+        schedule_batched_text_message(chat_id, item, flush_group_batch)
 
     # --- Callback: Credits in Gruppe → Shop per DM ---
     @bot.callback_query_handler(func=lambda c: c.data == "grp_shop" and _is_group(c))

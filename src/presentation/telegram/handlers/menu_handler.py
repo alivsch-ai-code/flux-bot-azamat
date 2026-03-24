@@ -6,8 +6,9 @@ from telebot import TeleBot, types
 
 from src.config.settings import config
 from src.presentation.telegram import keyboards
+from src.presentation.telegram.handlers.chat_debounce import cancel_pending_batch
 from src.presentation.telegram.handlers.common import clear_context, get_context, set_context
-from src.presentation.telegram.handlers.group_handler import _is_group, get_group_menu_markup
+from src.presentation.telegram.handlers.group_handler import get_group_menu_markup
 from src.presentation.telegram.handlers.gen import ctx_media_to_list
 from src.presentation.telegram.handlers.gen.media_helpers import schema_requires_media
 from src.presentation.telegram.handlers.gen.nav_handlers import send_model_detail_view
@@ -91,6 +92,7 @@ def process_webapp_action(
     all_models = db.get_all_models()
     clear_context(user_id)
     db.set_user_chat_mode(user_id, None, active=False)
+    cancel_pending_batch(user_id)
     webapp_only_markup = None
     app_url = (config.APP_URL or "").strip().rstrip("/")
     if app_url.startswith("https://"):
@@ -341,6 +343,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
                 if act_type == "nav_main":
                     clear_context(user_id)
                     db.set_user_chat_mode(user_id, None, active=False)
+                    cancel_pending_batch(user_id)
                     un = (message.from_user and message.from_user.first_name) or ""
                     welcome_text = get_welcome(lang, un)
                     markup = keyboards.get_main_reply_keyboard(lang)
@@ -361,6 +364,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
                     prev = get_context(user_id) or {}
                     clear_context(user_id)
                     db.set_user_chat_mode(user_id, None, active=False)
+                    cancel_pending_batch(user_id)
                     send_model_detail_view(bot, user_id, target, db, get_lang)
                     set_context(user_id, {
                         "model_key": target,
@@ -373,6 +377,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
 
         clear_context(user_id)
         db.set_user_chat_mode(user_id, None, active=False)
+        cancel_pending_batch(user_id)
         if action == "nav_main":
             un = (message.from_user and message.from_user.first_name) or ""
             welcome_text = get_welcome(lang, un)
@@ -407,7 +412,6 @@ def register(bot: TeleBot, generation_service, db) -> None:
         user_id = message.chat.id
         if ADMIN_ID and user_id != ADMIN_ID:
             return
-        lang = get_lang(user_id)
         try:
             # Cache invalidieren
             if hasattr(db, "_models_cache"):

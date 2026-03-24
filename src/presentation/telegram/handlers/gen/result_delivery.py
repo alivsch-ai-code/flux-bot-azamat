@@ -13,8 +13,6 @@ import os
 import time
 import uuid
 
-from telebot import types
-
 from src.infrastructure.metrics import record_timing
 from src.presentation.telegram.handlers.common import set_context
 from src.presentation.telegram.handlers.gen.download import download_url_to_bytes

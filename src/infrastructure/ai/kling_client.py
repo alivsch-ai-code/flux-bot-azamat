@@ -1,6 +1,5 @@
 import time
 import requests
-import jwt # pip install pyjwt
 import logging
 from src.domain.interfaces import AIProvider
 from src.domain.entities import AIModel, GenerationResult
