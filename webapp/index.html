@@ -644,6 +644,38 @@
             (opt.reference_images && opt.reference_images.enabled) ||
             (opt.generate_audio && opt.generate_audio.enabled)
           );
+          const hasNegativeInSchema = !!(schemaProps && schemaProps.negative_prompt);
+          const exRaw = (data.example_prompt != null && String(data.example_prompt).trim()) ? String(data.example_prompt).trim() : '';
+          const exShort = exRaw.slice(0, 200);
+          const promptPlaceholder = exShort
+            ? escapeHtml('z. B.: ' + exShort + (exRaw.length > 200 ? '…' : ''))
+            : escapeHtml(isText ? 'Erste Nachricht optional…' : 'Beschreibe Szenenbild, Stil, Details…');
+          let inputBlockHtml = '';
+          if (isText) {
+            inputBlockHtml = `
+              <div class="gen-options" id="model-input-block">
+                <h3>✍️ Eingabe (optional)</h3>
+                <div class="gen-row">
+                  <label for="gen-prompt">Prompt / erste Nachricht</label>
+                  <textarea id="gen-prompt" rows="3" placeholder="${promptPlaceholder}"></textarea>
+                </div>
+              </div>`;
+          } else {
+            const reqMark = schemaRequired.includes('prompt') ? ' *' : '';
+            inputBlockHtml = `
+              <div class="gen-options" id="model-input-block">
+                <h3>✍️ Prompt</h3>
+                <div class="gen-row">
+                  <label for="gen-prompt">Prompt${reqMark}</label>
+                  <textarea id="gen-prompt" rows="4" placeholder="${promptPlaceholder}"></textarea>
+                </div>
+                ${hasNegativeInSchema ? `
+                <div class="gen-row">
+                  <label for="gen-negative-prompt">Negative prompt (optional)</label>
+                  <textarea id="gen-negative-prompt" rows="2" placeholder="Was vermeiden…"></textarea>
+                </div>` : ''}
+              </div>`;
+          }
           if (hasGenOptions || dynamicKeys.length > 0) {
             const durEnum = (opt.duration && Array.isArray(opt.duration.enum) && opt.duration.enum.length) ? opt.duration.enum : [5, 6, 7, 8];
             const durDefault = Number((opt.duration && opt.duration.default) || 5);
@@ -733,6 +765,7 @@
             <div class="detail-desc">${escapeHtml(data.description || '')}</div>
             ${data.example_image_url ? '<div class="detail-example">🖼️ Dieses Modell hat ein Beispielbild oben in der Vorschau.</div>' : ''}
             ${costHtml}
+            ${inputBlockHtml}
             ${generationOptionsHtml}
             ${btnHtml}
           `;
@@ -803,9 +836,19 @@
               e.stopPropagation();
               const action = btn.getAttribute('data-action');
               if (!action) return;
+              const promptEl = document.getElementById('gen-prompt');
+              const negEl = document.getElementById('gen-negative-prompt');
+              if (!isText && schemaRequired.includes('prompt')) {
+                if (!promptEl || !promptEl.value.trim()) {
+                  showError('Bitte einen Prompt eingeben.');
+                  return;
+                }
+              }
               btn.disabled = true;
               if (btn.classList.contains('btn-start')) btn.textContent = '⏳ …';
-              let payload = {};
+              const payload = {};
+              if (promptEl && promptEl.value.trim()) payload.prompt = promptEl.value.trim();
+              if (negEl && negEl.value.trim()) payload.negative_prompt = negEl.value.trim();
               if (hasGenOptions || dynamicKeys.length > 0) {
                 const g = {};
                 const durEl = document.getElementById('gen-duration');
@@ -833,7 +876,7 @@
                   else if (p.type === "number") v = Number(v);
                   if (v !== "" && v !== null && !(Number.isNaN(v))) g[k] = v;
                 });
-                payload = { generation_options: g };
+                payload.generation_options = g;
               }
               sendAction(action, payload);
             });

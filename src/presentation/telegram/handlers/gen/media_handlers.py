@@ -125,6 +125,10 @@ def register_media_handlers(bot, db, get_lang, run_generation) -> None:
             if model and model.type and "upscale" in model.type and media_list:
                 run_generation(user_id, ctx["model_key"], "", media_list)
             else:
+                pending = (ctx.get("pending_webapp_prompt") or "").strip()
+                if pending:
+                    run_generation(user_id, ctx["model_key"], pending, media_list)
+                    return
                 count = len(ctx["media_paths"])
                 bot.send_message(
                     user_id,

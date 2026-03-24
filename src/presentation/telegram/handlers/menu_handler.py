@@ -8,6 +8,8 @@ from src.config.settings import config
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.common import clear_context, get_context, set_context
 from src.presentation.telegram.handlers.group_handler import _is_group, get_group_menu_markup
+from src.presentation.telegram.handlers.gen import ctx_media_to_list
+from src.presentation.telegram.handlers.gen.media_helpers import schema_requires_media
 from src.presentation.telegram.handlers.gen.nav_handlers import send_model_detail_view
 from src.presentation.telegram.handlers.gen.start_handler import do_start_gen_flow
 from src.presentation.telegram.handlers.payment_handler import show_shop_logic
@@ -28,6 +30,26 @@ def _parse_admin_id() -> int:
 ADMIN_ID = _parse_admin_id()
 
 REFERRAL_REWARD = 50
+
+_MAX_WEBAPP_PROMPT_LEN = 12000
+
+# Wird von gen_handler.register gesetzt, damit WebApp-API (main.py) sofort generieren kann.
+_webapp_run_generation = None
+
+
+def set_webapp_run_generation(run_generation_fn) -> None:
+    """Bindet run_generation aus runner.py für process_webapp_action (start_gen mit Prompt)."""
+    global _webapp_run_generation
+    _webapp_run_generation = run_generation_fn
+
+
+def _trim_webapp_prompt(raw) -> str:
+    if not isinstance(raw, str):
+        return ""
+    s = raw.strip()
+    if len(s) > _MAX_WEBAPP_PROMPT_LEN:
+        return s[:_MAX_WEBAPP_PROMPT_LEN]
+    return s
 
 
 def _is_keyboard_mode(db) -> bool:
@@ -120,26 +142,55 @@ def process_webapp_action(
             send_model_detail_view(bot, user_id, model_key, db, get_lang)
     elif action.startswith("start_gen_"):
         model_key = action.replace("start_gen_", "")
-        options = {}
-        if isinstance(payload, dict):
-            raw_opts = payload.get("generation_options")
-            if isinstance(raw_opts, dict):
-                options = raw_opts
-        if options:
-            existing = get_context(user_id) or {}
-            existing["generation_options"] = options
-            ref_images = options.get("reference_images") or []
-            if isinstance(ref_images, list) and ref_images:
-                existing["media_paths"] = [
-                    {"path": str(u), "type": "image"}
-                    for u in ref_images
-                    if isinstance(u, str) and (u.startswith("http://") or u.startswith("https://"))
-                ]
-            else:
-                existing["media_paths"] = []
+        model = db.get_model_by_key(model_key)
+        pl = payload if isinstance(payload, dict) else {}
+        options: dict = {}
+        raw_opts = pl.get("generation_options")
+        if isinstance(raw_opts, dict):
+            options = dict(raw_opts)
+        neg = pl.get("negative_prompt")
+        if isinstance(neg, str) and neg.strip():
+            options["negative_prompt"] = neg.strip()
+        prompt_trim = _trim_webapp_prompt(pl.get("prompt"))
+
+        ref_images = options.get("reference_images") or []
+        media_paths: list = []
+        if isinstance(ref_images, list) and ref_images:
+            media_paths = [
+                {"path": str(u), "type": "image"}
+                for u in ref_images
+                if isinstance(u, str) and (u.startswith("http://") or u.startswith("https://"))
+            ]
+        elif options:
+            media_paths = []
+
+        needs_media = bool(model and schema_requires_media(model.input_schema, model=model))
+        has_media = bool(media_paths)
+        run_fn = _webapp_run_generation
+
+        if prompt_trim and run_fn and model and model.is_active and (has_media or not needs_media):
+            ctx_pre = {
+                "model_key": model_key,
+                "generation_options": options,
+                "media_paths": media_paths,
+                "menu_path": model.menu_path or "root",
+            }
+            set_context(user_id, ctx_pre)
+            run_fn(user_id, model_key, prompt_trim, ctx_media_to_list(ctx_pre), is_chat=False)
+            _remove_reply_keyboard_silently(bot, user_id)
+            return
+
+        if options or media_paths:
+            existing = {
+                "generation_options": options,
+                "media_paths": media_paths,
+            }
             set_context(user_id, existing)
+        pending = prompt_trim if (needs_media and not has_media and prompt_trim) else None
         _remove_reply_keyboard_silently(bot, user_id)
-        do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
+        do_start_gen_flow(
+            bot, user_id, model_key, db, get_lang, edit_message_id=None, pending_webapp_prompt=pending
+        )
     elif action.startswith("chat_mode_yes_"):
         model_key = action.replace("chat_mode_yes_", "")
         model = db.get_model_by_key(model_key)
@@ -150,9 +201,26 @@ def process_webapp_action(
             text = get_text("chat_active_msg", lang).format(model=model.name, cost=final_cost)
             markup = keyboards.get_chat_active_menu(lang)
             bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+            pl = payload if isinstance(payload, dict) else {}
+            prompt_trim = _trim_webapp_prompt(pl.get("prompt"))
+            if prompt_trim and _webapp_run_generation:
+                _webapp_run_generation(user_id, model_key, prompt_trim, None, is_chat=True)
     elif action.startswith("chat_mode_no_"):
         model_key = action.replace("chat_mode_no_", "")
+        model = db.get_model_by_key(model_key)
+        pl = payload if isinstance(payload, dict) else {}
+        prompt_trim = _trim_webapp_prompt(pl.get("prompt"))
         _remove_reply_keyboard_silently(bot, user_id)
+        if prompt_trim and _webapp_run_generation and model and model.is_active:
+            ctx_pre = {
+                "model_key": model_key,
+                "generation_options": {},
+                "media_paths": [],
+                "menu_path": model.menu_path or "root",
+            }
+            set_context(user_id, ctx_pre)
+            _webapp_run_generation(user_id, model_key, prompt_trim, None, is_chat=False)
+            return
         do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
     elif action == "cmd_shop":
         if webapp_only_markup:
@@ -359,7 +427,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
             bot.delete_message(user_id, message.message_id)
         except Exception:
             pass
-        process_webapp_action(bot, user_id, action, db, is_group=is_group)
+        process_webapp_action(bot, user_id, action, db, is_group=is_group, payload=data)
 
     # 1. START COMMAND (nur private Chats – Gruppen werden von group_handler bedient)
     @bot.message_handler(commands=['start'], func=lambda m: str(m.chat.type) == 'private')
