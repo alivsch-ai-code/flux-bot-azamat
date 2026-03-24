@@ -25,6 +25,8 @@ class GenerationService:
         media_files: Optional[List[MediaFile]] = None,
         no_charge: bool = False,
         group_chat_id: Optional[int] = None,
+        generation_params: Optional[dict] = None,
+        charge_cost: Optional[int] = None,
     ):
         start = time.perf_counter()
         try:
@@ -34,12 +36,14 @@ class GenerationService:
             prompt = InputValidator.sanitize_prompt(prompt or "")
 
             # 1. User & Credits Check (überspringen bei no_charge, z.B. Willkommens-Gruß)
+            effective_cost = int(charge_cost if charge_cost is not None else model.cost)
+
             if not no_charge:
                 if group_chat_id is not None:
                     user_credits = self.repo.get_effective_credits_for_group(user_id, group_chat_id)
                 else:
                     user_credits = self.repo.get_user_credits(user_id)
-                if user_credits < model.cost:
+                if user_credits < effective_cost:
                     return False, "Zu wenig Guthaben! Bitte aufladen."
 
             # Erste Bild-Datei für Pipelines (Backward-Kompatibilität)
@@ -63,8 +67,8 @@ class GenerationService:
             # 3. Routing nach Modelltyp
             def _charge(reason_suffix: str) -> bool:
                 if group_chat_id is not None:
-                    return self.repo.deduct_credits_for_group(user_id, group_chat_id, model.cost, reason=reason_suffix)
-                self.repo.update_credits(user_id, -model.cost, reason=reason_suffix)
+                    return self.repo.deduct_credits_for_group(user_id, group_chat_id, effective_cost, reason=reason_suffix)
+                self.repo.update_credits(user_id, -effective_cost, reason=reason_suffix)
                 return True  # User-Credits wurden oben bereits geprüft
 
             if model.key == "premium-headshot-pipeline":
@@ -91,7 +95,12 @@ class GenerationService:
 
             # --- Standard-Modelle (Unified Client) ---
             else:
-                result = self.ai.generate(model, prompt, media_files=media_files)
+                result = self.ai.generate(
+                    model,
+                    prompt,
+                    media_files=media_files,
+                    generation_params=generation_params or {},
+                )
                 if not result.success:
                     logger.warning("Generation FAILED (no charge): user_id=%s model=%s error=%s", user_id, model.key, result.error)
                     return False, f"Fehler: {result.error}"
@@ -109,7 +118,7 @@ class GenerationService:
 
     def _run_premium_pipeline(self, user_prompt: str, user_image_path: str):
         """Erstellt 4 Variationen mittels Flux Pro und FaceSwap."""
-        print(f"⚙️ Starte Premium Pipeline für: '{user_prompt}'")
+        logger.info("Starte Premium Pipeline")
 
         if not user_image_path or not os.path.exists(user_image_path):
             return False, "Selfie für Face-Swap fehlt!"
@@ -131,22 +140,22 @@ class GenerationService:
         ]
         
         final_urls = []
-        print(f"➡️ Starte Generierung von {len(prompts)} Varianten...")
+        logger.info("Starte Generierung von %s Varianten", len(prompts))
 
         for i, specific_prompt in enumerate(prompts):
-            print(f"   📸 Variante {i+1}/4 wird erstellt...")
+            logger.info("Variante %s/4 wird erstellt", i + 1)
             
             try:
                 # SCHRITT 1: Basis-Bild mit Flux
                 res_base = self.ai.generate(flux_model, specific_prompt, media_files=None)
                 if not res_base.success:
-                    print(f"Skipping Variant {i+1}: {res_base.error}")
+                    logger.warning("Skipping Variante %s: %s", i + 1, res_base.error)
                     continue
                 
                 base_url = str(res_base.data)
                 
                 # Rate Limit Schutz
-                print("      ⏳ Warte 5s auf FaceSwap...")
+                logger.debug("Warte 5s auf FaceSwap...")
                 time.sleep(5) 
 
                 # SCHRITT 2: Face Swap via Replicate direkt (da Pipeline-Logik spezifisch ist)
@@ -169,10 +178,10 @@ class GenerationService:
                     swap_url = str(output_swap)
 
                 final_urls.append(swap_url)
-                print(f"      ✅ Variante {i+1} fertig.")
+                logger.info("Variante %s fertig", i + 1)
 
             except Exception as e:
-                print(f"⚠️ Fehler bei Variante {i+1}: {e}")
+                logger.warning("Fehler bei Variante %s: %s", i + 1, e)
                 continue
         
         if len(final_urls) == 0:

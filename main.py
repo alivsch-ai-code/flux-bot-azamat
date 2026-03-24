@@ -68,7 +68,7 @@ def api_webapp_action():
         if _bot_instance is None:
             return jsonify(ok=False, error="no_bot"), 500
 
-        process_webapp_action(_bot_instance, user_id, action, _db_instance)
+        process_webapp_action(_bot_instance, user_id, action, _db_instance, payload=data)
         return jsonify(ok=True)
     except Exception as e:
         logger.exception("webapp_action error: %s", e)
@@ -141,6 +141,8 @@ def api_model():
         if not model or not model.is_active:
             return jsonify(ok=False, error="not_found"), 404
         final_cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
+        replicate_id = (model.replicate_id or "")
+        is_veo31 = "google/veo-3.1" in replicate_id.lower()
         example_url = ""
         example_prompt = ""
         if model.example_data and isinstance(model.example_data, dict):
@@ -150,10 +152,64 @@ def api_model():
                 model.example_data.get("url") or ""
             )
             example_prompt = (model.example_data.get("prompt") or model.example_data.get("example_prompt") or "")[:200]
+        input_schema = model.input_schema if isinstance(model.input_schema, dict) else {}
+        props = input_schema.get("properties") if isinstance(input_schema, dict) else {}
+        props = props if isinstance(props, dict) else {}
+
+        def _first_default(*keys, fallback=None):
+            for k in keys:
+                p = props.get(k)
+                if isinstance(p, dict) and "default" in p and p.get("default") is not None:
+                    return p.get("default")
+            return fallback
+
+        def _enum_or(*keys, fallback=None):
+            for k in keys:
+                p = props.get(k)
+                if isinstance(p, dict) and isinstance(p.get("enum"), list) and p.get("enum"):
+                    return p.get("enum")
+            return fallback if fallback is not None else []
+
+        generation_options_schema = {
+            "duration": {
+                "enabled": "duration" in props,
+                "default": int(_first_default("duration", fallback=5) or 5),
+                "enum": [int(x) for x in _enum_or("duration", fallback=[5, 6, 7, 8]) if str(x).isdigit()],
+            },
+            "resolution": {
+                "enabled": "resolution" in props,
+                "default": str(_first_default("resolution", fallback="1080p")),
+                "enum": [str(x) for x in _enum_or("resolution", fallback=["720p", "1080p"])],
+            },
+            "aspect_ratio": {
+                "enabled": "aspect_ratio" in props,
+                "default": str(_first_default("aspect_ratio", fallback="16:9")),
+                "enum": [str(x) for x in _enum_or("aspect_ratio", fallback=["16:9", "9:16", "1:1"])],
+            },
+            "reference_images": {
+                "enabled": "reference_images" in props,
+            },
+            "generate_audio": {
+                "enabled": "generate_audio" in props,
+                "default": bool(_first_default("generate_audio", fallback=True)),
+            },
+        }
+
         return jsonify(ok=True, key=model.key, name=model.name, description=model.description or "",
             example_image_url=example_url, example_prompt=example_prompt,
             final_cost=final_cost, menu_path=model.menu_path or "root",
-            model_type=model.type or [])
+            model_type=model.type or [],
+            replicate_id=replicate_id,
+            input_schema=input_schema,
+            generation_options_schema=generation_options_schema,
+            veo_options={
+                "enabled": is_veo31,
+                "default_duration": 5,
+                "durations": [5, 6, 7, 8],
+                "resolutions": ["720p", "1080p"],
+                "aspect_ratios": ["16:9", "9:16", "1:1"],
+                "base_cost_for_5s": final_cost,
+            })
     except Exception as e:
         logger.warning("api_model error: %s", e)
         return jsonify(ok=False, error=str(e)), 500

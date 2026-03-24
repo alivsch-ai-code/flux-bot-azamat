@@ -11,7 +11,7 @@ Vollständige technische Dokumentation des Test-Setups mit exakten Pfaden, Ablä
 | **Framework** | pytest 7.4+ |
 | **Linting** | ruff (nur `tests/`) |
 | **CI** | GitHub Actions (`.github/workflows/ci.yml`) |
-| **Testanzahl** | 125 Unit-Tests in 17 Dateien |
+| **Testanzahl** | 136 Unit-Tests in 19 Dateien |
 | **Coverage** | Optional via `pytest-cov` |
 
 ---
@@ -36,7 +36,9 @@ flux-bot-azamat/
     ├── test_handlers_common.py        # get_context, set_context, clear_context (Dialog-State)
     ├── test_infrastructure_metrics.py # record_timing, get_stats
     ├── test_infrastructure_validator.py # InputValidator (sanitize, validate_safety)
+    ├── test_media_helpers.py          # model_requires_image_for_video, schema_requires_media
     ├── test_prompt_engineer.py        # _truncate_fallback (LLM-Summarization Fallback)
+    ├── test_unified_client_options.py # UnifiedAIClient: generation_params -> replicate input
     ├── test_utils_gimmicks.py         # get_random_tip
     ├── test_utils_media_utils.py      # detect_media_from_bytes (Magic Bytes)
     ├── test_utils_strings.py          # get_text, get_welcome, get_webapp_strings, daily_fallback
@@ -332,7 +334,39 @@ from src.infrastructure.security.validator import InputValidator
 
 ---
 
-### 4.5e tests/test_utils_media_utils.py
+### 4.5e tests/test_media_helpers.py
+
+| Pfad (getestet) | Modul | Funktionen |
+|-----------------|-------|------------|
+| `src/presentation/telegram/handlers/gen/media_helpers.py` | `src.presentation.telegram.handlers.gen.media_helpers` | `model_requires_image_for_video`, `schema_requires_media` |
+
+**Tests:**
+
+| Test | Erwartung |
+|------|-----------|
+| `test_kling_v1_6_pro_by_replicate_id` | Kling v1.6 Pro wird als Image-to-Video-only erkannt |
+| `test_kling_v1_6_pro_by_key` | Erkennung funktioniert auch über model.key |
+| `test_other_video_model_false` | Normale Video-Modelle werden nicht fälschlich markiert |
+| `test_kling_model_requires_media_even_without_required_in_schema` | Für Kling wird Medien-Input erzwungen |
+
+---
+
+### 4.5f tests/test_unified_client_options.py
+
+| Pfad (getestet) | Modul | Funktion |
+|-----------------|-------|----------|
+| `src/infrastructure/ai/unified_client.py` | `src.infrastructure.ai.unified_client` | `_run_replicate` (indirekt via `generate`) |
+
+**Tests:**
+
+| Test | Erwartung |
+|------|-----------|
+| `test_run_replicate_includes_generation_params` | `duration`, `resolution`, `aspect_ratio`, `generate_audio`, `reference_images` werden in `replicate.run(input=...)` übernommen |
+| `test_run_replicate_includes_generic_schema_params` | generische schema-basierte Runtime-Parameter (z. B. `cfg_scale`) werden übernommen; `prompt` wird nicht überschrieben |
+
+---
+
+### 4.5g tests/test_utils_media_utils.py
 
 | Pfad (getestet) | Modul | Funktion |
 |-----------------|-------|----------|
@@ -342,7 +376,7 @@ from src.infrastructure.security.validator import InputValidator
 
 ---
 
-### 4.5f tests/test_utils_temp_cleanup.py
+### 4.5h tests/test_utils_temp_cleanup.py
 
 | Pfad (getestet) | Modul | Funktion |
 |-----------------|-------|----------|
@@ -524,6 +558,8 @@ def client():
 | test_dynamic_adapter | Keine |
 | test_handlers_common | Keine |
 | test_prompt_engineer | Keine |
+| test_media_helpers | Keine |
+| test_unified_client_options | Mock `replicate.run` |
 | test_utils_media_utils | Keine |
 | test_utils_temp_cleanup | tempfile, time.sleep für Alter-Simulation |
 
@@ -534,8 +570,8 @@ def client():
 | Getestet | Nicht getestet (z.B. wegen externer Dependencies) |
 |----------|---------------------------------------------------|
 | utils (strings, gimmicks, media_utils, temp_cleanup, telegram_init_data) | main.py (nur app-Flask), handlers (nur common, error_checks) |
-| domain.entities, infrastructure.validator, metrics, db.memory_repo | replicate.clients, unified_client, kling_client, sonauto_client |
-| application.services (GenerationService) | payment_handler, menu_handler, gen_handlers |
+| domain.entities, infrastructure.validator, metrics, db.memory_repo | replicate.clients, kling_client, sonauto_client |
+| application.services (GenerationService), unified_client (generation_params) | payment_handler, menu_handler, gen_handlers |
 | config.settings, dynamic_adapter, prompt_engineer._truncate_fallback | database.DatabaseManager (nur update_credits gemockt) |
 
 ---
@@ -556,3 +592,100 @@ Falls keine Transaktion erscheint: Render-Logs prüfen – ist diese Zeile vorha
 - **Coverage:** Es gibt keinen Mindest-Coverage-Wert; der Report dient der Orientierung.
 - **Flask:** Endpoints wie `/api/webapp_action` oder `/api/models` brauchen `_db_instance`/`_bot_instance` und werden hier nicht getestet.
 - **initData:** Es gibt keinen Test mit gültigem HMAC (würde echten Bot-Token erfordern).
+
+---
+
+## 11. Veo 3.1 WebApp-Flow (neu)
+
+Für `google/veo-3.1` wurde ein konfigurierbarer WebApp-Flow ergänzt:
+
+- User kann in der Modell-Detailansicht auswählen:
+  - `duration` (Default **5s**)
+  - `resolution`
+  - `aspect_ratio`
+  - `reference_images` (optionale URL-Liste)
+- Diese Werte werden als `generation_options` an `/api/webapp_action` gesendet.
+- Backend speichert die Optionen im User-Context und übergibt sie bis `replicate.run(...)`.
+
+### Preislogik (Veo 3.1)
+
+- Basispreis des Modells gilt für **5 Sekunden**.
+- Längere Dauer skaliert linear:
+  - `final_cost = round(base_cost_for_5s * duration / 5)`
+- Beispiel: Bei Basis 200 Credits kostet 8s ≈ 320 Credits.
+
+### Request-Beispiel (Replicate)
+
+```python
+output = replicate.run(
+    "google/veo-3.1",
+    input={
+        "prompt": "...",
+        "duration": 8,
+        "resolution": "1080p",
+        "aspect_ratio": "16:9",
+        "generate_audio": True,
+        "reference_images": ["https://...", "https://..."],
+    },
+)
+```
+
+---
+
+## 12. Unified WebApp-Flow aus DB-Schema (neu)
+
+Die WebApp baut Modell-Optionen jetzt **modellübergreifend** aus `input_schema` (DB) auf.
+
+### 12.1 Datenfluss
+
+1. `database.py` mappt `ai_models.input_schema` zuverlässig zu `dict`.
+2. `GET /api/model` gibt `input_schema` + abgeleitetes `generation_options_schema` zurück.
+3. `webapp/index.html` rendert Felder dynamisch:
+   - `enum` als Select
+   - `boolean` als true/false Select
+   - `number`/`integer`/`string` als Input
+4. Bei Start sendet die WebApp `generation_options` an `/api/webapp_action`.
+5. Backend übernimmt diese in den User-Context und reicht sie bis `replicate.run(...)` durch.
+
+### 12.2 Kling & Veo im Unified-Flow
+
+- **Kling v1.6 Pro:** bleibt als Image-to-Video-only abgesichert (`start_image`/`end_image`/`reference_images` nötig).
+- **Veo 3.1:** bleibt kompatibel mit Duration-abhängiger Kostenlogik (Basis auf 5s, linear skaliert).
+
+### 12.3 Vorteile
+
+- Neue Modelle mit neuen Schema-Parametern benötigen i. d. R. keine WebApp-Sonderimplementierung.
+- Weniger hardcodierte UI-Logik, mehr Verhalten aus DB-Schema.
+
+---
+
+## 13. Production-Hardening (neu)
+
+### 13.1 Sicherheitsfix: SQLite-Datei aus Git
+
+- `azamat_ai.db` wurde aus dem Git-Index entfernt.
+- `.gitignore` enthält jetzt `azamat_ai.db`.
+
+### 13.2 DB-Performance: Connection Pool
+
+- `DatabaseManager` nutzt jetzt `ThreadedConnectionPool`.
+- Verbindungen werden bei `close()` an den Pool zurückgegeben (Proxy-Lösung).
+- Konfigurierbar über `DB_MAX_POOL_SIZE` (Default 20).
+
+### 13.3 Replicate-Concurrency-Fix
+
+- `REPLICATE_MAX_CONCURRENT` korrigiert auf `max(1, ...)` (vorher `max(5, ...)`).
+- Kommentar und Laufzeitverhalten stimmen jetzt überein.
+
+### 13.4 Logging statt print() in Runtime-Modulen
+
+- Runtime-Pfade (`application`/`infrastructure`) verwenden jetzt strukturierte Logger-Aufrufe.
+- Validiert mit Ruff:
+  - `ruff check --select T20 src/application src/infrastructure src/presentation main.py`
+
+---
+
+## 14. Aktueller Verifikationsstand
+
+- Voller Testlauf: `136 passed`
+- Lint-Checks (relevante Module): keine neuen Fehler

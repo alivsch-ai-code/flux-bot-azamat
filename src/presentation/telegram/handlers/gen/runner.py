@@ -49,29 +49,61 @@ def create_run_generation(bot, db, generation_service, get_lang):
             return
         keep_context_for_image_loop = False
         try:
-            cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
+            base_cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
+            generation_options = (ctx or {}).get("generation_options") or {}
+            cost = base_cost
+            # Veo 3.1 pricing: base price is for 5s. Longer duration scales linearly.
+            rid = (model.replicate_id or "").lower()
+            if "google/veo-3.1" in rid:
+                try:
+                    duration = int(generation_options.get("duration", 5) or 5)
+                except (TypeError, ValueError):
+                    duration = 5
+                duration = max(5, duration)
+                cost = int(round(base_cost * (duration / 5.0)))
             if int(db.get_user_credits(user_id)) < cost:
                 smart_update_status(bot, user_id, get_text("err_no_credits", lang), ctx)
                 return
             wait_msg_id = smart_update_status(bot, user_id, get_text("status_generating", lang).format(tip=get_random_tip(lang)), ctx)
             bot.send_chat_action(user_id, 'typing' if is_chat else 'upload_photo')
 
-            success, result = generation_service.process_request(user_id, model, prompt, media_files)
+            success, result = generation_service.process_request(
+                user_id,
+                model,
+                prompt,
+                media_files,
+                generation_params=generation_options,
+                charge_cost=cost,
+            )
             for _ in range(4):
                 if success or not is_rate_limit(result):
                     break
                 smart_update_status(bot, user_id, get_text("please_wait_longer", lang), ctx)
                 time.sleep(20)
-                success, result = generation_service.process_request(user_id, model, prompt, media_files)
+                success, result = generation_service.process_request(
+                    user_id,
+                    model,
+                    prompt,
+                    media_files,
+                    generation_params=generation_options,
+                    charge_cost=cost,
+                )
 
             if not success and is_technical_error(result):
                 fallback_model = db.get_fallback_model(model)
                 if fallback_model:
                     logger.info("Fallback zu %s...", fallback_model.name)
                     smart_update_status(bot, user_id, get_text("fallback_attempt", lang).format(model=model.name, fallback=fallback_model.name), ctx)
-                    success, result = generation_service.process_request(user_id, fallback_model, prompt, media_files)
+                    success, result = generation_service.process_request(
+                        user_id,
+                        fallback_model,
+                        prompt,
+                        media_files,
+                        generation_params=generation_options,
+                        charge_cost=cost,
+                    )
                     if success:
-                        model, cost = fallback_model, int(fallback_model.custom_price or fallback_model.internal_cost)
+                        model = fallback_model
 
             try:
                 bot.delete_message(user_id, wait_msg_id)
@@ -109,6 +141,7 @@ def create_run_generation(bot, db, generation_service, get_lang):
                             "model_key": model.key,
                             "step": "waiting_for_prompt",
                             "media_paths": [],
+                            "generation_options": {},
                             "menu_path": menu_path,
                         }
                         set_context(user_id, new_ctx)

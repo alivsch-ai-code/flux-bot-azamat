@@ -134,6 +134,16 @@
     .profile-info { padding: 16px; background: var(--card-bg); border-radius: 12px; margin-bottom: 12px; }
     .profile-info p { margin: 8px 0; }
     .ref-link { word-break: break-all; font-size: 0.9rem; color: var(--accent); }
+    .gen-options { margin: 12px 0 8px; padding: 12px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); }
+    .gen-options h3 { font-size: 0.9rem; margin-bottom: 10px; color: rgba(255,255,255,0.9); }
+    .gen-row { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 10px; }
+    .gen-row label { font-size: 0.8rem; color: rgba(255,255,255,0.65); }
+    .gen-row select, .gen-row textarea {
+      width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(0,0,0,0.2); color: var(--tg-theme-text-color); font-size: 0.9rem;
+    }
+    .gen-row textarea { min-height: 70px; resize: vertical; }
+    .gen-hint { font-size: 0.75rem; color: rgba(255,255,255,0.55); margin-top: -4px; margin-bottom: 6px; }
   </style>
 </head>
 <body>
@@ -608,6 +618,93 @@
           }
           const costHtml = `<div class="detail-cost">💰 Kosten: ${escapeHtml(String(data.final_cost))} Credits</div>`;
           let btnHtml = '';
+          let generationOptionsHtml = '';
+          const opt = data.generation_options_schema || {};
+          const inputSchema = data.input_schema || {};
+          const schemaProps = (inputSchema && inputSchema.properties) ? inputSchema.properties : {};
+          const schemaRequired = Array.isArray(inputSchema.required) ? inputSchema.required : [];
+          const dynamicKeys = Object.keys(schemaProps).filter(k => {
+            const p = schemaProps[k] || {};
+            const kl = String(k).toLowerCase();
+            if (["prompt", "negative_prompt", "image", "images", "start_image", "end_image", "reference_images"].includes(kl)) return false;
+            if (p.readOnly) return false;
+            return ["string", "number", "integer", "boolean"].includes(p.type) || Array.isArray(p.enum);
+          });
+          const hasGenOptions = !!(
+            (opt.duration && opt.duration.enabled) ||
+            (opt.resolution && opt.resolution.enabled) ||
+            (opt.aspect_ratio && opt.aspect_ratio.enabled) ||
+            (opt.reference_images && opt.reference_images.enabled) ||
+            (opt.generate_audio && opt.generate_audio.enabled)
+          );
+          if (hasGenOptions || dynamicKeys.length > 0) {
+            const durEnum = (opt.duration && Array.isArray(opt.duration.enum) && opt.duration.enum.length) ? opt.duration.enum : [5, 6, 7, 8];
+            const durDefault = Number((opt.duration && opt.duration.default) || 5);
+            const durationOptions = durEnum.map(v => `<option value="${v}" ${Number(v) === durDefault ? 'selected' : ''}>${v}s</option>`).join('');
+
+            const resEnum = (opt.resolution && Array.isArray(opt.resolution.enum) && opt.resolution.enum.length) ? opt.resolution.enum : ['720p', '1080p'];
+            const resDefault = String((opt.resolution && opt.resolution.default) || resEnum[0] || '1080p');
+            const resolutionOptions = resEnum.map(v => `<option value="${escapeHtml(v)}" ${String(v) === resDefault ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
+
+            const ratioEnum = (opt.aspect_ratio && Array.isArray(opt.aspect_ratio.enum) && opt.aspect_ratio.enum.length) ? opt.aspect_ratio.enum : ['16:9', '9:16', '1:1'];
+            const ratioDefault = String((opt.aspect_ratio && opt.aspect_ratio.default) || ratioEnum[0] || '16:9');
+            const ratioOptions = ratioEnum.map(v => `<option value="${escapeHtml(v)}" ${String(v) === ratioDefault ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
+
+            const dynamicFieldsHtml = dynamicKeys.map(k => {
+              const p = schemaProps[k] || {};
+              const id = `gen-dyn-${k.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+              const label = `${k}${schemaRequired.includes(k) ? " *" : ""}`;
+              if (Array.isArray(p.enum) && p.enum.length) {
+                const opts = p.enum.map(v => `<option value="${escapeHtml(String(v))}" ${String(v) === String(p.default ?? p.enum[0]) ? "selected" : ""}>${escapeHtml(String(v))}</option>`).join("");
+                return `<div class="gen-row"><label for="${id}">${escapeHtml(label)}</label><select id="${id}" data-gen-key="${escapeHtml(k)}">${opts}</select></div>`;
+              }
+              if (p.type === "boolean") {
+                const def = (p.default !== false);
+                return `<div class="gen-row"><label for="${id}">${escapeHtml(label)}</label><select id="${id}" data-gen-key="${escapeHtml(k)}"><option value="true" ${def ? "selected" : ""}>true</option><option value="false" ${!def ? "selected" : ""}>false</option></select></div>`;
+              }
+              const defVal = (p.default ?? "");
+              const inputType = (p.type === "number" || p.type === "integer") ? "number" : "text";
+              const step = p.type === "integer" ? "1" : "any";
+              return `<div class="gen-row"><label for="${id}">${escapeHtml(label)}</label><input id="${id}" data-gen-key="${escapeHtml(k)}" type="${inputType}" step="${step}" value="${escapeHtml(String(defVal))}" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.2);color:var(--tg-theme-text-color);font-size:0.9rem;"></div>`;
+            }).join("");
+
+            generationOptionsHtml = `
+              <div class="gen-options" id="generation-options">
+                <h3>⚙️ Generation Optionen</h3>
+                ${opt.duration && opt.duration.enabled ? `
+                <div class="gen-row">
+                  <label for="gen-duration">Duration</label>
+                  <select id="gen-duration">${durationOptions}</select>
+                </div>` : ''}
+                ${opt.resolution && opt.resolution.enabled ? `
+                <div class="gen-row">
+                  <label for="gen-resolution">Resolution</label>
+                  <select id="gen-resolution">${resolutionOptions}</select>
+                </div>` : ''}
+                ${opt.aspect_ratio && opt.aspect_ratio.enabled ? `
+                <div class="gen-row">
+                  <label for="gen-ratio">Aspect Ratio</label>
+                  <select id="gen-ratio">${ratioOptions}</select>
+                </div>` : ''}
+                ${opt.reference_images && opt.reference_images.enabled ? `
+                <div class="gen-row">
+                  <label for="gen-reference-images">Reference Images (URLs, optional)</label>
+                  <textarea id="gen-reference-images" placeholder="https://...&#10;https://..."></textarea>
+                </div>` : ''}
+                ${opt.generate_audio && opt.generate_audio.enabled ? `
+                <div class="gen-row">
+                  <label for="gen-audio">Generate Audio</label>
+                  <select id="gen-audio">
+                    <option value="true" ${opt.generate_audio.default !== false ? 'selected' : ''}>true</option>
+                    <option value="false" ${opt.generate_audio.default === false ? 'selected' : ''}>false</option>
+                  </select>
+                </div>` : ''}
+                ${dynamicFieldsHtml}
+                ${(opt.duration && opt.duration.enabled) ? '<div class="gen-hint">Standarddauer ist die voreingestellte Option des Modells.</div>' : ''}
+                <div class="detail-cost" id="gen-cost-preview">💰 Kosten: ${escapeHtml(String(data.final_cost || 0))} Credits</div>
+              </div>
+            `;
+          }
           if (isText) {
             btnHtml = `<div class="chat-mode-btns">
               <button type="button" class="btn-start" data-action="chat_mode_yes_${escapeHtml(key)}">✅ Chat starten</button>
@@ -624,8 +721,23 @@
             <div class="detail-desc">${escapeHtml(data.description || '')}</div>
             ${data.example_image_url ? '<div class="detail-example">🖼️ Dieses Modell hat ein Beispielbild oben in der Vorschau.</div>' : ''}
             ${costHtml}
+            ${generationOptionsHtml}
             ${btnHtml}
           `;
+          if (hasGenOptions) {
+            const durEl = document.getElementById('gen-duration');
+            const costEl = document.getElementById('gen-cost-preview');
+            const base = Number(data.final_cost || 0);
+            if (durEl && costEl) {
+              const updateCost = () => {
+                const d = Math.max(5, Number(durEl.value || 5));
+                const final = Math.round(base * (d / 5));
+                costEl.textContent = `💰 Kosten: ${final} Credits`;
+              };
+              durEl.addEventListener('change', updateCost);
+              updateCost();
+            }
+          }
           document.getElementById('detail-content').querySelectorAll('[data-action]').forEach(btn => {
             btn.addEventListener('click', (e) => {
               e.preventDefault();
@@ -634,7 +746,37 @@
               if (!action) return;
               btn.disabled = true;
               if (btn.classList.contains('btn-start')) btn.textContent = '⏳ …';
-              sendAction(action);
+              let payload = {};
+              if (hasGenOptions || dynamicKeys.length > 0) {
+                const g = {};
+                const durEl = document.getElementById('gen-duration');
+                const resEl = document.getElementById('gen-resolution');
+                const ratioEl = document.getElementById('gen-ratio');
+                const refEl = document.getElementById('gen-reference-images');
+                const audioEl = document.getElementById('gen-audio');
+                if (durEl) g.duration = Math.max(1, Number(durEl.value || 5));
+                if (resEl) g.resolution = resEl.value;
+                if (ratioEl) g.aspect_ratio = ratioEl.value;
+                if (audioEl) g.generate_audio = (audioEl.value === 'true');
+                if (refEl) {
+                  g.reference_images = (refEl.value || '')
+                    .split(/\n|,/)
+                    .map(s => s.trim())
+                    .filter(s => s.startsWith('http://') || s.startsWith('https://'));
+                }
+                document.querySelectorAll('[data-gen-key]').forEach(el => {
+                  const k = el.getAttribute('data-gen-key');
+                  if (!k) return;
+                  let v = el.value;
+                  const p = schemaProps[k] || {};
+                  if (p.type === "boolean") v = (String(v) === "true");
+                  else if (p.type === "integer") v = Number.parseInt(v, 10);
+                  else if (p.type === "number") v = Number(v);
+                  if (v !== "" && v !== null && !(Number.isNaN(v))) g[k] = v;
+                });
+                payload = { generation_options: g };
+              }
+              sendAction(action, payload);
             });
           });
         })
