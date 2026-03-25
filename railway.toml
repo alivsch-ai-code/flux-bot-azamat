@@ -1,6 +1,6 @@
 [build]
-builder = "railpack"
-buildCommand = "npm ci --prefix webapp-react && npm run build --prefix webapp-react && pip install -r requirements.txt"
+builder = "NIXPACKS"
+nixpacksConfigPath = "nixpacks.toml"
 
 [deploy]
 startCommand = "python main.py"
