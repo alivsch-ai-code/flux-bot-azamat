@@ -952,6 +952,26 @@
               const p = schemaProps[k] || {};
               const id = `gen-dyn-${k.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
               const label = `${k}${schemaRequired.includes(k) ? " *" : ""}`;
+              const kl = String(k).toLowerCase();
+              const wantsUriImageUpload = (p.format === 'uri') && (kl.includes('image') || kl.includes('img'));
+              if (wantsUriImageUpload) {
+                const defVal = (p.default ?? "");
+                const inputVal = escapeHtml(String(defVal));
+                const fileId = `${id}-file`;
+                const btnId = `${id}-upload-btn`;
+                const statusId = `${id}-upload-status`;
+                return `
+                  <div class="gen-row">
+                    <label for="${id}">${escapeHtml(label)}</label>
+                    <div class="ref-upload-toolbar">
+                      <input type="file" id="${fileId}" accept="image/jpeg,image/png,image/webp" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none" />
+                      <button type="button" class="btn-ref-upload btn-upload-image-uri" id="${btnId}" data-target-input="${escapeHtml(id)}">📎 Upload</button>
+                      <span id="${statusId}" class="gen-hint" style="display:none;margin:0"></span>
+                    </div>
+                    <input id="${id}" data-gen-key="${escapeHtml(k)}" type="text" value="${inputVal}" style="width:100%;margin-top:8px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.2);color:var(--tg-theme-text-color);font-size:0.9rem;" />
+                  </div>
+                `;
+              }
               if (Array.isArray(p.enum) && p.enum.length) {
                 const opts = p.enum.map(v => `<option value="${escapeHtml(String(v))}" ${String(v) === String(p.default ?? p.enum[0]) ? "selected" : ""}>${escapeHtml(String(v))}</option>`).join("");
                 return `<div class="gen-row"><label for="${id}">${escapeHtml(label)}</label><select id="${id}" data-gen-key="${escapeHtml(k)}">${opts}</select></div>`;
@@ -1028,6 +1048,53 @@
             ${generationOptionsHtml}
             ${btnHtml}
           `;
+
+          // Upload-Buttons für dynamische URI-Image-Felder (z.B. input_image).
+          document.querySelectorAll('.btn-upload-image-uri').forEach(btn => {
+            const targetInputId = btn.dataset.targetInput;
+            const fileInput = document.getElementById(targetInputId + '-file') || document.getElementById(targetInputId + '_file');
+            const statusEl = document.getElementById(targetInputId + '-upload-status');
+            btn.addEventListener('click', () => {
+              fileInput && fileInput.click();
+            });
+            fileInput && fileInput.addEventListener('change', () => {
+              if (!fileInput.files || !fileInput.files.length) return;
+              const initData = tg && tg.initData;
+              if (!initData) {
+                showError('Kein Telegram-Kontext (initData).');
+                fileInput.value = '';
+                return;
+              }
+              btn.disabled = true;
+              if (statusEl) { statusEl.style.display = 'inline'; statusEl.textContent = '⏳ Upload…'; }
+              const fd = new FormData();
+              fd.append('init_data', initData);
+              for (let i = 0; i < fileInput.files.length; i++) fd.append('files', fileInput.files[i]);
+              fetch(API_BASE + '/api/webapp_upload_reference', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(res => {
+                  btn.disabled = false;
+                  fileInput.value = '';
+                  if (!res.ok || !Array.isArray(res.urls) || !res.urls.length) {
+                    if (statusEl) statusEl.textContent = res.error || 'Fehler';
+                    showError(res.error || 'Upload fehlgeschlagen');
+                    return;
+                  }
+                  const ta = document.getElementById(targetInputId);
+                  if (ta) ta.value = res.urls[0];
+                  if (statusEl) {
+                    statusEl.textContent = '✓ 1 URL';
+                    setTimeout(() => { statusEl.style.display = 'none'; }, 2500);
+                  }
+                })
+                .catch(() => {
+                  btn.disabled = false;
+                  fileInput.value = '';
+                  if (statusEl) statusEl.textContent = '';
+                  showError('Verbindungsfehler');
+                });
+            });
+          });
 
           // Paid Gemini Prompt-Optimization (3 credits shown as 3 stars in UI).
           const optBtn = document.getElementById('btn-optimize-paid');

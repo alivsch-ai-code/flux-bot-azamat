@@ -155,16 +155,31 @@ def process_webapp_action(
             options["negative_prompt"] = neg.strip()
         prompt_trim = _trim_webapp_prompt(pl.get("prompt"))
 
-        ref_images = options.get("reference_images") or []
+        # WebApp sendet Bild-Inputs typischerweise in `generation_options` als URI-Felder
+        # (z.B. `reference_images`, `input_image` ...). Für den Telegram-Flow und
+        # die UnifiedAIClient-Datei-Zuordnung brauchen wir daraus `media_paths`.
         media_paths: list = []
-        if isinstance(ref_images, list) and ref_images:
-            media_paths = [
-                {"path": str(u), "type": "image"}
-                for u in ref_images
-                if isinstance(u, str) and (u.startswith("http://") or u.startswith("https://"))
-            ]
-        elif options:
-            media_paths = []
+        media_keys_used: set[str] = set()
+
+        def _maybe_add_image_uri(val) -> None:
+            if isinstance(val, str) and (val.startswith("http://") or val.startswith("https://")):
+                media_paths.append({"path": val, "type": "image"})
+            elif isinstance(val, list):
+                for x in val:
+                    _maybe_add_image_uri(x)
+
+        for k, v in list(options.items()):
+            kl = str(k).lower()
+            # Nur Media-ähnliche Keys (damit wir z.B. aspect_ratio nicht anfassen).
+            if "image" in kl or "img" in kl or kl in ("reference_images",):
+                if v:
+                    _maybe_add_image_uri(v)
+                    media_keys_used.add(k)
+
+        # Entferne die URI-Keys aus generation_options, weil UnifiedAIClient sie via
+        # media_files bereits über das Replicate-Schema korrekt mappen soll.
+        if media_keys_used:
+            options = {k: v for k, v in options.items() if k not in media_keys_used}
 
         needs_media = bool(model and schema_requires_media(model.input_schema, model=model))
         has_media = bool(media_paths)
