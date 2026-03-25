@@ -19,7 +19,7 @@ class DynamicSchemaAdapter:
         
         # 2. Keywords für Dateityp-Erkennung in Schema-Keys
         self.type_keywords = {
-            "image": ["image", "img", "photo", "face", "avatar", "mask", "init_image", "target_image", "swap_image", "input_image", "image_input", "start_image", "end_image", "reference_images", "first_frame_image"],
+            "image": ["image", "img", "photo", "face", "avatar", "mask", "init_image", "target_image", "swap_image", "input_image", "image_input", "start_image", "end_image", "reference_images", "input_reference", "first_frame_image"],
             "video": ["video", "movie", "footage", "clip", "input_video", "video_input"],
             "audio": ["audio", "sound", "music", "voice", "mp3", "wav", "speech", "input_audio"],
             "document": ["document", "file", "pdf", "doc", "input_file"],
@@ -77,7 +77,7 @@ class DynamicSchemaAdapter:
             is_string_or_undef = type_def not in ["integer", "number", "boolean"]
             name_match = any(
                 k in key.lower()
-                for k in ["image", "video", "audio", "file", "path", "mask", "document", "pdf"]
+                for k in ["image", "video", "audio", "file", "path", "mask", "reference", "document", "pdf"]
             )
             
             # Ignoriere output_format
