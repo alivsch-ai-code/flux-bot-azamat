@@ -7,7 +7,7 @@ Nutzer verfügbar, KI-Upgrade mit natürlicherem Dialog; Prime oft inklusive, so
 
 message_text wird als JSON gespeichert; DailyService löst pro User-Sprache auf (de/en/ru/kk).
 
-Aufruf: python tools/seed_daily_alexa_plus_tomorrow.py
+Aufruf: python archive/legacy_tools/seed_daily_alexa_plus_tomorrow.py
 
 Benötigt DATABASE_URL in .env (PostgreSQL).
 """
@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 

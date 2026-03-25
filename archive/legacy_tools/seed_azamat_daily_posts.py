@@ -5,7 +5,7 @@ Nutzt DATABASE_URL aus .env. UPSERT auf date_to_send; bereits gesendete Posts (s
 bleiben markiert und erhalten nur optional neue Texte nicht erzwungen – wir überschreiben
 message_text aber setzen sent_status nur auf 0, wenn noch nicht gesendet.
 
-Aufruf: python tools/seed_azamat_daily_posts.py
+Aufruf: python archive/legacy_tools/seed_azamat_daily_posts.py
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Projektroot
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
