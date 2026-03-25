@@ -75,6 +75,19 @@ def _first_image_path(media_files: Optional[List[MediaFile]]) -> Optional[str]:
 
 
 class UnifiedAIClient:
+    """
+    UnifiedAIClient ist der einzige aktive Inferenz-Einstieg für die App.
+
+    Design:
+    - Provider-spezifisches Wissen (Replicate/OpenAI/etc.) ist hier gebündelt.
+    - Telegram/WebApp ruft nur `generate(model, prompt, media_files, generation_params)` auf.
+    - Falls künftig neue Provider hinzukommen: Implementierung hier ergänzen und
+      die Zuordnung (model.provider) sicherstellen.
+
+    Hinweis:
+    - Bisherige eigenständige Provider-Clients sind als Referenz archiviert
+      (siehe `archive/python_unused_providers/`) und werden nicht importiert.
+    """
     def __init__(self, config):
         self.config = config
         self.schema_adapter = DynamicSchemaAdapter()
@@ -99,7 +112,14 @@ class UnifiedAIClient:
         generation_params: Optional[dict] = None,
     ) -> GenerationResult:
         """
-        Verteilt die Anfrage an den richtigen Provider (Replicate, OpenAI, Kling etc.)
+        Verteilt die Anfrage an den richtigen Provider.
+
+        Erwartung:
+        - `model.provider` bestimmt den Provider-Typ.
+        - `model.input_schema` (falls vorhanden) steuert die Eingabe-Mapping-Logik über
+          `DynamicSchemaAdapter`.
+        - `generation_params` kommt aus der WebApp (z. B. duration/resolution) und wird
+          optional in das Provider-Input gemappt.
         """
         logger.info("UnifiedClient startet Request für %s (Provider: %s)", model.name, model.provider)
         

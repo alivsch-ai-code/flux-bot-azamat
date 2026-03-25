@@ -1,3 +1,17 @@
+"""
+menu_handler.py – Navigation und WebApp-Aktionen (Telegram Controller).
+
+Dieser Handler verbindet die React Mini App (WebApp) mit dem Telegram-Bot:
+- Für `commands`/`keyboard`: baut er Inline-/Reply-Menüs und Navigationsschritte
+- Für `webapp`-Modus: erstellt WebApp-Buttons mit URL-Pfaden wie `/webapp?path=...`
+- Für WebApp-Aktionen: `process_webapp_action(...)` wird vom Flask-Endpoint `/api/webapp_action` aufgerufen
+  und triggert dann den eigentlichen Generierungs-Flow über `runner.run_generation`.
+
+Unified-Prinzip:
+- Diese Datei kennt keine Provider-Details.
+- Inferenz/Provider-Mapping passiert nur in `GenerationService` + `UnifiedAIClient`.
+"""
+
 import json
 import logging
 import os
@@ -80,6 +94,9 @@ def process_webapp_action(
 ) -> dict | None:
     """Führt eine Web-App-Aktion aus. Nutzbar von web_app_data-Handler und API.
     Bei is_group=True (Gruppenchat): nur Credits + Sprache, kein volles Menü."""
+    # WebApp-Aktionen laufen in dieser Reihenfolge:
+    # HTTP-Endpoint (`/api/webapp_action`) -> process_webapp_action -> optional `run_generation` (via `_webapp_run_generation`)
+    # -> `GenerationService` -> `UnifiedAIClient` (Provider-Mapping).
     if is_group:
         text, markup = get_group_menu_markup(db, user_id, "")
         bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
@@ -141,6 +158,9 @@ def process_webapp_action(
         else:
             send_model_detail_view(bot, user_id, model_key, db, get_lang)
     elif action.startswith("start_gen_"):
+        # Start der Generierung:
+        # - `start_gen_<model_key>`: WebApp übergibt Modell-Key und Prompt/Optionen
+        # - wir extrahieren Media-URIs aus `generation_options` und starten den gen-Flow
         model_key = action.replace("start_gen_", "")
         model = db.get_model_by_key(model_key)
         pl = payload if isinstance(payload, dict) else {}

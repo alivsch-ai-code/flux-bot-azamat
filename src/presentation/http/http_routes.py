@@ -82,7 +82,15 @@ def _replicate_file_url(resp) -> str | None:
 
 
 def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str) -> None:
-    """Registriert alle HTTP-Endpunkte auf der gegebenen Flask-App."""
+    """
+    Registriert alle HTTP-Endpunkte.
+
+    Wichtige Prinzipien:
+    - Keine globalen DB/Bot-Variablen: stattdessen `runtime.db` und `runtime.bot`.
+    - Endpunkte sind bewusst defensiv (bei fehlendem DB/Bot liefern sie einen klaren Fehler).
+    - React Mini-App (Vite) wird als statische Datei-Assets ausgeliefert,
+      JSON-Endpunkte liefern Daten für den React Flow.
+    """
 
     @app.route("/")
     def health_check():

@@ -8,6 +8,23 @@ from src.presentation.telegram.handlers import gen_handler, group_handler, menu_
 logger = logging.getLogger(__name__)
 
 
+"""
+Telegram Bot Wiring (Update Orchestrierung).
+
+Dieses Modul ist bewusst klein:
+- `setup_bot(...)` setzt Telegram-Commands und den Chat-Menü-Button (Commands vs WebApp)
+- dann registriert es die Handler-Module:
+  - `group_handler` (Gruppenmodus: Gemini-Chat, Credits, Sprache)
+  - `menu_handler` (Navigation, WebApp-Aktionen, Shop/Settings)
+  - `payment_handler` (Telegram Stars / Invoice callbacks)
+  - `gen_handler` (Generierungs-Flow: nav/start/prompt/media)
+
+AI/Provider-Logik steckt NICHT hier, sondern in:
+- `src.application.services.GenerationService`
+- `src.infrastructure.ai.unified_client.UnifiedAIClient`
+"""
+
+
 def setup_bot(bot: TeleBot, generation_service, db) -> None:
     """Registriert Handler und startet den DailyService."""
     try:

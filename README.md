@@ -159,6 +159,7 @@ For a **German, detailed** breakdown (handlers, HTTP routes, `GenerationService`
 | **Application** | `GenerationService.process_request(...)` | Credits, validation, routing by model type, Replicate/OpenAI/Gemini via `UnifiedAIClient`. |
 | **Domain** | `UserRepository`, `AIProvider` in `src/domain/interfaces.py` | Contracts; `DatabaseManager` + adapters implement behavior. |
 | **Chat batching** | `schedule_batched_text_message`, `cancel_pending_batch` | `src/presentation/telegram/handlers/chat_debounce.py` |
+| **Chat persistence** | `get_chat_session` / `save_chat_session` | Neon table `chat_sessions` via `src/infrastructure/database.py` (history → Prompt) |
 
 ---
 
