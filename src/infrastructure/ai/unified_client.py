@@ -33,8 +33,11 @@ def _local_paths_to_urls(paths: List[str], client) -> List[str]:
                     content = f.read()
                 ext = os.path.splitext(p)[1].lower() or ".jpg"
                 mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png" if ext == ".png" else "image/webp" if ext == ".webp" else "application/octet-stream"
+                import io
+
                 fn = os.path.basename(p) or "image.jpg"
-                resp = client.files.create(content=content, filename=fn, type=mime)
+                # replicate SDK verlangt hier zwingend `file=`.
+                resp = client.files.create(file=io.BytesIO(content), filename=fn, type=mime)
                 url = getattr(resp, "url", None)
                 if not url and hasattr(resp, "urls") and isinstance(resp.urls, dict):
                     url = resp.urls.get("get")

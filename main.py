@@ -279,6 +279,8 @@ def api_webapp_upload_reference():
 
         client = replicate.Client(api_token=config.REPLICATE_API_TOKEN)
         urls: list[str] = []
+        import io
+
         for fs in files:
             raw = fs.read()
             if len(raw) > max_bytes:
@@ -287,7 +289,8 @@ def api_webapp_upload_reference():
             if mime not in allowed_mime:
                 return jsonify(ok=False, error="invalid_type"), 400
             fn = os.path.basename(fs.filename or "image.jpg") or "image.jpg"
-            resp = client.files.create(content=raw, filename=fn, type=mime)
+            # replicate SDK verlangt hier zwingend `file=` (Pfad oder Datei-Objekt).
+            resp = client.files.create(file=io.BytesIO(raw), filename=fn, type=mime)
             url = _replicate_file_url(resp)
             if not url or not (url.startswith("http://") or url.startswith("https://")):
                 return jsonify(ok=False, error="upload_failed"), 500
