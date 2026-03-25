@@ -963,7 +963,12 @@
               const typeStr = String(p.type || "").toLowerCase();
               // Einige Replicate-Schemas liefern `type: any` oder sehr abweichende `type`-Werte.
               // Für Uploads brauchen wir im Frontend nur, dass wir einen URI-Wert setzen können.
-              const isUriLikeInputType = !p.type || typeStr === "string" || typeStr === "array" || typeStr === "any";
+              const isUriLikeInputType =
+                !p.type ||
+                typeStr === "string" ||
+                typeStr === "array" ||
+                typeStr === "any" ||
+                typeStr === "object";
               const wantsImage = kl.includes("image") || kl.includes("img") || kl.includes("mask");
               // Format kann z.B. "uri", aber auch "uri-reference", "url" oder "path" sein.
               const wantsUriLike =
