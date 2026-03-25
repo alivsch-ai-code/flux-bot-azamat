@@ -384,6 +384,22 @@
       text-transform: uppercase;
       opacity: 0.9;
     }
+    .advanced-details {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(148,163,184,0.35);
+      background: rgba(0,0,0,0.15);
+    }
+    .advanced-details summary {
+      cursor: pointer;
+      font-weight: 800;
+      color: var(--tg-theme-text-color);
+      opacity: 0.92;
+      user-select: none;
+      margin-bottom: 8px;
+    }
+    .advanced-details[open] summary { margin-bottom: 10px; }
     .gen-row { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 12px; }
     .gen-row label { font-size: 0.78rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
     .gen-row select, .gen-row textarea {
@@ -953,7 +969,21 @@
           const dynamicKeys = Object.keys(schemaProps).filter(k => {
             const p = schemaProps[k] || {};
             const kl = String(k).toLowerCase();
-            if (["prompt", "negative_prompt", "image", "images", "start_image", "end_image", "reference_images"].includes(kl)) return false;
+            // Diese Felder werden unten separat gerendert (Prompt/Media) oder
+            // über dedizierte UI-Controls wie gen-duration/gen-resolution gemanagt.
+            if ([
+              "prompt",
+              "negative_prompt",
+              "image",
+              "images",
+              "start_image",
+              "end_image",
+              "reference_images",
+              "duration",
+              "resolution",
+              "aspect_ratio",
+              "generate_audio",
+            ].includes(kl)) return false;
             if (p.readOnly) return false;
             return ["string", "number", "integer", "boolean"].includes(p.type) || Array.isArray(p.enum);
           });
@@ -1007,95 +1037,121 @@
             const durDefault = Number((opt.duration && opt.duration.default) || 5);
             const durationOptions = durEnum.map(v => `<option value="${v}" ${Number(v) === durDefault ? 'selected' : ''}>${v}s</option>`).join('');
 
-            const resEnum = (opt.resolution && Array.isArray(opt.resolution.enum) && opt.resolution.enum.length) ? opt.resolution.enum : ['720p', '1080p'];
-            const resDefault = String((opt.resolution && opt.resolution.default) || resEnum[0] || '1080p');
-            const resolutionOptions = resEnum.map(v => `<option value="${escapeHtml(v)}" ${String(v) === resDefault ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
+            // IMPORTANT: `resolution` Enum muss aus dem echten Replicate input_schema kommen.
+            // Sonst kann es zu 422 kommen (z.B. erwartet: "0.5 MP", gesendet: "720p").
+            const resolutionProp = schemaProps.resolution || {};
+            const resEnum = Array.isArray(resolutionProp.enum) ? resolutionProp.enum : [];
+            const resDefault = (resolutionProp.default != null && String(resolutionProp.default).trim())
+              ? String(resolutionProp.default)
+              : (resEnum.length ? String(resEnum[0]) : '');
+            const resolutionOptions = resEnum.length
+              ? resEnum.map(v => `<option value="${escapeHtml(String(v))}" ${String(v) === resDefault ? 'selected' : ''}>${escapeHtml(String(v))}</option>`).join('')
+              : '';
 
-            const ratioEnum = (opt.aspect_ratio && Array.isArray(opt.aspect_ratio.enum) && opt.aspect_ratio.enum.length) ? opt.aspect_ratio.enum : ['16:9', '9:16', '1:1'];
-            const ratioDefault = String((opt.aspect_ratio && opt.aspect_ratio.default) || ratioEnum[0] || '16:9');
-            const ratioOptions = ratioEnum.map(v => `<option value="${escapeHtml(v)}" ${String(v) === ratioDefault ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
+            const aspectRatioProp = schemaProps.aspect_ratio || {};
+            const ratioEnum = Array.isArray(aspectRatioProp.enum) ? aspectRatioProp.enum : [];
+            const ratioDefault = (aspectRatioProp.default != null && String(aspectRatioProp.default).trim())
+              ? String(aspectRatioProp.default)
+              : (ratioEnum.length ? String(ratioEnum[0]) : '');
+            const ratioOptions = ratioEnum.length
+              ? ratioEnum.map(v => `<option value="${escapeHtml(String(v))}" ${String(v) === ratioDefault ? 'selected' : ''}>${escapeHtml(String(v))}</option>`).join('')
+              : '';
 
-            const dynamicFieldsHtml = dynamicKeys.map(k => {
-              const p = schemaProps[k] || {};
-              const id = `gen-dyn-${k.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
-              const label = `${k}${schemaRequired.includes(k) ? " *" : ""}`;
+            const mediaLikeDynamicKeys = dynamicKeys.filter(k => {
               const kl = String(k).toLowerCase();
-              // UI-Upload-Button für Bild-URI-Felder:
-              // Manche Replicate-Schemas liefern `format: "uri"` nicht exakt so aus,
-              // zeigen aber trotzdem ein URI-String-Feld an (z.B. `input_image`).
-              const fmt = String(p.format || "").toLowerCase();
-              // Manche Replicate-Schemas deklarieren `type: "array"` obwohl es sich
-              // in der Praxis um 0..1 URI handelt (z.B. `control_image`, `mask`).
-              // Darum erlauben wir auch `array`-Inputs für das Upload-UI.
-              const typeStr = String(p.type || "").toLowerCase();
-              // Einige Replicate-Schemas liefern `type: any` oder sehr abweichende `type`-Werte.
-              // Für Uploads brauchen wir im Frontend nur, dass wir einen URI-Wert setzen können.
-              const isUriLikeInputType =
-                !p.type ||
-                typeStr === "string" ||
-                typeStr === "array" ||
-                typeStr === "any" ||
-                typeStr === "object";
-              const wantsImage =
+              return (
                 kl.includes("image") ||
                 kl.includes("img") ||
                 kl.includes("mask") ||
+                kl.includes("input_image") ||
                 kl.includes("input_reference") ||
                 kl.includes("inputreference") ||
                 kl.includes("first_frame") ||
                 kl.includes("last_frame") ||
-                kl.includes("frame_image");
-              // Format kann z.B. "uri", aber auch "uri-reference", "url" oder "path" sein.
-              const wantsUriLike =
-                fmt.includes("uri") ||
-                fmt.includes("url") ||
-                fmt.includes("path") ||
-                fmt === "" ||
-                fmt === "uri" ||
-                fmt === "url";
-              // Der Replicate-Schema-Baustein ist manchmal unvollständig/abweichend.
-              // Für die Praxis reicht es, dass es ein "image/img/mask/frame"-Feld ist.
-              // Der Upload liefert eine HTTP(S)-URL, die Replicate i. d. R. als URI akzeptiert.
-              const wantsUriImageUpload = wantsImage && (isUriLikeInputType || wantsUriLike);
-              if (wantsUriImageUpload) {
-                const defVal = (p.default ?? "");
-                const inputVal = escapeHtml(String(defVal));
-                const fileId = `${id}-file`;
-                const btnId = `${id}-upload-btn`;
-                const statusId = `${id}-upload-status`;
-                const displayInitial = inputVal ? '✓ hochgeladen' : '';
-                return `
-                  <div class="gen-row">
-                    <label for="${id}">${escapeHtml(label)}</label>
-                    <div class="ref-upload-toolbar">
-                      <input type="file" id="${fileId}" accept="image/jpeg,image/png,image/webp" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none" />
-                      <button type="button" class="btn-ref-upload btn-upload-image-uri" id="${btnId}" data-target-input="${escapeHtml(id)}">📎 Upload</button>
-                      <span id="${statusId}" class="gen-hint" style="display:none;margin:0"></span>
+                kl.includes("frame_image")
+              );
+            });
+            const advancedDynamicKeys = dynamicKeys.filter(k => !mediaLikeDynamicKeys.includes(k));
+
+            function renderDynamicFields(keysArr) {
+              return keysArr.map(k => {
+                const p = schemaProps[k] || {};
+                const id = `gen-dyn-${k.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+                const label = `${k}${schemaRequired.includes(k) ? " *" : ""}`;
+                const kl = String(k).toLowerCase();
+                // UI-Upload-Button für Bild-URI-Felder:
+                // Manche Replicate-Schemas liefern `format: "uri"` nicht exakt so aus,
+                // zeigen aber trotzdem ein URI-String-Feld an (z.B. `input_image`).
+                const fmt = String(p.format || "").toLowerCase();
+                const typeStr = String(p.type || "").toLowerCase();
+
+                const isUriLikeInputType =
+                  !p.type ||
+                  typeStr === "string" ||
+                  typeStr === "array" ||
+                  typeStr === "any" ||
+                  typeStr === "object";
+
+                const wantsImage =
+                  kl.includes("image") ||
+                  kl.includes("img") ||
+                  kl.includes("mask") ||
+                  kl.includes("input_reference") ||
+                  kl.includes("inputreference") ||
+                  kl.includes("input_image") ||
+                  kl.includes("first_frame") ||
+                  kl.includes("last_frame") ||
+                  kl.includes("frame_image");
+
+                const wantsUriLike =
+                  fmt.includes("uri") ||
+                  fmt.includes("url") ||
+                  fmt.includes("path") ||
+                  fmt === "" ||
+                  fmt === "uri" ||
+                  fmt === "url";
+
+                const wantsUriImageUpload = wantsImage && (isUriLikeInputType || wantsUriLike);
+                if (wantsUriImageUpload) {
+                  const defVal = (p.default ?? "");
+                  const inputVal = escapeHtml(String(defVal));
+                  const fileId = `${id}-file`;
+                  const btnId = `${id}-upload-btn`;
+                  const statusId = `${id}-upload-status`;
+                  const displayInitial = inputVal ? '✓ hochgeladen' : '';
+                  return `
+                    <div class="gen-row">
+                      <label for="${id}">${escapeHtml(label)}</label>
+                      <div class="ref-upload-toolbar">
+                        <input type="file" id="${fileId}" accept="image/jpeg,image/png,image/webp" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none" />
+                        <button type="button" class="btn-ref-upload btn-upload-image-uri" id="${btnId}" data-target-input="${escapeHtml(id)}">📎 Upload</button>
+                        <span id="${statusId}" class="gen-hint" style="display:none;margin:0"></span>
+                      </div>
+                      <input id="${id}-display" type="text" value="${displayInitial}" readonly
+                        style="width:100%;margin-top:8px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.2);color:var(--tg-theme-text-color);font-size:0.9rem;" />
+                      <input id="${id}" data-gen-key="${escapeHtml(k)}" type="text" value="${inputVal}"
+                        style="display:none;" />
                     </div>
-                    <!--
-                      Sichtbares Feld: zeigt nur "hochgeladen", damit keine Replicate-URL im UI erscheint.
-                      Hidden Feld (mit data-gen-key): enthält die echte URL für die Payload.
-                    -->
-                    <input id="${id}-display" type="text" value="${displayInitial}" readonly
-                      style="width:100%;margin-top:8px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.2);color:var(--tg-theme-text-color);font-size:0.9rem;" />
-                    <input id="${id}" data-gen-key="${escapeHtml(k)}" type="text" value="${inputVal}"
-                      style="display:none;" />
-                  </div>
-                `;
-              }
-              if (Array.isArray(p.enum) && p.enum.length) {
-                const opts = p.enum.map(v => `<option value="${escapeHtml(String(v))}" ${String(v) === String(p.default ?? p.enum[0]) ? "selected" : ""}>${escapeHtml(String(v))}</option>`).join("");
-                return `<div class="gen-row"><label for="${id}">${escapeHtml(label)}</label><select id="${id}" data-gen-key="${escapeHtml(k)}">${opts}</select></div>`;
-              }
-              if (p.type === "boolean") {
-                const def = (p.default !== false);
-                return `<div class="gen-row"><label for="${id}">${escapeHtml(label)}</label><select id="${id}" data-gen-key="${escapeHtml(k)}"><option value="true" ${def ? "selected" : ""}>true</option><option value="false" ${!def ? "selected" : ""}>false</option></select></div>`;
-              }
-              const defVal = (p.default ?? "");
-              const inputType = (p.type === "number" || p.type === "integer") ? "number" : "text";
-              const step = p.type === "integer" ? "1" : "any";
-              return `<div class="gen-row"><label for="${id}">${escapeHtml(label)}</label><input id="${id}" data-gen-key="${escapeHtml(k)}" type="${inputType}" step="${step}" value="${escapeHtml(String(defVal))}" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.2);color:var(--tg-theme-text-color);font-size:0.9rem;"></div>`;
-            }).join("");
+                  `;
+                }
+
+                if (Array.isArray(p.enum) && p.enum.length) {
+                  const opts = p.enum.map(v => `<option value="${escapeHtml(String(v))}" ${String(v) === String(p.default ?? p.enum[0]) ? "selected" : ""}>${escapeHtml(String(v))}</option>`).join("");
+                  return `<div class="gen-row"><label for="${id}">${escapeHtml(label)}</label><select id="${id}" data-gen-key="${escapeHtml(k)}">${opts}</select></div>`;
+                }
+                if (p.type === "boolean") {
+                  const def = (p.default !== false);
+                  return `<div class="gen-row"><label for="${id}">${escapeHtml(label)}</label><select id="${id}" data-gen-key="${escapeHtml(k)}"><option value="true" ${def ? "selected" : ""}>true</option><option value="false" ${!def ? "selected" : ""}>false</option></select></div>`;
+                }
+                const defVal = (p.default ?? "");
+                const inputType = (p.type === "number" || p.type === "integer") ? "number" : "text";
+                const step = p.type === "integer" ? "1" : "any";
+                return `<div class="gen-row"><label for="${id}">${escapeHtml(label)}</label><input id="${id}" data-gen-key="${escapeHtml(k)}" type="${inputType}" step="${step}" value="${escapeHtml(String(defVal))}" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.2);color:var(--tg-theme-text-color);font-size:0.9rem;"></div>`;
+              }).join("");
+            }
+
+            const dynamicFieldsMediaHtml = renderDynamicFields(mediaLikeDynamicKeys);
+            const dynamicFieldsAdvancedHtml = renderDynamicFields(advancedDynamicKeys);
 
             generationOptionsHtml = `
               <div class="gen-options" id="generation-options">
@@ -1104,16 +1160,6 @@
                 <div class="gen-row">
                   <label for="gen-duration">Duration</label>
                   <select id="gen-duration">${durationOptions}</select>
-                </div>` : ''}
-                ${opt.resolution && opt.resolution.enabled ? `
-                <div class="gen-row">
-                  <label for="gen-resolution">Resolution</label>
-                  <select id="gen-resolution">${resolutionOptions}</select>
-                </div>` : ''}
-                ${opt.aspect_ratio && opt.aspect_ratio.enabled ? `
-                <div class="gen-row">
-                  <label for="gen-ratio">Aspect Ratio</label>
-                  <select id="gen-ratio">${ratioOptions}</select>
                 </div>` : ''}
                 ${opt.reference_images && opt.reference_images.enabled ? `
                 <div class="gen-row">
@@ -1125,15 +1171,29 @@
                   </div>
                   <textarea id="gen-reference-images" placeholder="https://...&#10;oder URLs erscheinen nach Upload hier"></textarea>
                 </div>` : ''}
-                ${opt.generate_audio && opt.generate_audio.enabled ? `
-                <div class="gen-row">
-                  <label for="gen-audio">Generate Audio</label>
-                  <select id="gen-audio">
-                    <option value="true" ${opt.generate_audio.default !== false ? 'selected' : ''}>true</option>
-                    <option value="false" ${opt.generate_audio.default === false ? 'selected' : ''}>false</option>
-                  </select>
-                </div>` : ''}
-                ${dynamicFieldsHtml}
+                <details class="advanced-details" id="advanced-gen-settings">
+                  <summary>⚙️ Erweiterte Einstellungen</summary>
+                  ${resolutionOptions ? `
+                  <div class="gen-row">
+                    <label for="gen-resolution">Resolution</label>
+                    <select id="gen-resolution">${resolutionOptions}</select>
+                  </div>` : ''}
+                  ${ratioOptions ? `
+                  <div class="gen-row">
+                    <label for="gen-ratio">Aspect Ratio</label>
+                    <select id="gen-ratio">${ratioOptions}</select>
+                  </div>` : ''}
+                  ${opt.generate_audio && opt.generate_audio.enabled ? `
+                  <div class="gen-row">
+                    <label for="gen-audio">Generate Audio</label>
+                    <select id="gen-audio">
+                      <option value="true" ${opt.generate_audio.default !== false ? 'selected' : ''}>true</option>
+                      <option value="false" ${opt.generate_audio.default === false ? 'selected' : ''}>false</option>
+                    </select>
+                  </div>` : ''}
+                  ${dynamicFieldsAdvancedHtml}
+                </details>
+                ${dynamicFieldsMediaHtml}
                 ${(opt.duration && opt.duration.enabled) ? '<div class="gen-hint">Standarddauer ist die voreingestellte Option des Modells.</div>' : ''}
                 <div class="detail-cost" id="gen-cost-preview">💰 Kosten: ${escapeHtml(String(data.final_cost || 0))} Credits</div>
               </div>
