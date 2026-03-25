@@ -83,7 +83,7 @@ Für `image_analysis`-Modelle könnte ein eigener Einstieg „🔍 Bild beschrei
 Bestehende DB-Modelle neu klassifizieren (z.B. nach Änderungen an `replicate_fetcher`):
 
 ```bash
-python -m src.tools.reclassify_models --main
+python -m archive.legacy_tools.reclassify_models --main
 ```
 
 Neue Modelle werden beim Import von Replicate automatisch korrekt klassifiziert.

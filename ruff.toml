@@ -2,4 +2,4 @@
 [lint.per-file-ignores]
 "main.py" = ["E402"]
 "src/application/services.py" = ["E402"]
-"src/tools/main_gui.py" = ["E402"]
+"archive/legacy_tools/main_gui.py" = ["E402"]

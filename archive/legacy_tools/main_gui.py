@@ -44,7 +44,9 @@ st.write("Erstellt Tabellen `ai_models` und `ai_models_staging`. **Achtung:** L�
 
 if st.button("🧹 Datenbank initialisieren", key="init"):
     with st.spinner("Initialisiere..."):
-        success, out = run_with_output(lambda: __import__("src.tools.init", fromlist=["setup_database"]).setup_database())
+        success, out = run_with_output(
+            lambda: __import__("archive.legacy_tools.init", fromlist=["setup_database"]).setup_database()
+        )
     if success:
         st.success("✅ Fertig!")
         st.code(out, language=None)
@@ -58,7 +60,9 @@ st.write("Lädt 8 Best-of-Modelle (Flux, Kling, Llama, etc.) von Replicate ins S
 
 if st.button("📥 Default-Modelle laden", key="fetch"):
     with st.spinner("Lade von Replicate..."):
-        success, out = run_with_output(lambda: __import__("src.tools.fetch_advanced", fromlist=["import_to_staging"]).import_to_staging())
+        success, out = run_with_output(
+            lambda: __import__("archive.legacy_tools.fetch_advanced", fromlist=["import_to_staging"]).import_to_staging()
+        )
     if success:
         st.success("✅ Fertig!")
         st.code(out, language=None)
@@ -72,7 +76,9 @@ st.write("Überträgt alle Modelle mit ✓ Approve aus dem Staging in die Live-D
 
 if st.button("🚀 Approve & Push to Live", key="approve"):
     with st.spinner("Übertrage..."):
-        success, out = run_with_output(lambda: __import__("src.tools.approve_to_main", fromlist=["transfer_approved"]).transfer_approved())
+        success, out = run_with_output(
+            lambda: __import__("archive.legacy_tools.approve_to_main", fromlist=["transfer_approved"]).transfer_approved()
+        )
     if success:
         st.success("✅ Fertig!")
         st.code(out, language=None)
@@ -87,7 +93,7 @@ st.write("Im **Admin-GUI** kannst du Modelle sichten, bearbeiten (Typ, Credits, 
 st.markdown("""
 Führe in einem **neuen Terminal** aus:
 ```
-streamlit run src/tools/admin_gui.py
+streamlit run archive/legacy_tools/admin_gui.py
 ```
 Oder öffne: [Admin-GUI](http://localhost:8502) (falls bereits gestartet).
 """)

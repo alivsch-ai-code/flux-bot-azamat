@@ -1,5 +1,5 @@
-"""Tests für src.infrastructure.db.memory_repo."""
-from src.infrastructure.db.memory_repo import InMemoryUserRepo
+"""Tests für tests.support.in_memory_user_repo."""
+from tests.support.in_memory_user_repo import InMemoryUserRepo
 
 
 class TestInMemoryUserRepo:

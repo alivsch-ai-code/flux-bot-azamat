@@ -590,7 +590,7 @@ Falls keine Transaktion erscheint: Render-Logs prüfen – ist diese Zeile vorha
 
 - **Ruff:** Es wird nur `tests/` gelintet, nicht das gesamte Projekt.
 - **Coverage:** Es gibt keinen Mindest-Coverage-Wert; der Report dient der Orientierung.
-- **Flask:** Endpoints wie `/api/webapp_action` oder `/api/models` brauchen `_db_instance`/`_bot_instance` und werden hier nicht getestet.
+- **Flask:** Endpoints wie `/api/webapp_action` oder `/api/models` brauchen gesetztes `main.app_runtime.db`/`bot` und werden nur dort getestet, wo explizit gemockt.
 - **initData:** Es gibt keinen Test mit gültigem HMAC (würde echten Bot-Token erfordern).
 
 ---

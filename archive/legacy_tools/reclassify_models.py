@@ -5,14 +5,14 @@ Korrigiert model_type und menu_path basierend auf Input- und Output-Schema.
 Nützlich nach Änderungen an replicate_fetcher.infer_model_type.
 
 Verwendung:
-  python -m src.tools.reclassify_models          # Staging-Tabelle
-  python -m src.tools.reclassify_models --main   # Haupt-Tabelle ai_models
+  python -m archive.legacy_tools.reclassify_models          # Staging-Tabelle
+  python -m archive.legacy_tools.reclassify_models --main   # Haupt-Tabelle ai_models
 """
 import argparse
 import json
 import os
 
-from src.tools.replicate_fetcher import infer_model_type
+from archive.legacy_tools.replicate_fetcher import infer_model_type
 
 try:
     from dotenv import load_dotenv
