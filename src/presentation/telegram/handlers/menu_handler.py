@@ -171,7 +171,7 @@ def process_webapp_action(
         for k, v in list(options.items()):
             kl = str(k).lower()
             # Nur Media-ähnliche Keys (damit wir z.B. aspect_ratio nicht anfassen).
-            if "image" in kl or "img" in kl or kl in ("reference_images",):
+            if "image" in kl or "img" in kl or "mask" in kl or kl in ("reference_images",):
                 if v:
                     _maybe_add_image_uri(v)
                     media_keys_used.add(k)
