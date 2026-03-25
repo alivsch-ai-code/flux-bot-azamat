@@ -9,6 +9,7 @@ import logging
 
 from telebot import TeleBot, types
 
+from src.config.settings import config
 from src.presentation.telegram.handlers.chat_debounce import schedule_batched_text_message
 from src.presentation.telegram.handlers.gen.chat_sessions import append_with_summary_if_needed, build_chat_prompt_from_messages
 from src.presentation.telegram.handlers.payment_handler import show_shop_logic
@@ -16,7 +17,7 @@ from src.utils.strings import get_text
 
 logger = logging.getLogger(__name__)
 
-GEMINI_GROUP_MODEL = "google-gemini-2-5-flash"
+GEMINI_GROUP_MODEL = config.GEMINI_GROUP_MODEL
 
 
 def _is_group(msg_or_call) -> bool:
