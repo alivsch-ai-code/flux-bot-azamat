@@ -1021,6 +1021,7 @@
                 const fileId = `${id}-file`;
                 const btnId = `${id}-upload-btn`;
                 const statusId = `${id}-upload-status`;
+                const displayInitial = inputVal ? '✓ hochgeladen' : '';
                 return `
                   <div class="gen-row">
                     <label for="${id}">${escapeHtml(label)}</label>
@@ -1029,7 +1030,14 @@
                       <button type="button" class="btn-ref-upload btn-upload-image-uri" id="${btnId}" data-target-input="${escapeHtml(id)}">📎 Upload</button>
                       <span id="${statusId}" class="gen-hint" style="display:none;margin:0"></span>
                     </div>
-                    <input id="${id}" data-gen-key="${escapeHtml(k)}" type="text" value="${inputVal}" style="width:100%;margin-top:8px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.2);color:var(--tg-theme-text-color);font-size:0.9rem;" />
+                    <!--
+                      Sichtbares Feld: zeigt nur "hochgeladen", damit keine Replicate-URL im UI erscheint.
+                      Hidden Feld (mit data-gen-key): enthält die echte URL für die Payload.
+                    -->
+                    <input id="${id}-display" type="text" value="${displayInitial}" readonly
+                      style="width:100%;margin-top:8px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.2);color:var(--tg-theme-text-color);font-size:0.9rem;" />
+                    <input id="${id}" data-gen-key="${escapeHtml(k)}" type="text" value="${inputVal}"
+                      style="display:none;" />
                   </div>
                 `;
               }
@@ -1141,8 +1149,12 @@
                     showError(res.error || 'Upload fehlgeschlagen');
                     return;
                   }
-                  const ta = document.getElementById(targetInputId);
-                  if (ta) ta.value = res.urls[0];
+                  // Hidden input enthält die echte URL für die Payload.
+                  const hiddenEl = document.getElementById(targetInputId);
+                  if (hiddenEl) hiddenEl.value = res.urls[0];
+                  // Visible UI zeigt nur "hochgeladen".
+                  const displayEl = document.getElementById(targetInputId + '-display');
+                  if (displayEl) displayEl.value = '✓ hochgeladen';
                   if (statusEl) {
                     statusEl.textContent = '✓ 1 URL';
                     setTimeout(() => { statusEl.style.display = 'none'; }, 2500);
