@@ -30,7 +30,7 @@ class InMemoryUserRepo(UserRepository):
             self.users[user_id] = {
                 "id": user_id, 
                 "username": username, 
-                "credits": 50
+                "credits": global_defaults.START_CREDITS
             }
 
     def update_credits(self, user_id: int, amount: int, reason: str = ""):
