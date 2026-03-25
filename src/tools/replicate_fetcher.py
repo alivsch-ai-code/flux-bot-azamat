@@ -244,7 +244,17 @@ def model_to_row(model, full_id: str) -> Optional[Dict[str, Any]]:
 
     clean_name = (model.name or full_id).replace("-", " ").replace("_", " ").title()
     desc = (getattr(model, "description", "") or "")[:500]
-    cover = getattr(model, "cover_image_url", None) or ""
+    # Replicate liefert je nach Modell/Owner unterschiedliche Thumbnail-Keys.
+    # Für Veo ist `cover_image_url` manchmal leer, darum versuchen wir mehrere Kandidaten.
+    cover = (
+        getattr(model, "cover_image_url", None)
+        or getattr(model, "cover_url", None)
+        or getattr(model, "thumbnail_url", None)
+        or getattr(model, "thumbnail", None)
+        or getattr(model, "image_url", None)
+        or getattr(model, "preview_image_url", None)
+        or ""
+    )
 
     return {
         "key": key,

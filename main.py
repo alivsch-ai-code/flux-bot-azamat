@@ -133,6 +133,48 @@ def api_strings():
         return jsonify({}), 200
 
 
+def _resolve_example_url(example_data: object) -> str:
+    """
+    Versucht aus `example_data` zuverlässig ein Beispiel-Preview zu finden.
+    Für Veo/Kling etc. können sich die Keys/Shapes unterscheiden.
+    """
+    if not example_data or not isinstance(example_data, dict):
+        return ""
+
+    candidates = (
+        "output_image",
+        "image",
+        "url",
+        "output_video_thumbnail",
+        "output_video",
+        "video_thumbnail",
+        "thumbnail",
+        "preview_image",
+    )
+    for k in candidates:
+        v = example_data.get(k)
+        if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")):
+            return v
+
+    # Fallback: rekursiv nach einer http(s)-URL im Beispiel-Objekt suchen.
+    def _walk(obj: object) -> str:
+        if isinstance(obj, str) and (obj.startswith("http://") or obj.startswith("https://")):
+            return obj
+        if isinstance(obj, dict):
+            for _k, _v in obj.items():
+                got = _walk(_v)
+                if got:
+                    return got
+        if isinstance(obj, list):
+            for x in obj:
+                got = _walk(x)
+                if got:
+                    return got
+        return ""
+
+    return _walk(example_data)
+
+
 @app.route('/api/model')
 def api_model():
     """API für WebApp: Vollständige Modell-Details (Name, Beschreibung, Beispielbild, Kosten)."""
@@ -151,11 +193,7 @@ def api_model():
         example_url = ""
         example_prompt = ""
         if model.example_data and isinstance(model.example_data, dict):
-            example_url = (
-                model.example_data.get("output_image") or
-                model.example_data.get("image") or
-                model.example_data.get("url") or ""
-            )
+            example_url = _resolve_example_url(model.example_data)
             example_prompt = (model.example_data.get("prompt") or model.example_data.get("example_prompt") or "")[:200]
         input_schema = model.input_schema if isinstance(model.input_schema, dict) else {}
         props = input_schema.get("properties") if isinstance(input_schema, dict) else {}
@@ -330,14 +368,7 @@ def api_models():
         for m in models:
             if m.menu_path == path:
                 cost = int(m.custom_price if m.custom_price is not None else m.internal_cost)
-                example_url = ""
-                if m.example_data and isinstance(m.example_data, dict):
-                    example_url = (
-                        m.example_data.get("output_image")
-                        or m.example_data.get("image")
-                        or m.example_data.get("url")
-                        or ""
-                    )
+                example_url = _resolve_example_url(getattr(m, "example_data", None))
                 items.append({
                     "key": m.key,
                     "name": m.name,

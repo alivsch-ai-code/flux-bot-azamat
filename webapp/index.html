@@ -216,6 +216,20 @@
       border: 1px solid var(--border);
       box-shadow: var(--shadow-sm);
     }
+    .detail-preview-fallback {
+      width: 100%;
+      max-height: 220px;
+      border-radius: var(--radius-md);
+      margin: 14px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 44px;
+      background: color-mix(in srgb, var(--tg-theme-text-color) 5%, var(--tg-theme-bg-color));
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      user-select: none;
+    }
     @supports not (color: color-mix(in srgb, white 50%, black)) {
       .detail-preview { background: rgba(0, 0, 0, 0.25); }
     }
@@ -905,9 +919,29 @@
           document.getElementById('detail-view').classList.remove('hidden');
           const isText = Array.isArray(data.model_type) && data.model_type.includes('text');
           const costLabel = data.final_cost <= 0 ? 'FREE' : data.final_cost + ' ⭐';
+          const types = Array.isArray(data.model_type) ? data.model_type : [];
+          const typeStr = String(types.join(" ")).toLowerCase();
+          const nameStr = String(data.name || "").toLowerCase();
+          let fallbackEmoji = "✨";
+          if (typeStr.includes("text") || nameStr.includes("text") || nameStr.includes("chat")) fallbackEmoji = "💬";
+          else if (
+            typeStr.includes("video") ||
+            nameStr.includes("video") ||
+            nameStr.includes("veo") ||
+            nameStr.includes("kling") ||
+            nameStr.includes("sora") ||
+            nameStr.includes("hunyuan") ||
+            nameStr.includes("runway")
+          ) fallbackEmoji = "🎬";
+          else if (typeStr.includes("audio") || nameStr.includes("audio") || nameStr.includes("bark") || nameStr.includes("whisper")) fallbackEmoji = "🎙️";
+          else if (typeStr.includes("image") || nameStr.includes("image") || nameStr.includes("flux") || nameStr.includes("sdxl")) fallbackEmoji = "🖼️";
+          else if (typeStr.includes("tool") || typeStr.includes("tools")) fallbackEmoji = "🛠️";
+
           let imgHtml = '';
           if (data.example_image_url) {
             imgHtml = `<img class="detail-preview" src="${escapeHtml(data.example_image_url)}" alt="Beispiel" onerror="this.style.display='none'">`;
+          } else {
+            imgHtml = `<div class="detail-preview-fallback" title="Kein Beispielbild verfügbar">${fallbackEmoji}</div>`;
           }
           const costHtml = `<div class="detail-cost">💰 Kosten: ${escapeHtml(String(data.final_cost))} Credits</div>`;
           let btnHtml = '';
@@ -1002,7 +1036,15 @@
                 typeStr === "array" ||
                 typeStr === "any" ||
                 typeStr === "object";
-              const wantsImage = kl.includes("image") || kl.includes("img") || kl.includes("mask") || kl.includes("frame");
+              const wantsImage =
+                kl.includes("image") ||
+                kl.includes("img") ||
+                kl.includes("mask") ||
+                kl.includes("input_reference") ||
+                kl.includes("inputreference") ||
+                kl.includes("first_frame") ||
+                kl.includes("last_frame") ||
+                kl.includes("frame_image");
               // Format kann z.B. "uri", aber auch "uri-reference", "url" oder "path" sein.
               const wantsUriLike =
                 fmt.includes("uri") ||
@@ -1014,7 +1056,7 @@
               // Der Replicate-Schema-Baustein ist manchmal unvollständig/abweichend.
               // Für die Praxis reicht es, dass es ein "image/img/mask/frame"-Feld ist.
               // Der Upload liefert eine HTTP(S)-URL, die Replicate i. d. R. als URI akzeptiert.
-              const wantsUriImageUpload = isUriLikeInputType && wantsImage;
+              const wantsUriImageUpload = wantsImage && (isUriLikeInputType || wantsUriLike);
               if (wantsUriImageUpload) {
                 const defVal = (p.default ?? "");
                 const inputVal = escapeHtml(String(defVal));

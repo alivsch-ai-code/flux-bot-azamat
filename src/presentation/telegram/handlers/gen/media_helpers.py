@@ -46,6 +46,7 @@ MEDIA_KEYWORDS = [
     "image", "images", "img", "photo", "init_image", "target_image", "swap_image",
     "input_image", "control_image", "mask", "redux_image",
     "start_image", "end_image", "reference_images",
+    "input_reference",
     "first_frame_image",
     "video", "videos", "input_video", "audio", "input_audio",
     "file", "document",
