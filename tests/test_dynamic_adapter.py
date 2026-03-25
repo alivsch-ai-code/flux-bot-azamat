@@ -53,6 +53,21 @@ class TestBuildInputPayload:
         assert result["width"] == 512
         assert result["height"] == 768
 
+    def test_maps_input_reference_as_image(self):
+        """`input_reference` wird wie ein Bild-Feld gemappt."""
+        adapter = DynamicSchemaAdapter()
+        schema = {
+            "properties": {
+                "prompt": {"type": "string"},
+                # Replicate-Schemas sind nicht immer exakt; darum ohne `format: uri`.
+                "input_reference": {"type": "string"},
+            }
+        }
+        file_urls = ["https://example.com/reference.jpg"]
+        result = adapter.build_input_payload(schema, "hello", file_urls=file_urls)
+        assert result["prompt"] == "hello"
+        assert result["input_reference"] == file_urls[0]
+
 
 class TestParseOutput:
     """Prüft parse_output: Extraktion von URL/Text aus API-Antworten."""

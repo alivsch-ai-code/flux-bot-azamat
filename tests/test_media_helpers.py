@@ -43,3 +43,9 @@ class TestSchemaRequiresMediaWithModel:
         model = MagicMock(replicate_id="x/upscale", key="upscale")
         schema = {"properties": {"image": {}}, "required": ["image"]}
         assert schema_requires_media(schema, model=model) is True
+
+    def test_model_with_required_input_reference_in_schema(self):
+        """`input_reference` gilt ebenfalls als Medien-Input."""
+        model = MagicMock(replicate_id="x/upscale", key="upscale")
+        schema = {"properties": {"input_reference": {}}, "required": ["input_reference"]}
+        assert schema_requires_media(schema, model=model) is True
