@@ -13,6 +13,19 @@ from src.infrastructure.metrics import record_timing
 from src.infrastructure.security.validator import InputValidator
 
 class GenerationService:
+    """
+    Business-Layer zwischen Telegram/WebApp und dem AI-Inferenz-Client.
+
+    Verantwortlichkeiten:
+    - Prompt-Sicherheit (InputValidator)
+    - Credits/Abrechnung (User oder Gruppe)
+    - Routing nach Modell-Key (Sonder-Pipelines) oder via `UnifiedAIClient` (Standard)
+    - Nachlauf: Timings + Fehlerbehandlung
+
+    Wichtig: Diese Klasse kapselt die Logik so, dass Telegram-Handler und
+    WebApp/HTTP nur noch "Requests" anfragen, ohne Provider-spezifische Details
+    kennen zu müssen (Unified-Prinzip).
+    """
     def __init__(self, repo, ai):
         self.repo = repo  # Das ist der DatabaseManager
         self.ai = ai      # Das ist der UnifiedAIClient
@@ -28,14 +41,21 @@ class GenerationService:
         generation_params: Optional[dict] = None,
         charge_cost: Optional[int] = None,
     ):
+        """
+        Verarbeitet eine Generierungsanfrage.
+
+        Rückgabe:
+        - `(success: bool, data: str|list|GenerationResult.error)`
+        Datenformat hängt vom Modell/Provider ab (z. B. URL, Text, Listen/Iteratoren).
+        """
         start = time.perf_counter()
         try:
-            # 0. Prompt-Sicherheit & Bereinigung
+            # 0) Prompt-Sicherheit & Bereinigung
             if not InputValidator.validate_safety(prompt or ""):
                 return False, "⚠️ Deine Eingabe wurde aus Sicherheitsgründen abgelehnt."
             prompt = InputValidator.sanitize_prompt(prompt or "")
 
-            # 1. User & Credits Check (überspringen bei no_charge, z.B. Willkommens-Gruß)
+            # 1) Credits-Check (überspringen bei no_charge, z.B. Willkommens-Gruß)
             effective_cost = int(charge_cost if charge_cost is not None else model.cost)
 
             if not no_charge:

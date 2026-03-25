@@ -1,6 +1,25 @@
 """
-Einstieg: Telegram-Bot (Polling) + Flask-Waitress für Mini-App und APIs.
-HTTP-Routen liegen in `src.presentation.http.http_routes`.
+Projekt-Einstieg (Production Entrypoint).
+
+Dieser Serverprozess kombiniert zwei Aufgaben:
+
+1) Telegram-Bot (Polling)
+   - `telebot.TeleBot.infinity_polling(...)` empfängt Updates
+   - `setup_bot(...)` registriert alle Telegram Handler
+
+2) Flask Webserver (Mini-App + JSON APIs)
+   - `register_flask_routes(...)` registriert:
+     - `GET /webapp` (liefert den React-Vite Build aus `webapp-react/dist`)
+     - `GET /webapp/<assets>` (Vite Assets)
+     - `POST /api/*` (WebApp Aktionen, User Infos, Strings, Model-Daten, Uploads)
+
+Warum das so ist:
+- Telegram-Updates laufen asynchron zum Webserver.
+- Die WebApp/Flask-Endpunkte brauchen Zugriff auf:
+  - `DatabaseManager` (Neon-PostgreSQL)
+  - den Bot (für Aktionen/Antwortflow)
+- Deshalb hängt `main` die Referenzen in ein gemeinsames Runtime-Objekt
+  (`AppRuntime`) und übergibt es an `src.presentation.http.http_routes`.
 """
 import logging
 import os
@@ -26,6 +45,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(__name__)
 app_runtime = AppRuntime()
+# HTTP-Endpunkte registrieren (Mini-App + JSON APIs).
 register_flask_routes(app, app_runtime, project_root=_PROJECT_ROOT)
 
 
@@ -96,6 +116,7 @@ def start_log_status_loop() -> None:
 
 
 def main():
+    # 1) Logging konfigurieren (wichtig für Railway/Render Log-Filtering)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -103,10 +124,13 @@ def main():
     logging.getLogger("TeleBot").setLevel(logging.WARNING)
     logger.info("Initialisiere Bot System...")
 
+    # 2) Persistenter Zustand: DB Verbindung (Neon/PostgreSQL)
     db = DatabaseManager()
     logger.info("Datenbank verbunden (PostgreSQL via Neon).")
 
+    # 3) Unified Inference Entry: ein Client, der alle Provider/Modelle verdrahtet.
     ai_provider = UnifiedAIClient(config)
+    # 4) Business Layer: Credits/Validation/Routering + Pipeline-Sonderfälle.
     generation_service = GenerationService(repo=db, ai=ai_provider)
     logger.info("Service Layer initialisiert.")
 
@@ -116,9 +140,11 @@ def main():
         logger.critical("Fehler beim Erstellen des Bots: %s", e)
         sys.exit(1)
 
+    # 5) Telegram Handler verdrahten (Orchestrierung + Sub-Handler registrieren)
     setup_bot(bot, generation_service, db)
     logger.info("Telegram Handler registriert.")
 
+    # 6) Flask Endpunkte brauchen DB/Bot, um `/api/webapp_action` auszuführen.
     app_runtime.db = db
     app_runtime.bot = bot
     threading.Thread(target=run_web_server, daemon=True).start()
@@ -127,6 +153,7 @@ def main():
 
     logger.info("Bot ist bereit (Umgebung: %s)", config.APP_ENV)
 
+    # 7) Webhook entfernen (falls aktiv), sonst kann es zu 409 Conflicts kommen.
     try:
         bot.delete_webhook(drop_pending_updates=True)
         logger.info("Webhook entfernt (falls vorhanden).")
@@ -139,6 +166,9 @@ def main():
         time.sleep(poll_delay)
 
     retry_delay_409 = int(os.getenv("TELEGRAM_409_RETRY_DELAY", "30"))
+    # 8) Polling Loop mit Retry-Logik:
+    #    - Timeout -> kurze Pause und neu starten
+    #    - 409 Conflict -> warten, weil evtl. noch eine alte Instanz pollt
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=30, skip_pending=True)

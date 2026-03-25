@@ -1,3 +1,16 @@
+"""
+payment_handler.py – Telegram Stars Payment Flow.
+
+Dieser Handler kümmert sich um:
+- Shop-UI (Kredit-Pakete als Inline-Buttons)
+- Invoice-Erstellung für den Kauf (`send_invoice` / Callback)
+- Callback-Verarbeitung für `buy_*` Pakete
+
+Wichtig:
+- Die eigentliche Abrechnung/Wallet-Logik (Credits + Gruppen-Credits) passiert im `DatabaseManager`
+  und in `GenerationService`. Hier wird nur der Telegram-Teil verkabelt.
+"""
+
 import logging
 from typing import Optional
 
