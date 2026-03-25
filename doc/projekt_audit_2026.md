@@ -17,7 +17,7 @@ Vollständiger Durchgang: Einstieg, Bot, Replicate, Mini-App-UI, Infrastruktur, 
 | Telegram | `src/presentation/telegram/bot.py`, `keyboards.py`, `handlers/*` |
 | Gen-Flow | `handlers/gen_handler.py` → `handlers/gen/*` |
 | Mini App | React: `webapp-react/` → `/webapp` |
-| Tools (lokal/Admin) | `src/tools/*` |
+| Tools (lokal/Admin) | `archive/legacy_tools/` (siehe `archive/README.md`) |
 | Doku | `doc/*` |
 
 ---
@@ -84,7 +84,7 @@ Vollständiger Durchgang: Einstieg, Bot, Replicate, Mini-App-UI, Infrastruktur, 
 
 ---
 
-## 7. Tools (`src/tools/`)
+## 7. Tools (`archive/legacy_tools/`)
 
 - `replicate_fetcher`, `reclassify_models`, `fetch_advanced`, `import_staging`, GUIs – für Betrieb separat vom Bot.
 - Nicht Teil des Runtime-Pfads von `main.py` (außer bei manuellem Aufruf).

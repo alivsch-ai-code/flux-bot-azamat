@@ -1,4 +1,4 @@
-from main import _resolve_example_url
+from src.presentation.http.http_routes import _resolve_example_url
 
 
 def test_resolve_example_url_finds_http_in_nested_dicts():

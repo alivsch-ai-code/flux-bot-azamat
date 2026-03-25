@@ -90,11 +90,13 @@ python main.py
 flux-bot-azamat/
 ├── main.py                 # Entry: Flask + Telegram polling
 ├── webapp-react/           # Vite + React Mini App (build → dist/, served under /webapp)
+├── archive/                # Unused providers + legacy operator tools (see archive/README.md)
 ├── src/
 │   ├── application/        # GenerationService, business logic
 │   ├── domain/             # Entities, interfaces
 │   ├── infrastructure/     # DB, Replicate, OpenAI adapters
-│   ├── presentation/       # Telegram handlers, keyboards
+│   ├── presentation/       # Telegram handlers, HTTP routes (Mini-App API), keyboards
+│   │   ├── http/           # Flask routes for /webapp and /api/*
 │   │   └── telegram/handlers/
 │   │       ├── group_handler.py   # Groups: Gemini chat, credits, language
 │   │       ├── chat_debounce.py   # Batched text chat (timers, flush callback)
@@ -153,7 +155,7 @@ For a **German, detailed** breakdown (handlers, HTTP routes, `GenerationService`
 | Layer | Interface | Notes |
 |-------|-----------|--------|
 | **Telegram** | pyTelegramBotAPI handlers | Order: `group_handler` → `menu_handler` → `payment_handler` → `gen_handler`. Group text is **not** handled by `prompt_handlers` (early return). |
-| **HTTP** | Flask routes in `main.py` | `/webapp`, `/api/webapp_action`, `/api/user_info`, `/api/strings`, `/api/model`, `/api/models`, `/api/shop_packages`, `/api/webapp_upload_reference` — see doc above. |
+| **HTTP** | Flask in `main.py` + `src/presentation/http/http_routes.py` | `/webapp`, `/api/*` — see doc above. |
 | **Application** | `GenerationService.process_request(...)` | Credits, validation, routing by model type, Replicate/OpenAI/Gemini via `UnifiedAIClient`. |
 | **Domain** | `UserRepository`, `AIProvider` in `src/domain/interfaces.py` | Contracts; `DatabaseManager` + adapters implement behavior. |
 | **Chat batching** | `schedule_batched_text_message`, `cancel_pending_batch` | `src/presentation/telegram/handlers/chat_debounce.py` |

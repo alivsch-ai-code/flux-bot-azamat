@@ -1,8 +1,15 @@
-import os
-import replicate
-from typing import List, Optional
-import logging
+"""
+Zentraler Einstieg für Modell-Inferenz: **ein** Client pro App (`UnifiedAIClient`).
 
+Alle aktiven Provider (Replicate, OpenAI, Grok, Platzhalter Kling/DeepSeek) werden hier
+verdrahtet. Ältere, eigenständige `AIProvider`-Klassen (z. B. `ReplicateClient`, Kling,
+Sonauto) liegen unter `archive/python_unused_providers/` und sind nicht eingebunden.
+"""
+import logging
+import os
+from typing import List, Optional
+
+import replicate
 from openai import OpenAI
 
 from src.domain.entities import AIModel, GenerationResult, MediaFile

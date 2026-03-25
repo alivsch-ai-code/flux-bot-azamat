@@ -91,7 +91,7 @@ class TestApiModelOptionsSchema:
 
         fake_db = MagicMock()
         fake_db.get_model_by_key.return_value = model
-        monkeypatch.setattr(main_module, "_db_instance", fake_db)
+        monkeypatch.setattr(main_module.app_runtime, "db", fake_db)
 
         r = client.get("/api/model?key=google-veo-3-1")
         assert r.status_code == 200
@@ -114,8 +114,8 @@ class TestWebappUploadReference:
     def test_no_db_returns_400(self, client):
         import main as main_module
 
-        prev = main_module._db_instance
-        main_module._db_instance = None
+        prev = main_module.app_runtime.db
+        main_module.app_runtime.db = None
         try:
             r = client.post(
                 "/api/webapp_upload_reference",
@@ -125,12 +125,12 @@ class TestWebappUploadReference:
             assert r.status_code == 400
             assert r.get_json()["error"] == "no_db"
         finally:
-            main_module._db_instance = prev
+            main_module.app_runtime.db = prev
 
     def test_missing_init_data(self, client, monkeypatch):
         import main as main_module
 
-        monkeypatch.setattr(main_module, "_db_instance", MagicMock())
+        monkeypatch.setattr(main_module.app_runtime, "db", MagicMock())
         r = client.post("/api/webapp_upload_reference", data={}, content_type="multipart/form-data")
         assert r.status_code == 400
         body = r.get_json()
@@ -140,7 +140,7 @@ class TestWebappUploadReference:
     def test_no_files(self, client, monkeypatch):
         import main as main_module
 
-        monkeypatch.setattr(main_module, "_db_instance", MagicMock())
+        monkeypatch.setattr(main_module.app_runtime, "db", MagicMock())
         monkeypatch.setattr(
             "src.presentation.telegram.handlers.menu_handler._is_webapp_mode",
             lambda _db: True,
@@ -159,7 +159,7 @@ class TestWebappUploadReference:
     def test_success_returns_urls(self, client, monkeypatch):
         import main as main_module
 
-        monkeypatch.setattr(main_module, "_db_instance", MagicMock())
+        monkeypatch.setattr(main_module.app_runtime, "db", MagicMock())
         monkeypatch.setattr(
             "src.presentation.telegram.handlers.menu_handler._is_webapp_mode",
             lambda _db: True,

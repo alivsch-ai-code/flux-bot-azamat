@@ -14,7 +14,7 @@ from psycopg2.extras import Json
 
 import replicate
 
-from src.tools.replicate_fetcher import model_to_row
+from archive.legacy_tools.replicate_fetcher import model_to_row
 
 load_dotenv()
 
@@ -81,7 +81,7 @@ def ensure_staging_exists(cur):
     """)
     if not cur.fetchone()[0]:
         raise RuntimeError(
-            "Tabelle ai_models_staging fehlt. Führe zuerst: python -m src.tools.init"
+            "Tabelle ai_models_staging fehlt. Führe zuerst: python -m archive.legacy_tools.init"
         )
 
 

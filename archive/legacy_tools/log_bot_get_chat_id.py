@@ -2,7 +2,7 @@
 log_bot_get_chat_id.py – Hilfstool: Chat-ID für LOG_BOT_ALOSCHA ermitteln
 
 Starten:
-    python -m src.tools.log_bot_get_chat_id
+    python -m archive.legacy_tools.log_bot_get_chat_id
 
 Vorgehen:
 1) In Telegram den Bot LOG_BOT_ALOSCHA öffnen und /start senden.

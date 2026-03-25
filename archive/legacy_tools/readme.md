@@ -27,7 +27,7 @@ Bevor du startest, stelle sicher, dass folgende Dinge eingerichtet sind:
 Alle Aktionen per Klick in einem Browser:
 
 ```bash
-streamlit run src/tools/main_gui.py
+streamlit run archive/legacy_tools/main_gui.py
 ```
 
 Dort findest du Buttons für: DB initialisieren, Default-Modelle laden, Approve & Push to Live. Die Admin-GUI zum Bearbeiten startest du separat (siehe unten).
@@ -37,7 +37,7 @@ Dort findest du Buttons für: DB initialisieren, Default-Modelle laden, Approve 
 ### Kommandozeile
 
 Der Prozess besteht aus drei Schritten.
-**Wichtig:** Führe alle Befehle aus dem Projekt-Hauptverzeichnis aus. Verwende `python -m src.tools.xxx` (nicht `python src/tools/xxx.py`), damit die Imports funktionieren.
+**Wichtig:** Führe alle Befehle aus dem Projekt-Hauptverzeichnis aus. Verwende `python -m archive.legacy_tools.xxx` (nicht `python archive/legacy_tools/xxx.py`), damit die Imports funktionieren.
 
 ### Schritt 1: Datenbank initialisieren
 
@@ -45,7 +45,7 @@ Dieser Befehl bereinigt veraltete Tabellen und erstellt die Struktur für `ai_mo
 _(Achtung: Dies löscht alle bisherigen Daten in diesen Tabellen!)_
 
 ```bash
-python -m src.tools.init
+python -m archive.legacy_tools.init
 ```
 
 ### Schritt 2: Modelle abrufen (Staging Import)
@@ -53,13 +53,13 @@ python -m src.tools.init
 **Default (empfohlen):** Lädt ca. 10 kuratierte Best-of-Modelle (Flux, Kling, Llama, etc.):
 
 ```bash
-python -m src.tools.fetch_advanced
+python -m archive.legacy_tools.fetch_advanced
 ```
 
 **Alternativ:** Breite Suche über Collections & Provider (mehr Modelle):
 
 ```bash
-python -m src.tools.import_staging
+python -m archive.legacy_tools.import_staging
 ```
 
 _Hinweis: Manuelle Änderungen (manual_override) bleiben bei erneuten Importen erhalten._
@@ -73,14 +73,14 @@ Startet das interaktive Streamlit-Dashboard im Browser. Hier kannst du:
 - Mit einem Klick auf "🚀 APPROVE & PUSH TO LIVE" alle markierten Modelle in die Live-Datenbank übertragen.
 
 ```bash
-streamlit run src/tools/admin_gui.py
+streamlit run archive/legacy_tools/admin_gui.py
 ```
 
 ---
 
 ## 📂 Dateistruktur (Übersicht)
 
-- **`main_gui.py`**: Haupt-GUI – Ein-Klick-Aktionen für Init, Fetch, Approve. Start: `streamlit run src/tools/main_gui.py`
+- **`main_gui.py`**: Haupt-GUI – Ein-Klick-Aktionen für Init, Fetch, Approve. Start: `streamlit run archive/legacy_tools/main_gui.py`
 - **`replicate_fetcher.py`**: Zentrales Modul zur Metadaten-Extraktion von Replicate-Modellen (Schema, Typ, `menu_path`, Credits). Wird von allen Import-Tools genutzt.
 - **`init.py`**: Baut die PostgreSQL-Tabellenschemata auf (`ai_models` + `ai_models_staging`).
 - **`fetch_advanced.py`**: **Default.** Holt 8 Best-of-Modelle (Image, Video, Text) und schreibt ins Staging.
@@ -89,7 +89,7 @@ streamlit run src/tools/admin_gui.py
 - **`approve_to_main.py`**: Transfer von Staging (is_approved=1) nach Live.
 - **`reclassify_models.py`**: Wendet die verbesserte Klassifikationslogik auf bestehende Modelle an (model_type, menu_path aus Input/Output-Schema).
 
-**Default:** `python -m src.tools.fetch_advanced` – schneller Import der Best-of-Modelle.
+**Default:** `python -m archive.legacy_tools.fetch_advanced` – schneller Import der Best-of-Modelle.
 
 ---
 
@@ -99,10 +99,10 @@ Nach Änderungen an `replicate_fetcher.py` oder bei falsch zugeordneten Modellen
 
 ```bash
 # Staging-Tabelle aktualisieren
-python -m src.tools.reclassify_models
+python -m archive.legacy_tools.reclassify_models
 
 # Haupt-Tabelle (Live) aktualisieren
-python -m src.tools.reclassify_models --main
+python -m archive.legacy_tools.reclassify_models --main
 ```
 
 **Klassifikation beim Import:** Modelle werden beim Laden von Replicate (`fetch_advanced`, `import_staging`) automatisch korrekt klassifiziert – Output-Typ entscheidet primär (Text→Chat, Bild→Bild Studio). `image_analysis` = Input Bild, Output Text. `img2img` nur wenn Bild-Input Pflicht.
