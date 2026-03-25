@@ -953,7 +953,14 @@
               const id = `gen-dyn-${k.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
               const label = `${k}${schemaRequired.includes(k) ? " *" : ""}`;
               const kl = String(k).toLowerCase();
-              const wantsUriImageUpload = (p.format === 'uri') && (kl.includes('image') || kl.includes('img'));
+              // UI-Upload-Button für Bild-URI-Felder:
+              // Manche Replicate-Schemas liefern `format: "uri"` nicht exakt so aus,
+              // zeigen aber trotzdem ein URI-String-Feld an (z.B. `input_image`).
+              const fmt = String(p.format || "").toLowerCase();
+              const isStringField = !p.type || String(p.type) === "string";
+              const wantsImage = kl.includes("image") || kl.includes("img");
+              const wantsUriLike = fmt.includes("uri") || fmt === "" || fmt === "uri";
+              const wantsUriImageUpload = isStringField && wantsImage && wantsUriLike;
               if (wantsUriImageUpload) {
                 const defVal = (p.default ?? "");
                 const inputVal = escapeHtml(String(defVal));
