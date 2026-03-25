@@ -4,8 +4,9 @@ nixPkgs = ["nodejs", "python312", "gcc"]
 [phases.install]
 cmds = [
   "npm ci --prefix webapp-react",
-  "python -m ensurepip --upgrade",
-  "python -m pip install -r requirements.txt"
+  "python3 -m venv /opt/venv",
+  "/opt/venv/bin/pip install --upgrade pip",
+  "/opt/venv/bin/pip install -r requirements.txt"
 ]
 
 [phases.build]
@@ -14,5 +15,5 @@ cmds = [
 ]
 
 [start]
-cmd = "python main.py"
+cmd = "/opt/venv/bin/python main.py"
 
