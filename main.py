@@ -77,7 +77,7 @@ def api_webapp_action():
         return jsonify(ok=False, error=str(e)), 400
     except Exception as e:
         logger.exception("webapp_action error: %s", e)
-        return jsonify(ok=False, error=str(e)), 500
+        return jsonify(ok=False, error="internal_error"), 500
 
 
 @app.route('/api/user_info', methods=['POST'])
@@ -116,7 +116,7 @@ def api_user_info():
         )
     except Exception as e:
         logger.exception("api_user_info error: %s", e)
-        return jsonify(ok=False, error=str(e)), 500
+        return jsonify(ok=False, error="internal_error"), 500
 
 
 @app.route('/api/strings')
@@ -255,7 +255,7 @@ def api_model():
             })
     except Exception as e:
         logger.warning("api_model error: %s", e)
-        return jsonify(ok=False, error=str(e)), 500
+        return jsonify(ok=False, error="internal_error"), 500
 
 
 def _replicate_file_url(resp) -> str | None:
@@ -337,7 +337,7 @@ def api_webapp_upload_reference():
         return jsonify(ok=True, urls=urls)
     except Exception as e:
         logger.exception("webapp_upload_reference error: %s", e)
-        return jsonify(ok=False, error=str(e)), 500
+        return jsonify(ok=False, error="internal_error"), 500
 
 
 @app.route('/api/shop_packages')

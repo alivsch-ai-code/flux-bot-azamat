@@ -19,12 +19,29 @@ class _PooledConnectionProxy:
     def __init__(self, conn, owner):
         self._conn = conn
         self._owner = owner
+        self._released = False
 
     def __getattr__(self, item):
         return getattr(self._conn, item)
 
     def close(self):
+        # Idempotent: `close()` kann mehrfach aufgerufen werden
+        # (z.B. durch explizites close() und späteres __del()).
+        if self._released:
+            return
+        self._released = True
         self._owner._release_connection(self._conn)
+
+    def __del__(self):
+        """
+        Fallback für Fehlpfade (z.B. Exception vor `conn.close()`):
+        gibt die Connection so gut wie möglich ans Pool zurück.
+        """
+        try:
+            self.close()
+        except Exception:
+            # Destructor darf nie Exceptions werfen.
+            pass
 
 class DatabaseManager:
     def __init__(self):
@@ -356,11 +373,13 @@ class DatabaseManager:
     def get_user_credits(self, user_id):
         with self.lock:
             conn = self._get_connection()
-            c = conn.cursor()
-            c.execute("SELECT credits FROM users WHERE user_id = %s", (user_id,))
-            res = c.fetchone()
-            conn.close()
-            return res[0] if res else 0
+            try:
+                c = conn.cursor()
+                c.execute("SELECT credits FROM users WHERE user_id = %s", (user_id,))
+                res = c.fetchone()
+                return res[0] if res else 0
+            finally:
+                conn.close()
             
     def update_credits(self, user_id, amount, reason="usage"):
         with self.lock:
@@ -385,14 +404,16 @@ class DatabaseManager:
         """Credits eines Users für eine bestimmte Gruppe (Kauf über Gruppen-Button)."""
         with self.lock:
             conn = self._get_connection()
-            c = conn.cursor()
-            c.execute(
-                "SELECT credits FROM group_user_credits WHERE user_id = %s AND chat_id = %s",
-                (user_id, chat_id)
-            )
-            res = c.fetchone()
-            conn.close()
-            return res[0] if res else 0
+            try:
+                c = conn.cursor()
+                c.execute(
+                    "SELECT credits FROM group_user_credits WHERE user_id = %s AND chat_id = %s",
+                    (user_id, chat_id)
+                )
+                res = c.fetchone()
+                return res[0] if res else 0
+            finally:
+                conn.close()
 
     def update_group_user_credits(self, user_id: int, chat_id: int, amount: int, reason: str = "usage") -> None:
         """Credits für (user, group) hinzufügen. Nur für positive Beträge (Kauf)."""
