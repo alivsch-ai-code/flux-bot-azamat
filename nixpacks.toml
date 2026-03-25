@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["nodejs_24", "python312", "gcc"]
+nixPkgs = ["nodejs", "python312", "gcc"]
 
 [phases.install]
 cmds = [
