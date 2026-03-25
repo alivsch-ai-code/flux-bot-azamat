@@ -957,10 +957,14 @@
               // Manche Replicate-Schemas liefern `format: "uri"` nicht exakt so aus,
               // zeigen aber trotzdem ein URI-String-Feld an (z.B. `input_image`).
               const fmt = String(p.format || "").toLowerCase();
-              const isStringField = !p.type || String(p.type) === "string";
+              // Manche Replicate-Schemas deklarieren `type: "array"` obwohl es sich
+              // in der Praxis um 0..1 URI handelt (z.B. `control_image`, `mask`).
+              // Darum erlauben wir auch `array`-Inputs für das Upload-UI.
+              const typeStr = String(p.type || "").toLowerCase();
+              const isUriLikeInputType = !p.type || typeStr === "string" || typeStr === "array";
               const wantsImage = kl.includes("image") || kl.includes("img");
               const wantsUriLike = fmt.includes("uri") || fmt === "" || fmt === "uri";
-              const wantsUriImageUpload = isStringField && wantsImage && wantsUriLike;
+              const wantsUriImageUpload = isUriLikeInputType && wantsImage && wantsUriLike;
               if (wantsUriImageUpload) {
                 const defVal = (p.default ?? "");
                 const inputVal = escapeHtml(String(defVal));
