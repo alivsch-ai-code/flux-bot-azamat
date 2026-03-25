@@ -29,10 +29,8 @@ def _parse_admin_id() -> int:
 
 
 ADMIN_ID = _parse_admin_id()
-
-REFERRAL_REWARD = 50
-
-_MAX_WEBAPP_PROMPT_LEN = 12000
+REFERRAL_REWARD = config.REFERRAL_REWARD
+_MAX_WEBAPP_PROMPT_LEN = config._MAX_WEBAPP_PROMPT_LEN
 
 # Wird von gen_handler.register gesetzt, damit WebApp-API (main.py) sofort generieren kann.
 _webapp_run_generation = None

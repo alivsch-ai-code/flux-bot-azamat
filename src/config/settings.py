@@ -36,7 +36,19 @@ class Settings:
         # Optionale Einstellungen mit Standardwerten
         self.PORT = int(os.getenv("PORT", 5000))
         self.APP_ENV = os.getenv("APP_ENV", "development")
+
+        # START UND REFERRAL REWARDS
         self.START_CREDITS = 50
+        self.REFERRAL_REWARD = 50
+        #GROUP CHAT MODEL
+        self.GEMINI_GROUP_MODEL = "google-gemini-2-5-flash"
+        self._MAX_WEBAPP_PROMPT_LEN = 12000
+        self.CREDIT_PACKAGES = [
+            ("S", "100 Credits", 50, 100),   
+            ("M", "500 Credits", 200, 500),  
+            ("L", "1500 Credits", 500, 1500)
+        ]
+
         # Max. parallele Replicate-Predictions (replicate.run). 1 = streng nacheinander.
         self.REPLICATE_MAX_CONCURRENT = max(1, int(os.getenv("REPLICATE_MAX_CONCURRENT", "1")))
         # URL für Mini App – nur HTTPS!

@@ -4,15 +4,12 @@ from typing import Optional
 from telebot import TeleBot, types
 
 from src.presentation.telegram.handlers.common import clear_context
+from src.config.settings import config
 from src.utils.strings import get_text
 
 logger = logging.getLogger(__name__)
 
-CREDIT_PACKAGES = [
-    ("S", "100 Credits", 50, 100),   
-    ("M", "500 Credits", 200, 500),  
-    ("L", "1500 Credits", 500, 1500)
-]
+CREDIT_PACKAGES = config.CREDIT_PACKAGES
 
 def get_user_lang(msg) -> str:
     """Holt die Sprachcode aus Message oder User (z. B. call.message oder call.from_user)."""

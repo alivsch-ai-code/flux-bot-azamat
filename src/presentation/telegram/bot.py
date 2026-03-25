@@ -13,7 +13,8 @@ def setup_bot(bot: TeleBot, generation_service, db) -> None:
     try:
         bot.set_my_commands([
             types.BotCommand("start", "🚀 Start / Menu"),
-            types.BotCommand("shop", "💎 Credits"),
+            types.BotCommand("credits", "💎 Current Credits"),
+            types.BotCommand("shop", "💎 Buy Credits"),
             types.BotCommand("help", "🆘 Help"),
         ])
     except Exception as e:
