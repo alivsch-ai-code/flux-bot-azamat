@@ -327,7 +327,15 @@ def api_models():
         for m in models:
             if m.menu_path == path:
                 cost = int(m.custom_price if m.custom_price is not None else m.internal_cost)
-                items.append({"key": m.key, "name": m.name, "final_cost": cost})
+                example_url = ""
+                if m.example_data and isinstance(m.example_data, dict):
+                    example_url = (
+                        m.example_data.get("output_image")
+                        or m.example_data.get("image")
+                        or m.example_data.get("url")
+                        or ""
+                    )
+                items.append({"key": m.key, "name": m.name, "final_cost": cost, "example_image_url": example_url})
             elif path == "root" and "/" not in m.menu_path and m.menu_path != "root":
                 sub_cats.add(m.menu_path)
             elif path != "root" and m.menu_path.startswith(path + "/"):
