@@ -23,7 +23,7 @@ Railway ist die aktuelle Haupt-Deployment-Plattform (schneller Start, kein Cold-
 
 | Einstellung | Wert |
 |-------------|------|
-| **Build Command** | (leer – Railway nutzt automatisch `pip install -r requirements.txt`) |
+| **Build Command** | `npm ci --prefix webapp-react && npm run build --prefix webapp-react && pip install -r requirements.txt` |
 | **Start Command** | `python main.py` |
 | **Root Directory** | (leer, wenn Repo-Root) |
 
@@ -47,7 +47,8 @@ Railway ist die aktuelle Haupt-Deployment-Plattform (schneller Start, kein Cold-
 ### 4. Web-App mit BotFather
 
 1. [@BotFather](https://t.me/BotFather) → `/setmenubutton`
-2. URL: `https://flux-bot-azamat-production.up.railway.app/webapp`
+2. URL: `https://flux-bot-azamat-production.up.railway.app/webapp-react` (React Dual-Variante)
+   (alternativ für die alte HTML-UI: `/webapp`)
 
 ### 5. Port
 

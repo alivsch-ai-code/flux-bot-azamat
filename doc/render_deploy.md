@@ -27,7 +27,7 @@ Diese URL wird von Render gesetzt und in `RENDER_EXTERNAL_URL` bereitgestellt. D
 | **Name** | z.B. `flux-bot-azamat` (wird Teil der URL) |
 | **Region** | Frankfurt (oder nahe zu dir) |
 | **Branch** | `main` |
-| **Build Command** | `pip install -r requirements.txt` |
+| **Build Command** | `npm ci --prefix webapp-react && npm run build --prefix webapp-react && pip install -r requirements.txt` |
 | **Start Command** | `python main.py` |
 | **Instance Type** | Free (oder Starter) |
 
@@ -57,7 +57,8 @@ Unter **Environment** diese Variablen setzen:
 
 1. [@BotFather](https://t.me/BotFather) öffnen
 2. `/setmenubutton` → deinen Bot wählen
-3. URL angeben: `https://flux-bot-azamat.onrender.com/webapp`  
+3. URL angeben: `https://flux-bot-azamat.onrender.com/webapp-react` (React Dual-Variante)  
+   (alternativ falls du die alte HTML-UI testest: `/webapp`)
    (Name durch deinen Service-Namen ersetzen)
 
 ---
