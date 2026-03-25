@@ -20,10 +20,9 @@ def _local_paths_to_urls(paths: List[str], client) -> List[str]:
     """
     Konvertiert lokale Dateipfade zu URIs für Replicate (format: uri).
     - HTTP(S)-URLs bleiben unverändert.
-    - Kleine Dateien (<1MB): Data-URI (base64).
-    - Größere: Upload via Replicate Files API.
+    - Upload via Replicate Files API (damit Replicate-Input-Felder wie `format: uri`
+      zuverlässig eine echte URL bekommen und nicht an `data:`-URIs scheitern).
     """
-    import base64
     urls = []
     for p in paths or []:
         if _is_http_url(p):
@@ -32,20 +31,24 @@ def _local_paths_to_urls(paths: List[str], client) -> List[str]:
             try:
                 with open(p, "rb") as f:
                     content = f.read()
-                size = len(content)
                 ext = os.path.splitext(p)[1].lower() or ".jpg"
                 mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png" if ext == ".png" else "image/webp" if ext == ".webp" else "application/octet-stream"
-                if size < 1024 * 1024:
+                fn = os.path.basename(p) or "image.jpg"
+                resp = client.files.create(content=content, filename=fn, type=mime)
+                url = getattr(resp, "url", None)
+                if not url and hasattr(resp, "urls") and isinstance(resp.urls, dict):
+                    url = resp.urls.get("get")
+                if url:
+                    urls.append(url)
+                else:
+                    # Letzter Fallback: data:-URI. Falls Replicate das ebenfalls ablehnt,
+                    # wäre es besser, vorher zu garantieren, dass Upload immer eine URL liefert.
+                    import base64
                     b64 = base64.b64encode(content).decode("ascii")
                     urls.append(f"data:{mime};base64,{b64}")
-                else:
-                    fn = os.path.basename(p) or "image.jpg"
-                    resp = client.files.create(content=content, filename=fn, type=mime)
-                    url = getattr(resp, "url", None)
-                    if not url and hasattr(resp, "urls") and isinstance(resp.urls, dict):
-                        url = resp.urls.get("get")
-                    urls.append(url if url else p)
             except Exception:
+                # Notfalls originalen Pfad weiterreichen; kann beim Provider validierungsfehlschlagen.
+                # Aber: vorherige Bugs zeigen, dass `data:`/non-URI Werte hier problematisch sind.
                 urls.append(p)
         else:
             urls.append(p)

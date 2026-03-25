@@ -79,7 +79,7 @@ def process_webapp_action(
     db,
     is_group: bool = False,
     payload: dict | None = None,
-) -> None:
+) -> dict | None:
     """Führt eine Web-App-Aktion aus. Nutzbar von web_app_data-Handler und API.
     Bei is_group=True (Gruppenchat): nur Credits + Sprache, kein volles Menü."""
     if is_group:
@@ -265,6 +265,26 @@ def process_webapp_action(
         settings = db.get_user_settings(user_id)
         new_val = 0 if settings.get("daily_msg", True) else 1
         db.update_setting(user_id, "daily_msg", new_val)
+    elif action == "optimize_prompt_paid":
+        # WebApp: Bezahlt 3 Credits (in UI als 3 ⭐ angezeigt) für eine Gemini-Prompt-Optimierung.
+        pl = payload if isinstance(payload, dict) else {}
+        raw_prompt = pl.get("prompt")
+        prompt_trim = _trim_webapp_prompt(raw_prompt)
+        if not prompt_trim:
+            raise ValueError("missing_prompt")
+
+        opt_cost = 3
+        current_credits = int(db.get_user_credits(user_id))
+        if current_credits < opt_cost:
+            raise ValueError("Zu wenig Guthaben für Prompt-Optimierung (3 Credits).")
+
+        db.update_credits(user_id, -opt_cost, reason="prompt_optimize")
+
+        from src.infrastructure.ai.replicate.prompt_engineer import optimize_prompt_via_llm
+
+        optimized = optimize_prompt_via_llm(prompt_trim)
+        new_credits = int(db.get_user_credits(user_id))
+        return {"optimized_prompt": optimized, "credits": new_credits}
     elif action.startswith("buy_credits_"):
         parts = action.replace("buy_credits_", "").split("_")
         if len(parts) >= 2:

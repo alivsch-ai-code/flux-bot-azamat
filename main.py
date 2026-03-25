@@ -68,8 +68,13 @@ def api_webapp_action():
         if _bot_instance is None:
             return jsonify(ok=False, error="no_bot"), 500
 
-        process_webapp_action(_bot_instance, user_id, action, _db_instance, payload=data)
-        return jsonify(ok=True)
+        res_data = process_webapp_action(_bot_instance, user_id, action, _db_instance, payload=data)
+        if res_data is None:
+            return jsonify(ok=True)
+        return jsonify(ok=True, **res_data)
+    except ValueError as e:
+        logger.info("webapp_action validation error: %s", e)
+        return jsonify(ok=False, error=str(e)), 400
     except Exception as e:
         logger.exception("webapp_action error: %s", e)
         return jsonify(ok=False, error=str(e)), 500

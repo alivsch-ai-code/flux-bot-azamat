@@ -912,6 +912,9 @@
                   <label for="gen-prompt">Prompt / erste Nachricht</label>
                   <textarea id="gen-prompt" rows="3" placeholder="${promptPlaceholder}"></textarea>
                 </div>
+                <div class="gen-row">
+                  <button type="button" class="btn-secondary btn-optimize-paid" id="btn-optimize-paid" data-cost="3">✨ Optimize (+3 ⭐)</button>
+                </div>
               </div>`;
           } else {
             const reqMark = schemaRequired.includes('prompt') ? ' *' : '';
@@ -921,6 +924,9 @@
                 <div class="gen-row">
                   <label for="gen-prompt">Prompt${reqMark}</label>
                   <textarea id="gen-prompt" rows="4" placeholder="${promptPlaceholder}"></textarea>
+                </div>
+                <div class="gen-row">
+                  <button type="button" class="btn-secondary btn-optimize-paid" id="btn-optimize-paid" data-cost="3">✨ Optimize (+3 ⭐)</button>
                 </div>
                 ${hasNegativeInSchema ? `
                 <div class="gen-row">
@@ -1022,6 +1028,57 @@
             ${generationOptionsHtml}
             ${btnHtml}
           `;
+
+          // Paid Gemini Prompt-Optimization (3 credits shown as 3 stars in UI).
+          const optBtn = document.getElementById('btn-optimize-paid');
+          const optPromptEl = document.getElementById('gen-prompt');
+          if (optBtn && optPromptEl) {
+            optBtn.addEventListener('click', async (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              const promptVal = (optPromptEl.value || '').trim();
+              if (!promptVal) {
+                showError('Bitte Prompt eingeben.');
+                return;
+              }
+              const initData = tg?.initData;
+              if (!initData) {
+                showError('Kein Telegram-Kontext (initData).');
+                return;
+              }
+              const original = optBtn.textContent;
+              optBtn.disabled = true;
+              optBtn.textContent = '⏳ …';
+              try {
+                const res = await fetch(API_BASE + '/api/webapp_action', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'optimize_prompt_paid', prompt: promptVal, init_data: initData })
+                });
+                const data2 = await res.json();
+                if (!data2.ok) {
+                  showError(data2.error || 'Fehler');
+                  return;
+                }
+                if (data2.optimized_prompt) optPromptEl.value = data2.optimized_prompt;
+                if (data2.credits != null) {
+                  state.user.credits = data2.credits;
+                  const el = document.getElementById('credits-badge');
+                  const cnt = document.getElementById('credits-count');
+                  if (el && cnt) {
+                    el.style.display = 'inline-flex';
+                    cnt.textContent = data2.credits;
+                  }
+                  updateTopBar();
+                }
+              } catch (e) {
+                showError('Prompt Optimierung fehlgeschlagen');
+              } finally {
+                optBtn.disabled = false;
+                optBtn.textContent = original;
+              }
+            });
+          }
           if (hasGenOptions) {
             const durEl = document.getElementById('gen-duration');
             const costEl = document.getElementById('gen-cost-preview');
@@ -1031,6 +1088,11 @@
                 const d = Math.max(5, Number(durEl.value || 5));
                 const final = Math.round(base * (d / 5));
                 costEl.textContent = `💰 Kosten: ${final} Credits`;
+                const startBtn = document.querySelector('button.btn-start[data-action^="start_gen_"]');
+                if (startBtn) {
+                  const label = base <= 0 ? 'FREE' : `${final} ★`;
+                  startBtn.textContent = `🚀 Start (${label === 'FREE' ? 'FREE' : label})`;
+                }
               };
               durEl.addEventListener('change', updateCost);
               updateCost();
