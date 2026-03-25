@@ -3,5 +3,5 @@ builder = "NIXPACKS"
 nixpacksConfigPath = "nixpacks.toml"
 
 [deploy]
-startCommand = "python main.py"
+startCommand = "/opt/venv/bin/python main.py"
 
