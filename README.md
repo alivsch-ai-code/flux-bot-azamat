@@ -89,8 +89,7 @@ python main.py
 ```
 flux-bot-azamat/
 ├── main.py                 # Entry: Flask + Telegram polling
-├── webapp/
-│   └── index.html          # Telegram Mini App (shop, settings, model picker)
+├── webapp-react/           # Vite + React Mini App (build → dist/, served under /webapp)
 ├── src/
 │   ├── application/        # GenerationService, business logic
 │   ├── domain/             # Entities, interfaces

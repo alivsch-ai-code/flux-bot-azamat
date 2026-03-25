@@ -11,7 +11,7 @@ Dieses Dokument beschreibt typische **Use Cases**, die **äußeren und inneren S
 | **Privat: Erste Nachricht → Chat** | Nutzer schreibt ohne Menü-Kontext Text → Bot aktiviert Default-Textmodell (z. B. Gemini Flash) und antwortet. | `prompt_handlers` → `chat_debounce` → `run_generation` |
 | **Privat: Modell-Chat** | Nutzer startet Chat zu einem gewählten Textmodell; Nachrichten werden gebündelt beantwortet (siehe Abschnitt 4). | `nav_handlers` (Chat ja) + `prompt_handlers` |
 | **Privat: Bild/Video/Audio** | Modell wählen → Prompt (optional Optimierung) → `GenerationService` → Medienversand. | `start_handler`, `prompt_handlers`, `media_handlers`, `runner` |
-| **Privat: Mini App** | Shop, Einstellungen, Modell-Details, Referenz-Upload über eingebettete Web-UI. | `webapp/index.html` → Flask-APIs unter `/api/*` |
+| **Privat: Mini App** | Shop, Einstellungen, Modell-Details, Referenz-Upload über eingebettete Web-UI. | React unter `/webapp` (`webapp-react/dist`) → Flask-APIs unter `/api/*` |
 | **Privat: Credits** | Pakete kaufen per Telegram Stars (`/shop`, Inline-Buttons). | `payment_handler` |
 | **Gruppe: AZAMAT-Chat** | Text in Gruppe → gebündelte Gemini-Antwort; Credits pro schreibendem Nutzer (Gruppen-Logik in DB). | `group_handler` + `chat_debounce` |
 | **Gruppe: Shop & Sprache** | `/shop`, Inline „Credits“ / „Sprache“; Shop per DM; Sprache pro `chat_id`. | `group_handler` |
@@ -54,7 +54,7 @@ Alle Routen laufen im selben Prozess wie der Telegram-Polling-Thread (siehe Depl
 | Route | Methode | Zweck |
 |-------|---------|--------|
 | `/` | GET | Health / einfache Antwort |
-| `/webapp` | GET | Auslieferung der Mini-App (`webapp/index.html`) |
+| `/webapp` | GET | Auslieferung der Mini-App (Vite-Build `webapp-react/dist/index.html`) |
 | `/api/webapp_action` | POST | Aktionen aus der WebApp (`action`, `init_data`); ruft `process_webapp_action` auf |
 | `/api/user_info` | POST | Nutzer, Credits, Sprache, Bot-Username anhand `init_data` |
 | `/api/strings` | GET | `?lang=de|en|ru|kk` — UI-Strings für die WebApp |

@@ -16,7 +16,7 @@ Vollständiger Durchgang: Einstieg, Bot, Replicate, Mini-App-UI, Infrastruktur, 
 | Infrastruktur | `src/infrastructure/database.py`, `metrics.py`, `ai/*`, `security/` |
 | Telegram | `src/presentation/telegram/bot.py`, `keyboards.py`, `handlers/*` |
 | Gen-Flow | `handlers/gen_handler.py` → `handlers/gen/*` |
-| Mini App | `webapp/index.html` |
+| Mini App | React: `webapp-react/` → `/webapp` |
 | Tools (lokal/Admin) | `src/tools/*` |
 | Doku | `doc/*` |
 
@@ -61,7 +61,7 @@ Vollständiger Durchgang: Einstieg, Bot, Replicate, Mini-App-UI, Infrastruktur, 
 
 ---
 
-## 5. Mini App (`webapp/index.html`)
+## 5. Mini App (React, `webapp-react/`)
 
 **Zuvor:**
 - API lieferte nur Modelle auf exaktem `menu_path`; **Unterordner** (`sub_cats`) wurden im Backend berechnet, aber **nicht** zurückgegeben → leere Ansicht, Fallback nur auf Telegram.
@@ -97,7 +97,7 @@ Vollständiger Durchgang: Einstieg, Bot, Replicate, Mini-App-UI, Infrastruktur, 
 2. **`common.py`:** Thread-sicherer Zugriff auf `user_context` (Lock, `get_context` liefert Kopie).
 3. **`menu_handler.py`:** sichere `ADMIN_ID`-Interpretation; WebApp-Button-Fallback bei BUTTON_TYPE_INVALID; HTTPS-Validierung.
 4. **`main.py`:** `jsonify` für API; `/api/models` mit **`folders`**; 409-Retry; redundante Imports entfernt; WebApp Content-Type.
-5. **`webapp/index.html`:** Unterordner-Navigation, `escapeHtml`, robustere `showModels`-Signatur.
+5. **React Mini App:** Schema-gesteuerte Modell-Detailansicht, Uploads, Shop/Einstellungen über `/api/*`.
 6. **`result_delivery.py`:** `InputMediaPhoto(media=url, …)`.
 7. **`keyboards.py`:** `callback_data`-Truncation (64 Bytes) gegen BUTTON_TYPE_INVALID.
 8. **Railway:** `runtime.txt`, `railway_deploy.md`, `RAILWAY_PUBLIC_DOMAIN` für APP_URL.

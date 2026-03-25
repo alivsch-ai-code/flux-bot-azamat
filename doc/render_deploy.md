@@ -57,9 +57,7 @@ Unter **Environment** diese Variablen setzen:
 
 1. [@BotFather](https://t.me/BotFather) öffnen
 2. `/setmenubutton` → deinen Bot wählen
-3. URL angeben: `https://flux-bot-azamat.onrender.com/webapp-react` (React Dual-Variante)  
-   (alternativ falls du die alte HTML-UI testest: `/webapp`)
-   (Name durch deinen Service-Namen ersetzen)
+3. URL angeben: `https://flux-bot-azamat.onrender.com/webapp` (Name durch deinen Service-Namen ersetzen; `/webapp-react` leitet um)
 
 ---
 

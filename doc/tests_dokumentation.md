@@ -640,7 +640,7 @@ Die WebApp baut Modell-Optionen jetzt **modellübergreifend** aus `input_schema`
 
 1. `database.py` mappt `ai_models.input_schema` zuverlässig zu `dict`.
 2. `GET /api/model` gibt `input_schema` + abgeleitetes `generation_options_schema` zurück.
-3. `webapp/index.html` rendert Felder dynamisch:
+3. React Mini App rendert Felder dynamisch (Schema aus `/api/model`):
    - `enum` als Select
    - `boolean` als true/false Select
    - `number`/`integer`/`string` als Input
