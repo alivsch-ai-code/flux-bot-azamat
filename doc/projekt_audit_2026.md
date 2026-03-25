@@ -101,6 +101,9 @@ Vollständiger Durchgang: Einstieg, Bot, Replicate, Mini-App-UI, Infrastruktur, 
 6. **`result_delivery.py`:** `InputMediaPhoto(media=url, …)`.
 7. **`keyboards.py`:** `callback_data`-Truncation (64 Bytes) gegen BUTTON_TYPE_INVALID.
 8. **Railway:** `runtime.txt`, `railway_deploy.md`, `RAILWAY_PUBLIC_DOMAIN` für APP_URL.
+9. **DB-Stabilität:** `DatabaseManager` gibt Connections im Fehlerfall zuverlässig an den Pool zurück (Fallback + try/finally in sensiblen Lese-Pfaden).
+10. **Security / Info Disclosure:** Flask/WebApp liefert bei unerwarteten Exceptions nur `error="internal_error"` an Clients; Details bleiben in Server-Logs.
+11. **CI / Runtime:** GitHub Actions nutzt jetzt Python **3.12** statt 3.11.
 
 ---
 

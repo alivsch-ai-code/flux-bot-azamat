@@ -77,6 +77,13 @@ python main.py
 
 ---
 
+## 🛡️ Ops & Security Notes
+- Flask/WebApp: bei unerwarteten Fehlern geben APIs an Clients nur `error="internal_error"` zurück; die Details stehen in den Server-Logs.
+- CI: GitHub Actions testet jetzt mit Python **3.12**.
+- DB: `DatabaseManager` sorgt zuverlässig dafür, dass Connections auch bei Exceptions wieder an den Pool zurückgegeben werden (verhindert Pool-„Lecks“ im Fehlerfall).
+
+---
+
 ## 📁 Project Structure
 
 ```

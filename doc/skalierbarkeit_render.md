@@ -61,7 +61,15 @@ self.lock = threading.Lock()
 def get_user_credits(self, user_id):
     with self.lock:  # <-- Alle 40 User warten auf diesen Lock
         conn = self._get_connection()
-        ...
+        try:
+            c = conn.cursor()
+            c.execute("SELECT credits FROM users WHERE user_id = %s", (user_id,))
+            res = c.fetchone()
+            return res[0] if res else 0
+        finally:
+            # Wichtig bei DB-Ausnahmen: Connection ans Pool zurückgeben,
+            # damit der Pool nicht leer/zu knapp wird.
+            conn.close()
 ```
 
 - **Jeder** DB-Zugriff nutzt den gleichen `Lock`
