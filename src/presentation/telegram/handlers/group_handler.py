@@ -40,6 +40,9 @@ def get_group_menu_markup(db, chat_id: int, user_name: str = "") -> tuple:
 
 def _try_send_one_time_greeting(bot: TeleBot, db, generation_service, user_id: int, user_name: str, lang: str) -> None:
     """Sendet einmalig eine von Gemini generierte Willkommens-DM. Wird in DB vermerkt."""
+    # Schutz: Wir senden die DM nicht jedes Mal neu.
+    # In der DB wird sowohl "attempted" (versucht) als auch "sent" (tatsächlich zugestellt) vermerkt.
+    # Dadurch verhindern wir Spam bei Retries/Deploy/Inkonsistenzen.
     if db.has_group_greeting_been_sent(user_id) or db.has_group_greeting_been_attempted(user_id):
         return
     db.mark_group_greeting_attempted(user_id)
@@ -77,7 +80,12 @@ def register(bot: TeleBot, generation_service, db) -> None:
                 pass
             return
 
+        # Session-Key Mapping:
+        # - Gruppenchat wird unter einem negativen session_id geführt,
+        #   damit es sich von privaten User-IDs unterscheidet.
         session_id = -abs(chat_id)
+        # - Chat History pro Modell-Key: wir erweitern den Gemini-Modell-Key um `_group`,
+        #   damit Gruppen- und Privat-History nicht kollidieren.
         model_key = f"{GEMINI_GROUP_MODEL}_group"
         lang = get_group_lang(chat_id)
         system_prompt = get_text("azamat_system_prompt", lang)

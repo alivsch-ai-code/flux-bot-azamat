@@ -121,6 +121,7 @@ def process_webapp_action(
         except Exception as e:
             logger.warning("WebApp-Markup (process_webapp_action) fehlgeschlagen: %s", e)
     if action == "nav_main":
+        # Startseite der Mini App: Begrüßung + initiales Modellmenü (oder WebApp-Button).
         user_name = getattr(db, "get_user_username_or_name", lambda u: None)(user_id) or ""
         welcome_text = get_welcome(lang, user_name)
         markup = webapp_only_markup or keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
@@ -161,6 +162,11 @@ def process_webapp_action(
         # Start der Generierung:
         # - `start_gen_<model_key>`: WebApp übergibt Modell-Key und Prompt/Optionen
         # - wir extrahieren Media-URIs aus `generation_options` und starten den gen-Flow
+        #
+        # Warum so:
+        # - Im WebApp-UI werden Bild-Inputs oft als HTTPS-URLs in Felder wie `reference_images` / `input_image` gesendet.
+        # - Für den Telegram-Flow und `UnifiedAIClient` brauchen wir daraus eine einheitliche `media_paths`-Liste.
+        # - Danach reicht `GenerationService` den Prompt + `media_files` an den Provider weiter.
         model_key = action.replace("start_gen_", "")
         model = db.get_model_by_key(model_key)
         pl = payload if isinstance(payload, dict) else {}
@@ -204,13 +210,24 @@ def process_webapp_action(
 
         # Entferne die URI-Keys aus generation_options, weil UnifiedAIClient sie via
         # media_files bereits über das Replicate-Schema korrekt mappen soll.
+        #
+        # Ergebnis:
+        # - `options` enthält nur noch echte Laufzeitoptionen (duration, resolution, negative_prompt, ...).
+        # - `media_paths` enthält nur noch echte Medien-Inputs.
         if media_keys_used:
             options = {k: v for k, v in options.items() if k not in media_keys_used}
 
+        # Media-Decision:
+        # - `schema_requires_media(...)` schaut in das Modell-Input-Schema (aus DB),
+        #   ob der Provider wirklich ein Bild/Video erwartet.
+        # - `has_media` prüft, ob die WebApp tatsächlich schon Media-URIs übergeben hat.
         needs_media = bool(model and schema_requires_media(model.input_schema, model=model))
         has_media = bool(media_paths)
         run_fn = _webapp_run_generation
 
+        # Fast-Path: Wenn wir genug Inputs haben, generieren wir sofort.
+        # - `run_fn` ist über `set_webapp_run_generation(...)` gesetzt (aus runner/create_run_generation),
+        #   damit wir im HTTP-Flow (Flask) denselben Codepfad nutzen wie im Telegram-Flow.
         if prompt_trim and run_fn and model and model.is_active and (has_media or not needs_media):
             ctx_pre = {
                 "model_key": model_key,
@@ -235,6 +252,9 @@ def process_webapp_action(
             bot, user_id, model_key, db, get_lang, edit_message_id=None, pending_webapp_prompt=pending
         )
     elif action.startswith("chat_mode_yes_"):
+        # WebApp: Chat-Modus aktivieren (Text-LLM mit persistenter Historie).
+        # Danach wird ein erster Prompt (falls vorhanden) als `chat_history_mode="once_off"`
+        # angestoßen, weil der User-Start in der History bereits im Telegram Flow vorbehandelt werden kann.
         model_key = action.replace("chat_mode_yes_", "")
         model = db.get_model_by_key(model_key)
         if model and model.is_active:
@@ -258,6 +278,8 @@ def process_webapp_action(
                     chat_user_name=user_name,
                 )
     elif action.startswith("chat_mode_no_"):
+        # WebApp: Chat-Modus deaktivieren (falls User gerade im Chat-Flow war).
+        # Danach laufen wir wieder in den normalen Generierungs-Flow.
         model_key = action.replace("chat_mode_no_", "")
         model = db.get_model_by_key(model_key)
         pl = payload if isinstance(payload, dict) else {}
