@@ -1011,7 +1011,10 @@
                 fmt === "" ||
                 fmt === "uri" ||
                 fmt === "url";
-              const wantsUriImageUpload = isUriLikeInputType && wantsImage && wantsUriLike;
+              // Der Replicate-Schema-Baustein ist manchmal unvollständig/abweichend.
+              // Für die Praxis reicht es, dass es ein "image/img/mask/frame"-Feld ist.
+              // Der Upload liefert eine HTTP(S)-URL, die Replicate i. d. R. als URI akzeptiert.
+              const wantsUriImageUpload = isUriLikeInputType && wantsImage;
               if (wantsUriImageUpload) {
                 const defVal = (p.default ?? "");
                 const inputVal = escapeHtml(String(defVal));
