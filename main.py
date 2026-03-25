@@ -68,8 +68,13 @@ def api_webapp_action():
         if _bot_instance is None:
             return jsonify(ok=False, error="no_bot"), 500
 
-        process_webapp_action(_bot_instance, user_id, action, _db_instance)
-        return jsonify(ok=True)
+        res_data = process_webapp_action(_bot_instance, user_id, action, _db_instance, payload=data)
+        if res_data is None:
+            return jsonify(ok=True)
+        return jsonify(ok=True, **res_data)
+    except ValueError as e:
+        logger.info("webapp_action validation error: %s", e)
+        return jsonify(ok=False, error=str(e)), 400
     except Exception as e:
         logger.exception("webapp_action error: %s", e)
         return jsonify(ok=False, error=str(e)), 500
@@ -141,6 +146,8 @@ def api_model():
         if not model or not model.is_active:
             return jsonify(ok=False, error="not_found"), 404
         final_cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
+        replicate_id = (model.replicate_id or "")
+        is_veo31 = "google/veo-3.1" in replicate_id.lower()
         example_url = ""
         example_prompt = ""
         if model.example_data and isinstance(model.example_data, dict):
@@ -150,12 +157,145 @@ def api_model():
                 model.example_data.get("url") or ""
             )
             example_prompt = (model.example_data.get("prompt") or model.example_data.get("example_prompt") or "")[:200]
+        input_schema = model.input_schema if isinstance(model.input_schema, dict) else {}
+        props = input_schema.get("properties") if isinstance(input_schema, dict) else {}
+        props = props if isinstance(props, dict) else {}
+
+        def _first_default(*keys, fallback=None):
+            for k in keys:
+                p = props.get(k)
+                if isinstance(p, dict) and "default" in p and p.get("default") is not None:
+                    return p.get("default")
+            return fallback
+
+        def _enum_or(*keys, fallback=None):
+            for k in keys:
+                p = props.get(k)
+                if isinstance(p, dict) and isinstance(p.get("enum"), list) and p.get("enum"):
+                    return p.get("enum")
+            return fallback if fallback is not None else []
+
+        generation_options_schema = {
+            "duration": {
+                "enabled": "duration" in props,
+                "default": int(_first_default("duration", fallback=5) or 5),
+                "enum": [int(x) for x in _enum_or("duration", fallback=[5, 6, 7, 8]) if str(x).isdigit()],
+            },
+            "resolution": {
+                "enabled": "resolution" in props,
+                "default": str(_first_default("resolution", fallback="1080p")),
+                "enum": [str(x) for x in _enum_or("resolution", fallback=["720p", "1080p"])],
+            },
+            "aspect_ratio": {
+                "enabled": "aspect_ratio" in props,
+                "default": str(_first_default("aspect_ratio", fallback="16:9")),
+                "enum": [str(x) for x in _enum_or("aspect_ratio", fallback=["16:9", "9:16", "1:1"])],
+            },
+            "reference_images": {
+                "enabled": "reference_images" in props,
+            },
+            "generate_audio": {
+                "enabled": "generate_audio" in props,
+                "default": bool(_first_default("generate_audio", fallback=True)),
+            },
+        }
+
         return jsonify(ok=True, key=model.key, name=model.name, description=model.description or "",
             example_image_url=example_url, example_prompt=example_prompt,
             final_cost=final_cost, menu_path=model.menu_path or "root",
-            model_type=model.type or [])
+            model_type=model.type or [],
+            replicate_id=replicate_id,
+            input_schema=input_schema,
+            generation_options_schema=generation_options_schema,
+            veo_options={
+                "enabled": is_veo31,
+                "default_duration": 5,
+                "durations": [5, 6, 7, 8],
+                "resolutions": ["720p", "1080p"],
+                "aspect_ratios": ["16:9", "9:16", "1:1"],
+                "base_cost_for_5s": final_cost,
+            })
     except Exception as e:
         logger.warning("api_model error: %s", e)
+        return jsonify(ok=False, error=str(e)), 500
+
+
+def _replicate_file_url(resp) -> str | None:
+    url = getattr(resp, "url", None)
+    if not url and hasattr(resp, "urls") and isinstance(resp.urls, dict):
+        url = resp.urls.get("get")
+    return str(url) if url else None
+
+
+@app.route("/api/webapp_upload_reference", methods=["POST"])
+def api_webapp_upload_reference():
+    """
+    WebApp: Referenzbilder als Multipart hochladen → Replicate Files API → HTTPS-URLs
+    für generation_options.reference_images (wie manuell eingetragene URLs).
+    """
+    max_bytes = 10 * 1024 * 1024
+    max_files = 10
+    allowed_mime = frozenset({"image/jpeg", "image/png", "image/webp"})
+
+    if _db_instance is None:
+        return jsonify(ok=False, error="no_db"), 400
+    try:
+        import replicate
+        from src.utils.telegram_init_data import validate_init_data
+        from src.presentation.telegram.handlers.menu_handler import _is_webapp_mode
+
+        init_data = request.form.get("init_data", "")
+        if not init_data:
+            return jsonify(ok=False, error="missing_init_data"), 400
+        if not _is_webapp_mode(_db_instance):
+            return jsonify(ok=False, error="webapp_disabled"), 400
+
+        user_id = validate_init_data(init_data, config.TELEGRAM_TOKEN)
+        if not user_id:
+            return jsonify(ok=False, error="invalid_init_data"), 403
+
+        files = request.files.getlist("files")
+        if not files:
+            one = request.files.get("file")
+            files = [one] if one and getattr(one, "filename", None) else []
+        files = [f for f in files if f and getattr(f, "filename", None)]
+        if not files:
+            return jsonify(ok=False, error="no_files"), 400
+        if len(files) > max_files:
+            return jsonify(ok=False, error="too_many_files"), 400
+
+        def _mime_for_upload(fs) -> str:
+            ct = (fs.content_type or "").split(";")[0].strip().lower()
+            if ct in allowed_mime:
+                return ct
+            ext = (os.path.splitext(fs.filename or "")[1] or "").lower()
+            if ext in (".jpg", ".jpeg"):
+                return "image/jpeg"
+            if ext == ".png":
+                return "image/png"
+            if ext == ".webp":
+                return "image/webp"
+            return ""
+
+        client = replicate.Client(api_token=config.REPLICATE_API_TOKEN)
+        urls: list[str] = []
+        for fs in files:
+            raw = fs.read()
+            if len(raw) > max_bytes:
+                return jsonify(ok=False, error="file_too_large"), 400
+            mime = _mime_for_upload(fs)
+            if mime not in allowed_mime:
+                return jsonify(ok=False, error="invalid_type"), 400
+            fn = os.path.basename(fs.filename or "image.jpg") or "image.jpg"
+            resp = client.files.create(content=raw, filename=fn, type=mime)
+            url = _replicate_file_url(resp)
+            if not url or not (url.startswith("http://") or url.startswith("https://")):
+                return jsonify(ok=False, error="upload_failed"), 500
+            urls.append(url)
+
+        return jsonify(ok=True, urls=urls)
+    except Exception as e:
+        logger.exception("webapp_upload_reference error: %s", e)
         return jsonify(ok=False, error=str(e)), 500
 
 
@@ -187,7 +327,22 @@ def api_models():
         for m in models:
             if m.menu_path == path:
                 cost = int(m.custom_price if m.custom_price is not None else m.internal_cost)
-                items.append({"key": m.key, "name": m.name, "final_cost": cost})
+                example_url = ""
+                if m.example_data and isinstance(m.example_data, dict):
+                    example_url = (
+                        m.example_data.get("output_image")
+                        or m.example_data.get("image")
+                        or m.example_data.get("url")
+                        or ""
+                    )
+                items.append({
+                    "key": m.key,
+                    "name": m.name,
+                    "final_cost": cost,
+                    "example_image_url": example_url,
+                    "model_type": m.type or [],
+                    "provider": getattr(m, "provider", "") or "",
+                })
             elif path == "root" and "/" not in m.menu_path and m.menu_path != "root":
                 sub_cats.add(m.menu_path)
             elif path != "root" and m.menu_path.startswith(path + "/"):
@@ -339,17 +494,35 @@ def main():
 
     # SCHRITT G: Bot starten (mit Retry bei Timeout/409-Konflikt)
     logger.info("Bot ist bereit (Umgebung: %s)", config.APP_ENV)
+
+    # Webhook entfernen (falls aktiv) – sonst 409 bei getUpdates
+    try:
+        bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Webhook entfernt (falls vorhanden).")
+    except Exception as e:
+        logger.warning("delete_webhook fehlgeschlagen (nicht kritisch): %s", e)
+
+    # Initiale Wartezeit: alte Instanz (Deploy/Restart) soll getUpdates freigeben
+    poll_delay = int(os.getenv("TELEGRAM_POLL_START_DELAY", "25"))
+    if poll_delay > 0:
+        logger.info("Warte %ds vor erstem Polling (alte Instanz freigeben)...", poll_delay)
+        time.sleep(poll_delay)
+
+    retry_delay_409 = int(os.getenv("TELEGRAM_409_RETRY_DELAY", "30"))
     while True:
         try:
-            bot.infinity_polling(timeout=60, long_polling_timeout=30)
+            bot.infinity_polling(timeout=60, long_polling_timeout=30, skip_pending=True)
         except Exception as e:
             err_str = str(e).lower()
             if "timed out" in err_str or "timeout" in err_str:
                 logger.warning("Telegram Polling Timeout – starte in 5s neu: %s", e)
                 time.sleep(5)
             elif "409" in err_str or "conflict" in err_str or "getupdates" in err_str:
-                logger.warning("Telegram 409 Conflict (anderer Poller aktiv) – warte 15s, retry: %s", e)
-                time.sleep(15)
+                logger.warning(
+                    "Telegram 409 Conflict (anderer Poller aktiv) – warte %ds, retry: %s",
+                    retry_delay_409, e,
+                )
+                time.sleep(retry_delay_409)
             else:
                 logger.critical("Kritischer Absturz: %s", e)
                 sys.exit(1)

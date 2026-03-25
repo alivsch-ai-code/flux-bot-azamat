@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Any, Dict, Union
+from typing import List, Optional, Any, Dict
 
 
 class MediaType(str, Enum):

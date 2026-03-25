@@ -1,4 +1,6 @@
+import logging
 import psycopg2
+from psycopg2 import pool as psycopg2_pool
 import threading
 import os
 import json
@@ -8,20 +10,57 @@ from dotenv import load_dotenv
 from src.domain.entities import User, AIModel
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+
+
+class _PooledConnectionProxy:
+    """Gibt Connection beim close() an den Pool zurück."""
+
+    def __init__(self, conn, owner):
+        self._conn = conn
+        self._owner = owner
+
+    def __getattr__(self, item):
+        return getattr(self._conn, item)
+
+    def close(self):
+        self._owner._release_connection(self._conn)
 
 class DatabaseManager:
     def __init__(self):
         self.db_url = os.getenv("DATABASE_URL")
         self.lock = threading.Lock()
+        self._pool = None
         
         if self.db_url:
+            self._pool = psycopg2_pool.ThreadedConnectionPool(
+                minconn=1,
+                maxconn=int(os.getenv("DB_MAX_POOL_SIZE", "20")),
+                dsn=self.db_url,
+                sslmode="require",
+            )
             self._init_db()
             self._migrate_db()
         else:
-            print("⚠️ DATABASE_URL fehlt in .env")
+            logger.warning("DATABASE_URL fehlt in .env")
 
     def _get_connection(self):
+        if self._pool is not None:
+            conn = self._pool.getconn()
+            return _PooledConnectionProxy(conn, self)
         return psycopg2.connect(self.db_url, sslmode='require')
+
+    def _release_connection(self, conn):
+        if self._pool is not None:
+            try:
+                self._pool.putconn(conn)
+                return
+            except Exception:
+                pass
+        try:
+            conn.close()
+        except Exception:
+            pass
 
     def _init_db(self):
         with self.lock:
@@ -140,7 +179,7 @@ class DatabaseManager:
                 conn.commit()
                 conn.close()
             except Exception as e:
-                print(f"❌ DB Init Error: {e}")
+                logger.exception("DB Init Error: %s", e)
 
     def _migrate_db(self):
         """Fügt neue Spalten hinzu, falls sie in alten Tabellen fehlen."""
@@ -209,7 +248,7 @@ class DatabaseManager:
 
                 conn.commit()
             except Exception as e:
-                print(f"⚠️ Migration Warning: {e}")
+                logger.warning("Migration Warning: %s", e)
                 conn.rollback()
             finally:
                 conn.close()
@@ -326,13 +365,21 @@ class DatabaseManager:
     def update_credits(self, user_id, amount, reason="usage"):
         with self.lock:
             conn = self._get_connection()
-            c = conn.cursor()
-            # User anlegen falls nicht existiert (mit Default 150 Credits)
-            c.execute("INSERT INTO users (user_id, username) VALUES (%s, 'Unknown') ON CONFLICT (user_id) DO NOTHING", (user_id,))
-            c.execute("UPDATE users SET credits = credits + %s WHERE user_id = %s", (amount, user_id))
-            c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, amount, reason))
-            conn.commit()
-            conn.close()
+            try:
+                c = conn.cursor()
+                # User anlegen falls nicht existiert (mit Default 150 Credits)
+                c.execute("INSERT INTO users (user_id, username) VALUES (%s, 'Unknown') ON CONFLICT (user_id) DO NOTHING", (user_id,))
+                c.execute("UPDATE users SET credits = credits + %s WHERE user_id = %s", (amount, user_id))
+                c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, amount, reason))
+                conn.commit()
+                # WARNING-Level: sichtbar in Railway/Cloud-Logs; wichtiger Audit-Trail
+                logger.warning("TRANSACTION_RECORDED user_id=%s amount=%s reason=%s", user_id, amount, reason)
+            except Exception as e:
+                conn.rollback()
+                logger.exception("update_credits FAILED user_id=%s amount=%s reason=%s: %s", user_id, amount, reason, e)
+                raise
+            finally:
+                conn.close()
 
     def get_group_user_credits(self, user_id: int, chat_id: int) -> int:
         """Credits eines Users für eine bestimmte Gruppe (Kauf über Gruppen-Button)."""
@@ -400,9 +447,11 @@ class DatabaseManager:
                     "INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)",
                     (user_id, -from_group, f"{reason}_grp_{chat_id}")
                 )
+                logger.warning("TRANSACTION_RECORDED (group) user_id=%s amount=%s reason=%s", user_id, -from_group, f"{reason}_grp_{chat_id}")
             if from_user > 0:
                 c.execute("UPDATE users SET credits = credits - %s WHERE user_id = %s", (from_user, user_id))
                 c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, -from_user, reason))
+                logger.warning("TRANSACTION_RECORDED (user) user_id=%s amount=%s reason=%s", user_id, -from_user, reason)
             conn.commit()
             conn.close()
             return True
@@ -515,7 +564,7 @@ class DatabaseManager:
                 conn.commit()
                 conn.close()
             except Exception as e:
-                print(f"⚠️ add_group_if_not_exists: {e}")
+                logger.warning("add_group_if_not_exists failed: %s", e)
 
     def get_all_tracked_groups(self) -> list:
         """Alle bekannten Gruppen-Chat-IDs (group_settings)."""
@@ -559,7 +608,7 @@ class DatabaseManager:
                 conn.commit()
                 conn.close()
             except Exception as e:
-                print(f"⚠️ increment_azamat_random_count: {e}")
+                logger.warning("increment_azamat_random_count failed: %s", e)
 
     def get_group_language(self, chat_id: int) -> str:
         """Sprache für eine Gruppe. Default: en."""
@@ -691,7 +740,7 @@ class DatabaseManager:
                 conn.commit()
                 conn.close()
             except Exception as e:
-                print(f"⚠️ mark_azamat_greeting_sent: {e}")
+                logger.warning("mark_azamat_greeting_sent failed: %s", e)
 
     def get_user_username_or_name(self, user_id: int) -> str:
         """Holt username oder user_id als Fallback für Begrüßungen."""
@@ -702,7 +751,7 @@ class DatabaseManager:
                 c.execute("SELECT username FROM users WHERE user_id = %s", (user_id,))
                 row = c.fetchone()
                 conn.close()
-                return (row[0] or f"User") if row else "User"
+                return (row[0] or "User") if row else "User"
             except Exception:
                 return "User"
 
@@ -720,7 +769,7 @@ class DatabaseManager:
                 conn.commit()
                 conn.close()
             except Exception as e:
-                print(f"⚠️ Fehler beim Speichern von generation_error: {e}")
+                logger.warning("Fehler beim Speichern von generation_error: %s", e)
 
     def cleanup_old_generation_errors(self):
         """Löscht Einträge älter als 7 Tage."""
@@ -733,9 +782,9 @@ class DatabaseManager:
                 conn.commit()
                 conn.close()
                 if deleted:
-                    print(f"🧹 generation_errors: {deleted} Einträge älter als 7 Tage gelöscht.")
+                    logger.info("generation_errors cleanup: %s Einträge älter als 7 Tage gelöscht.", deleted)
             except Exception as e:
-                print(f"⚠️ generation_errors Cleanup: {e}")
+                logger.warning("generation_errors Cleanup failed: %s", e)
 
     # --- CHAT SESSIONS (eine Zeile pro User+Modell) ---
 

@@ -1,8 +1,11 @@
 import requests
 import time
 import json
+import logging
 from src.domain.interfaces import AIProvider
 from src.domain.entities import AIModel, GenerationResult
+
+logger = logging.getLogger(__name__)
 
 class SonautoClient(AIProvider):
     def __init__(self, api_key: str):
@@ -25,7 +28,7 @@ class SonautoClient(AIProvider):
         }
 
         try:
-            print(f"🎵 Starte Sonauto Request: {prompt[:30]}...")
+            logger.info("Starte Sonauto Request")
             response = requests.post(self.api_url, json=payload, headers=headers)
             
             # --- DEBUG INFO ---
@@ -40,7 +43,7 @@ class SonautoClient(AIProvider):
             task_id = data.get("task_id") or data.get("id")
             
             if task_id:
-                print(f"⏳ Task ID {task_id} erhalten. Warte auf Fertigstellung...")
+                logger.info("Sonauto Task ID %s erhalten. Warte auf Fertigstellung...", task_id)
                 return self._poll_result(task_id, headers)
             
             return GenerationResult(success=False, error="Keine task_id erhalten.")
@@ -62,15 +65,15 @@ class SonautoClient(AIProvider):
                     raw_status = res_data.get("status", "").upper()
                     
                     # Nur alle 5 Durchläufe oder bei Änderung printen, damit die Konsole sauber bleibt
-                    if i % 5 == 0: 
-                        print(f"   ... Status: {raw_status}")
+                    if i % 5 == 0:
+                        logger.debug("Sonauto Status: %s", raw_status)
 
                     # --- FIX: Auch "SUCCESS" akzeptieren ---
                     if raw_status in ["COMPLETED", "SUCCEEDED", "SUCCESS"]:
                         
                         # --- FIX: URL Suche verbessern (basierend auf Screenshot "Song Paths") ---
                         # Wir drucken einmal das ganze Ergebnis, damit wir es 100% sicher sehen
-                        print(f"✅ Status SUCCESS! Analysiere Antwort...")
+                        logger.info("Sonauto Status SUCCESS. Analysiere Antwort...")
                         # print(json.dumps(res_data, indent=2)) # <--- Kannst du einkommentieren zum Debuggen
 
                         final_url = None
@@ -92,11 +95,11 @@ class SonautoClient(AIProvider):
                             if not final_url.startswith("http"):
                                 final_url = "https://sonauto.ai" + final_url # Annahme, ggf. anpassen
                             
-                            print(f"🎉 Song fertig: {final_url}")
+                            logger.info("Song fertig")
                             return GenerationResult(success=True, data=final_url)
                         else:
-                            print("❌ Status SUCCESS, aber keine URL gefunden. Raw Data:")
-                            print(json.dumps(res_data, indent=2))
+                            logger.warning("Status SUCCESS, aber keine URL gefunden.")
+                            logger.debug("Sonauto raw data: %s", json.dumps(res_data, ensure_ascii=False))
                             return GenerationResult(success=False, error="URL nicht im JSON gefunden")
 
                     elif raw_status == "FAILED":
@@ -104,7 +107,7 @@ class SonautoClient(AIProvider):
                 
                 time.sleep(2)
             except Exception as e:
-                print(f"⚠️ Polling Fehler: {e}")
+                logger.warning("Sonauto Polling Fehler: %s", e)
                 time.sleep(2)
         
         return GenerationResult(success=False, error="Timeout: Song wurde nicht fertig.")

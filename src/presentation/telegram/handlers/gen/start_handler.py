@@ -20,7 +20,15 @@ from src.presentation.telegram.handlers.gen.ux import smart_update_status
 from src.utils.strings import get_text
 
 
-def do_start_gen_flow(bot, user_id: int, model_key: str, db, get_lang, edit_message_id: Optional[int] = None) -> bool:
+def do_start_gen_flow(
+    bot,
+    user_id: int,
+    model_key: str,
+    db,
+    get_lang,
+    edit_message_id: Optional[int] = None,
+    pending_webapp_prompt: Optional[str] = None,
+) -> bool:
     """
     Startet den Generierungs-Flow (Context setzen, Prompt/Media anfordern).
     edit_message_id: Falls gesetzt, wird die Nachricht editiert; sonst wird neu gesendet.
@@ -32,20 +40,22 @@ def do_start_gen_flow(bot, user_id: int, model_key: str, db, get_lang, edit_mess
     lang = get_lang(user_id)
     prev = get_context(user_id) or {}
     existing_media = prev.get("media_paths") or []
+    generation_options = prev.get("generation_options") or {}
     has_media = bool(existing_media)
-    needs_media = schema_requires_media(model.input_schema)
+    needs_media = schema_requires_media(model.input_schema, model=model)
     step = "waiting_for_prompt" if has_media else ("waiting_for_media" if needs_media else "waiting_for_prompt")
 
-    set_context(
-        user_id,
-        {
-            "model_key": model_key,
-            "step": step,
-            "media_paths": existing_media if has_media else [],
-            "last_bot_msg_id": edit_message_id,
-            "menu_path": model.menu_path,
-        },
-    )
+    ctx_payload = {
+        "model_key": model_key,
+        "step": step,
+        "media_paths": existing_media if has_media else [],
+        "generation_options": generation_options,
+        "last_bot_msg_id": edit_message_id,
+        "menu_path": model.menu_path,
+    }
+    if pending_webapp_prompt and pending_webapp_prompt.strip():
+        ctx_payload["pending_webapp_prompt"] = pending_webapp_prompt.strip()
+    set_context(user_id, ctx_payload)
     if step == "waiting_for_media":
         allow_multi = schema_allows_multiple_media(model.input_schema)
         prompt_text = get_text("model_req_media_multiple", lang) if allow_multi else get_text("model_req_media_single", lang)

@@ -6,8 +6,11 @@ from telebot import TeleBot, types
 
 from src.config.settings import config
 from src.presentation.telegram import keyboards
+from src.presentation.telegram.handlers.chat_debounce import cancel_pending_batch
 from src.presentation.telegram.handlers.common import clear_context, get_context, set_context
-from src.presentation.telegram.handlers.group_handler import _is_group, get_group_menu_markup
+from src.presentation.telegram.handlers.group_handler import get_group_menu_markup
+from src.presentation.telegram.handlers.gen import ctx_media_to_list
+from src.presentation.telegram.handlers.gen.media_helpers import schema_requires_media
 from src.presentation.telegram.handlers.gen.nav_handlers import send_model_detail_view
 from src.presentation.telegram.handlers.gen.start_handler import do_start_gen_flow
 from src.presentation.telegram.handlers.payment_handler import show_shop_logic
@@ -29,6 +32,26 @@ ADMIN_ID = _parse_admin_id()
 
 REFERRAL_REWARD = 50
 
+_MAX_WEBAPP_PROMPT_LEN = 12000
+
+# Wird von gen_handler.register gesetzt, damit WebApp-API (main.py) sofort generieren kann.
+_webapp_run_generation = None
+
+
+def set_webapp_run_generation(run_generation_fn) -> None:
+    """Bindet run_generation aus runner.py für process_webapp_action (start_gen mit Prompt)."""
+    global _webapp_run_generation
+    _webapp_run_generation = run_generation_fn
+
+
+def _trim_webapp_prompt(raw) -> str:
+    if not isinstance(raw, str):
+        return ""
+    s = raw.strip()
+    if len(s) > _MAX_WEBAPP_PROMPT_LEN:
+        return s[:_MAX_WEBAPP_PROMPT_LEN]
+    return s
+
 
 def _is_keyboard_mode(db) -> bool:
     return db.get_bot_setting("menu_mode", "commands") == "keyboard"
@@ -49,7 +72,14 @@ def _remove_reply_keyboard_silently(bot: TeleBot, user_id: int) -> None:
         pass
 
 
-def process_webapp_action(bot: TeleBot, user_id: int, action: str, db, is_group: bool = False) -> None:
+def process_webapp_action(
+    bot: TeleBot,
+    user_id: int,
+    action: str,
+    db,
+    is_group: bool = False,
+    payload: dict | None = None,
+) -> dict | None:
     """Führt eine Web-App-Aktion aus. Nutzbar von web_app_data-Handler und API.
     Bei is_group=True (Gruppenchat): nur Credits + Sprache, kein volles Menü."""
     if is_group:
@@ -62,6 +92,7 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db, is_group:
     all_models = db.get_all_models()
     clear_context(user_id)
     db.set_user_chat_mode(user_id, None, active=False)
+    cancel_pending_batch(user_id)
     webapp_only_markup = None
     app_url = (config.APP_URL or "").strip().rstrip("/")
     if app_url.startswith("https://"):
@@ -113,8 +144,70 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db, is_group:
             send_model_detail_view(bot, user_id, model_key, db, get_lang)
     elif action.startswith("start_gen_"):
         model_key = action.replace("start_gen_", "")
+        model = db.get_model_by_key(model_key)
+        pl = payload if isinstance(payload, dict) else {}
+        options: dict = {}
+        raw_opts = pl.get("generation_options")
+        if isinstance(raw_opts, dict):
+            options = dict(raw_opts)
+        neg = pl.get("negative_prompt")
+        if isinstance(neg, str) and neg.strip():
+            options["negative_prompt"] = neg.strip()
+        prompt_trim = _trim_webapp_prompt(pl.get("prompt"))
+
+        # WebApp sendet Bild-Inputs typischerweise in `generation_options` als URI-Felder
+        # (z.B. `reference_images`, `input_image` ...). Für den Telegram-Flow und
+        # die UnifiedAIClient-Datei-Zuordnung brauchen wir daraus `media_paths`.
+        media_paths: list = []
+        media_keys_used: set[str] = set()
+
+        def _maybe_add_image_uri(val) -> None:
+            if isinstance(val, str) and (val.startswith("http://") or val.startswith("https://")):
+                media_paths.append({"path": val, "type": "image"})
+            elif isinstance(val, list):
+                for x in val:
+                    _maybe_add_image_uri(x)
+
+        for k, v in list(options.items()):
+            kl = str(k).lower()
+            # Nur Media-ähnliche Keys (damit wir z.B. aspect_ratio nicht anfassen).
+            if "image" in kl or "img" in kl or "mask" in kl or kl in ("reference_images",):
+                if v:
+                    _maybe_add_image_uri(v)
+                    media_keys_used.add(k)
+
+        # Entferne die URI-Keys aus generation_options, weil UnifiedAIClient sie via
+        # media_files bereits über das Replicate-Schema korrekt mappen soll.
+        if media_keys_used:
+            options = {k: v for k, v in options.items() if k not in media_keys_used}
+
+        needs_media = bool(model and schema_requires_media(model.input_schema, model=model))
+        has_media = bool(media_paths)
+        run_fn = _webapp_run_generation
+
+        if prompt_trim and run_fn and model and model.is_active and (has_media or not needs_media):
+            ctx_pre = {
+                "model_key": model_key,
+                "generation_options": options,
+                "media_paths": media_paths,
+                "menu_path": model.menu_path or "root",
+            }
+            set_context(user_id, ctx_pre)
+            run_fn(user_id, model_key, prompt_trim, ctx_media_to_list(ctx_pre), is_chat=False)
+            _remove_reply_keyboard_silently(bot, user_id)
+            return
+
+        if options or media_paths:
+            existing = {
+                "generation_options": options,
+                "media_paths": media_paths,
+            }
+            set_context(user_id, existing)
+        pending = prompt_trim if (needs_media and not has_media and prompt_trim) else None
         _remove_reply_keyboard_silently(bot, user_id)
-        do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
+        do_start_gen_flow(
+            bot, user_id, model_key, db, get_lang, edit_message_id=None, pending_webapp_prompt=pending
+        )
     elif action.startswith("chat_mode_yes_"):
         model_key = action.replace("chat_mode_yes_", "")
         model = db.get_model_by_key(model_key)
@@ -125,9 +218,44 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db, is_group:
             text = get_text("chat_active_msg", lang).format(model=model.name, cost=final_cost)
             markup = keyboards.get_chat_active_menu(lang)
             bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+            pl = payload if isinstance(payload, dict) else {}
+            prompt_trim = _trim_webapp_prompt(pl.get("prompt"))
+            if prompt_trim and _webapp_run_generation:
+                user_name = getattr(db, "get_user_username_or_name", lambda _u: None)(user_id) or "User"
+                _webapp_run_generation(
+                    user_id,
+                    model_key,
+                    prompt_trim,
+                    None,
+                    is_chat=True,
+                    chat_history_mode="once_off",
+                    chat_user_name=user_name,
+                )
     elif action.startswith("chat_mode_no_"):
         model_key = action.replace("chat_mode_no_", "")
+        model = db.get_model_by_key(model_key)
+        pl = payload if isinstance(payload, dict) else {}
+        prompt_trim = _trim_webapp_prompt(pl.get("prompt"))
         _remove_reply_keyboard_silently(bot, user_id)
+        if prompt_trim and _webapp_run_generation and model and model.is_active:
+            ctx_pre = {
+                "model_key": model_key,
+                "generation_options": {},
+                "media_paths": [],
+                "menu_path": model.menu_path or "root",
+            }
+            set_context(user_id, ctx_pre)
+            user_name = getattr(db, "get_user_username_or_name", lambda _u: None)(user_id) or "User"
+            _webapp_run_generation(
+                user_id,
+                model_key,
+                prompt_trim,
+                None,
+                is_chat=False,
+                chat_history_mode="once_off",
+                chat_user_name=user_name,
+            )
+            return
         do_start_gen_flow(bot, user_id, model_key, db, get_lang, edit_message_id=None)
     elif action == "cmd_shop":
         if webapp_only_markup:
@@ -152,6 +280,26 @@ def process_webapp_action(bot: TeleBot, user_id: int, action: str, db, is_group:
         settings = db.get_user_settings(user_id)
         new_val = 0 if settings.get("daily_msg", True) else 1
         db.update_setting(user_id, "daily_msg", new_val)
+    elif action == "optimize_prompt_paid":
+        # WebApp: Bezahlt 3 Credits (in UI als 3 ⭐ angezeigt) für eine Gemini-Prompt-Optimierung.
+        pl = payload if isinstance(payload, dict) else {}
+        raw_prompt = pl.get("prompt")
+        prompt_trim = _trim_webapp_prompt(raw_prompt)
+        if not prompt_trim:
+            raise ValueError("missing_prompt")
+
+        opt_cost = 3
+        current_credits = int(db.get_user_credits(user_id))
+        if current_credits < opt_cost:
+            raise ValueError("Zu wenig Guthaben für Prompt-Optimierung (3 Credits).")
+
+        db.update_credits(user_id, -opt_cost, reason="prompt_optimize")
+
+        from src.infrastructure.ai.replicate.prompt_engineer import optimize_prompt_via_llm
+
+        optimized = optimize_prompt_via_llm(prompt_trim)
+        new_credits = int(db.get_user_credits(user_id))
+        return {"optimized_prompt": optimized, "credits": new_credits}
     elif action.startswith("buy_credits_"):
         parts = action.replace("buy_credits_", "").split("_")
         if len(parts) >= 2:
@@ -230,6 +378,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
                 if act_type == "nav_main":
                     clear_context(user_id)
                     db.set_user_chat_mode(user_id, None, active=False)
+                    cancel_pending_batch(user_id)
                     un = (message.from_user and message.from_user.first_name) or ""
                     welcome_text = get_welcome(lang, un)
                     markup = keyboards.get_main_reply_keyboard(lang)
@@ -250,6 +399,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
                     prev = get_context(user_id) or {}
                     clear_context(user_id)
                     db.set_user_chat_mode(user_id, None, active=False)
+                    cancel_pending_batch(user_id)
                     send_model_detail_view(bot, user_id, target, db, get_lang)
                     set_context(user_id, {
                         "model_key": target,
@@ -262,6 +412,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
 
         clear_context(user_id)
         db.set_user_chat_mode(user_id, None, active=False)
+        cancel_pending_batch(user_id)
         if action == "nav_main":
             un = (message.from_user and message.from_user.first_name) or ""
             welcome_text = get_welcome(lang, un)
@@ -296,7 +447,6 @@ def register(bot: TeleBot, generation_service, db) -> None:
         user_id = message.chat.id
         if ADMIN_ID and user_id != ADMIN_ID:
             return
-        lang = get_lang(user_id)
         try:
             # Cache invalidieren
             if hasattr(db, "_models_cache"):
@@ -334,7 +484,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
             bot.delete_message(user_id, message.message_id)
         except Exception:
             pass
-        process_webapp_action(bot, user_id, action, db, is_group=is_group)
+        process_webapp_action(bot, user_id, action, db, is_group=is_group, payload=data)
 
     # 1. START COMMAND (nur private Chats – Gruppen werden von group_handler bedient)
     @bot.message_handler(commands=['start'], func=lambda m: str(m.chat.type) == 'private')

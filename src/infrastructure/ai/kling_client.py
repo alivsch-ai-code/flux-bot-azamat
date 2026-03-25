@@ -1,8 +1,10 @@
 import time
 import requests
-import jwt # pip install pyjwt
+import logging
 from src.domain.interfaces import AIProvider
 from src.domain.entities import AIModel, GenerationResult
+
+logger = logging.getLogger(__name__)
 
 class KlingClient(AIProvider):
     def __init__(self, api_key: str):
@@ -73,7 +75,7 @@ class KlingClient(AIProvider):
                 
                 time.sleep(5)
             except Exception as e:
-                print(f"Polling Error: {e}")
+                logger.warning("Kling Polling Error: %s", e)
                 time.sleep(5)
 
         return GenerationResult(success=False, error="Timeout bei Kling AI")

@@ -45,17 +45,40 @@ def ctx_media_to_list(ctx) -> list:
 MEDIA_KEYWORDS = [
     "image", "images", "img", "photo", "init_image", "target_image", "swap_image",
     "input_image", "control_image", "mask", "redux_image",
+    "start_image", "end_image", "reference_images",
+    "first_frame_image",
     "video", "videos", "input_video", "audio", "input_audio",
     "file", "document",
 ]
 
+# Modelle, die NUR Image-to-Video unterstützen (kein Text-to-Video).
+# Replicate-Schema markiert start_image/end_image oft als optional, die API verlangt sie aber.
+IMG2VIDEO_ONLY_MODELS = ["kling-v1.6-pro", "kwaivgi/kling-v1.6-pro"]
 
-def schema_requires_media(input_schema: dict) -> bool:
+
+def model_requires_image_for_video(model) -> bool:
+    """
+    True wenn das Modell nur Image-to-Video unterstützt (z.B. Kling v1.6 Pro).
+    Diese Modelle brauchen start_image, end_image oder reference_images – ohne Bild schlägt die API fehl.
+    """
+    if not model:
+        return False
+    rid = (model.replicate_id or "").lower()
+    key = (getattr(model, "key", "") or "").lower()
+    for m in IMG2VIDEO_ONLY_MODELS:
+        if m in rid or m in key:
+            return True
+    return False
+
+
+def schema_requires_media(input_schema: dict, model=None) -> bool:
     """
     Prüft, ob Medien-Input (Bild/Video/Audio) PFLICHT ist.
-    Nur True, wenn ein Media-Key in 'required' steht – sonst kann der User
-    mit reinem Text-Prompt starten (txt2img auch bei optionalem image).
+    True wenn: (a) Media-Key in 'required' steht, oder
+    (b) Modell nur Image-to-Video unterstützt (z.B. Kling v1.6 Pro).
     """
+    if model_requires_image_for_video(model):
+        return True
     if not input_schema or not isinstance(input_schema, dict):
         return False
     required = input_schema.get("required") or []

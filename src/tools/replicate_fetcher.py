@@ -11,7 +11,7 @@ Klassifikationslogik (wichtig für korrektes UX):
 """
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 # --- MENÜ-HIERARCHIE (passt zu strings.py menu_*)
 PATH_MAP = {

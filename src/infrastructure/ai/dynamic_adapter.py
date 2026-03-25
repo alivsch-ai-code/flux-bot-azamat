@@ -1,6 +1,5 @@
-import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 class DynamicSchemaAdapter:
     def __init__(self):
@@ -20,7 +19,7 @@ class DynamicSchemaAdapter:
         
         # 2. Keywords für Dateityp-Erkennung in Schema-Keys
         self.type_keywords = {
-            "image": ["image", "img", "photo", "face", "avatar", "mask", "init_image", "target_image", "swap_image", "input_image", "image_input"],
+            "image": ["image", "img", "photo", "face", "avatar", "mask", "init_image", "target_image", "swap_image", "input_image", "image_input", "start_image", "end_image", "reference_images", "first_frame_image"],
             "video": ["video", "movie", "footage", "clip", "input_video", "video_input"],
             "audio": ["audio", "sound", "music", "voice", "mp3", "wav", "speech", "input_audio"],
             "document": ["document", "file", "pdf", "doc", "input_file"],
@@ -168,9 +167,10 @@ class DynamicSchemaAdapter:
         
         # A. Liste
         if isinstance(raw_output, list):
-            if not raw_output: return None
+            if not raw_output:
+                return None
             if isinstance(raw_output[0], str):
-                return raw_output[0] 
+                return raw_output[0]
             return raw_output[0]
 
         # B. Dictionary

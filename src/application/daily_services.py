@@ -1,8 +1,10 @@
+import json
 import os
 import random
 import re
 import time
 import threading
+import logging
 from datetime import datetime
 
 import feedparser
@@ -10,6 +12,8 @@ import feedparser
 from telebot import types
 
 from src.utils.strings import get_random_daily_fallback, get_text
+
+logger = logging.getLogger(__name__)
 
 # Google News RSS für AI-Themen
 AI_NEWS_RSS_URL = os.getenv(
@@ -26,6 +30,30 @@ _last_azamat_slots_done = set()
 AZAMAT_GREETING_MODEL = "google-gemini-2-5-flash"
 
 
+def _resolve_daily_message_text(raw: str | None, lang: str) -> str:
+    """
+    Ein Post kann ein einfacher String sein oder JSON mit Sprachschlüsseln:
+    {"de":"...", "en":"...", "ru":"...", "kk":"..."} → passender Text pro User.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("{"):
+        try:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                for key in (lang, "en", "de", "ru", "kk"):
+                    val = data.get(key)
+                    if val is not None and str(val).strip():
+                        return str(val).strip()
+                for val in data.values():
+                    if val is not None and str(val).strip():
+                        return str(val).strip()
+        except json.JSONDecodeError:
+            pass
+    return raw
+
+
 class DailyService:
     def __init__(self, bot, db, generation_service=None):
         self.bot = bot
@@ -39,7 +67,7 @@ class DailyService:
         thread = threading.Thread(target=self._loop)
         thread.daemon = True # Thread stirbt automatisch, wenn Hauptprogramm beendet wird
         thread.start()
-        print("✅ Daily Service gestartet.")
+        logger.info("Daily Service gestartet.")
 
     def _loop(self):
         """
@@ -55,10 +83,10 @@ class DailyService:
                 
                 if post:
                     post_id, text, img_path = post
-                    print(f"📢 Daily Service: Neue Nachricht für heute gefunden (ID: {post_id}). Sende...")
+                    logger.info("Daily Service: Neue Nachricht für heute gefunden (ID: %s).", post_id)
                     self._broadcast(text, img_path)
                     self.db.mark_post_as_sent(post_id)
-                    print(f"✅ Daily Service: Nachricht {post_id} als gesendet markiert.")
+                    logger.info("Daily Service: Nachricht %s als gesendet markiert.", post_id)
                 else:
                     # Kein Post in DB → Fallback: 1× pro Tag „Hallo! Drück /start“ in User-Sprache
                     global _last_fallback_date
@@ -79,7 +107,7 @@ class DailyService:
                 self._maybe_send_ai_news_post()
 
             except Exception as e:
-                print(f"⚠️ Fehler im Daily Service Loop: {e}")
+                logger.warning("Fehler im Daily Service Loop: %s", e)
 
             # Prüfe alle 60 Sekunden
             time.sleep(60) 
@@ -89,53 +117,66 @@ class DailyService:
         
         # WICHTIG: Überspringen, wenn weder Text noch Bild vorhanden sind.
         if (not text or not text.strip()) and (not img_path or not img_path.strip()):
-            print("ℹ️ Daily Service: Weder Text noch Bild zum Senden vorhanden. Broadcast übersprungen.")
+            logger.info("Daily Service: Weder Text noch Bild vorhanden. Broadcast übersprungen.")
             return
 
         try:
             users = self.db.get_subscribed_users() # Holt IDs mit daily_msg = 1
             
             if not users:
-                print("ℹ️ Daily Service: Keine Abonnenten gefunden.")
+                logger.info("Daily Service: Keine Abonnenten gefunden.")
                 return
 
-            print(f"📨 Sende an {len(users)} Empfänger...")
+            logger.info("Daily Service: sende an %s Empfänger.", len(users))
             
             success_count = 0
             for user_id in users:
                 try:
+                    settings = self.db.get_user_settings(user_id)
+                    user_lang = settings.get("lang", "en") or "en"
+                    out_text = _resolve_daily_message_text(text, user_lang)
+                    sent = False
+
                     # Fall A: Nachricht mit Bild
                     if img_path and img_path.strip():
                         # Prüfen ob URL (http) oder lokaler Pfad
                         if img_path.startswith("http"):
-                            self.bot.send_photo(user_id, img_path, caption=text, parse_mode="HTML")
+                            self.bot.send_photo(
+                                user_id, img_path, caption=out_text or None, parse_mode="HTML"
+                            )
+                            sent = True
                         else:
                             # Prüfen ob lokale Datei existiert
                             try:
                                 with open(img_path, "rb") as f:
-                                    self.bot.send_photo(user_id, f, caption=text, parse_mode="HTML")
+                                    self.bot.send_photo(
+                                        user_id, f, caption=out_text or None, parse_mode="HTML"
+                                    )
+                                sent = True
                             except FileNotFoundError:
                                 # Fallback: Nur Text senden, wenn Bild fehlt und Text vorhanden ist
-                                if text and text.strip():
-                                    self.bot.send_message(user_id, text, parse_mode="HTML")
+                                if out_text:
+                                    self.bot.send_message(user_id, out_text, parse_mode="HTML")
+                                    sent = True
 
                     # Fall B: Nur Text, aber nur wenn Text auch Inhalt hat
-                    elif text and text.strip():
-                        self.bot.send_message(user_id, text, parse_mode="HTML")
-                    
-                    success_count += 1
-                    
+                    elif out_text:
+                        self.bot.send_message(user_id, out_text, parse_mode="HTML")
+                        sent = True
+
+                    if sent:
+                        success_count += 1
+
                     # Kurze Pause, um Telegram Limits (Rate Limits) nicht zu verletzen
                     time.sleep(0.05) 
                     
-                except Exception as e:
+                except Exception:
                     # Optional: User deaktivieren bei "Bot was blocked by the user"
-                    # print(f"❌ Fehler beim Senden an {user_id}: {e}")
                     pass
 
-            print(f"🏁 Broadcast beendet. Erfolgreich: {success_count}/{len(users)}")
+            logger.info("Broadcast beendet. Erfolgreich: %s/%s", success_count, len(users))
         except Exception as e:
-            print(f"⚠️ Kritischer Fehler im Broadcast: {e}")
+            logger.warning("Kritischer Fehler im Broadcast: %s", e)
 
     def _broadcast_fallback(self):
         """Sendet Fallback-Nachricht (Hallo, /start) in der Sprache jedes Users, wenn keine DB-Nachricht da ist."""
@@ -143,7 +184,7 @@ class DailyService:
             users = self.db.get_subscribed_users()
             if not users:
                 return
-            print(f"📨 Daily Fallback: Sende an {len(users)} User (kein DB-Post für heute)...")
+            logger.info("Daily Fallback: sende an %s User (kein DB-Post für heute).", len(users))
             success = 0
             for user_id in users:
                 try:
@@ -158,9 +199,9 @@ class DailyService:
                     time.sleep(0.05)
                 except Exception:
                     pass
-            print(f"✅ Daily Fallback: {success}/{len(users)} erfolgreich.")
+            logger.info("Daily Fallback: %s/%s erfolgreich.", success, len(users))
         except Exception as e:
-            print(f"⚠️ Fehler beim Daily Fallback: {e}")
+            logger.warning("Fehler beim Daily Fallback: %s", e)
 
     def _maybe_send_azamat_greetings(self):
         """Sendet 2× täglich eine von Azamat generierte Begrüßung an User mit daily_msg=1."""
@@ -196,14 +237,14 @@ class DailyService:
 
         model = self.db.get_model_by_key(AZAMAT_GREETING_MODEL)
         if not model or "text" not in (model.type or []):
-            print("ℹ️ Azamat Greeting: Text-Modell nicht verfügbar.")
+            logger.info("Azamat Greeting: Text-Modell nicht verfügbar.")
             return
 
         users = self.db.get_subscribed_users()
         if not users:
             return
 
-        print(f"🤖 Azamat Greeting Slot {slot} ({today}): Sende an {len(users)} User...")
+        logger.info("Azamat Greeting Slot %s (%s): sende an %s User.", slot, today, len(users))
         success = 0
         for user_id in users:
             try:
@@ -224,10 +265,10 @@ class DailyService:
                 self.db.mark_azamat_greeting_sent(user_id, today, slot)
                 success += 1
                 time.sleep(0.08)
-            except Exception as e:
+            except Exception:
                 pass
         if success:
-            print(f"✅ Azamat Greeting: {success}/{len(users)} gesendet.")
+            logger.info("Azamat Greeting: %s/%s gesendet.", success, len(users))
 
     def _fetch_ai_news_from_rss(self, max_items: int = 2) -> list:
         """Lädt die neuesten AI-News von Google News RSS. Gibt Liste von {title, snippet, link} zurück."""
@@ -244,7 +285,7 @@ class DailyService:
                 result.append({"title": title, "snippet": desc[:300], "link": link})
             return result
         except Exception as e:
-            print(f"⚠️ RSS-Fetch fehlgeschlagen: {e}")
+            logger.warning("RSS-Fetch fehlgeschlagen: %s", e)
             return []
 
     def _maybe_send_ai_news_post(self):
@@ -297,6 +338,6 @@ class DailyService:
             self.bot.send_message(target_id, text, parse_mode="HTML")
             self.db.increment_azamat_random_count_today()
             label = "group" if target_type == "group" else "user"
-            print(f"📰 Azamat AI News an {label} {target_id} gesendet.")
+            logger.info("Azamat AI News an %s %s gesendet.", label, target_id)
         except Exception:
             pass

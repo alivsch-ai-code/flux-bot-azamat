@@ -1,14 +1,15 @@
 import os
 import replicate
-import time
 from typing import List, Optional
+import logging
 
 from openai import OpenAI
 
-from src.config.settings import config
 from src.domain.entities import AIModel, GenerationResult, MediaFile
 from src.infrastructure.ai.dynamic_adapter import DynamicSchemaAdapter
 from src.infrastructure.ai.replicate_concurrency import replicate_run_slot
+
+logger = logging.getLogger(__name__)
 
 
 def _is_http_url(s: str) -> bool:
@@ -19,10 +20,9 @@ def _local_paths_to_urls(paths: List[str], client) -> List[str]:
     """
     Konvertiert lokale Dateipfade zu URIs für Replicate (format: uri).
     - HTTP(S)-URLs bleiben unverändert.
-    - Kleine Dateien (<1MB): Data-URI (base64).
-    - Größere: Upload via Replicate Files API.
+    - Upload via Replicate Files API (damit Replicate-Input-Felder wie `format: uri`
+      zuverlässig eine echte URL bekommen und nicht an `data:`-URIs scheitern).
     """
-    import base64
     urls = []
     for p in paths or []:
         if _is_http_url(p):
@@ -31,20 +31,24 @@ def _local_paths_to_urls(paths: List[str], client) -> List[str]:
             try:
                 with open(p, "rb") as f:
                     content = f.read()
-                size = len(content)
                 ext = os.path.splitext(p)[1].lower() or ".jpg"
                 mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png" if ext == ".png" else "image/webp" if ext == ".webp" else "application/octet-stream"
-                if size < 1024 * 1024:
+                fn = os.path.basename(p) or "image.jpg"
+                resp = client.files.create(content=content, filename=fn, type=mime)
+                url = getattr(resp, "url", None)
+                if not url and hasattr(resp, "urls") and isinstance(resp.urls, dict):
+                    url = resp.urls.get("get")
+                if url:
+                    urls.append(url)
+                else:
+                    # Letzter Fallback: data:-URI. Falls Replicate das ebenfalls ablehnt,
+                    # wäre es besser, vorher zu garantieren, dass Upload immer eine URL liefert.
+                    import base64
                     b64 = base64.b64encode(content).decode("ascii")
                     urls.append(f"data:{mime};base64,{b64}")
-                else:
-                    fn = os.path.basename(p) or "image.jpg"
-                    resp = client.files.create(content=content, filename=fn, type=mime)
-                    url = getattr(resp, "url", None)
-                    if not url and hasattr(resp, "urls") and isinstance(resp.urls, dict):
-                        url = resp.urls.get("get")
-                    urls.append(url if url else p)
             except Exception:
+                # Notfalls originalen Pfad weiterreichen; kann beim Provider validierungsfehlschlagen.
+                # Aber: vorherige Bugs zeigen, dass `data:`/non-URI Werte hier problematisch sind.
                 urls.append(p)
         else:
             urls.append(p)
@@ -82,16 +86,17 @@ class UnifiedAIClient:
         model: AIModel,
         prompt: str,
         media_files: Optional[List[MediaFile]] = None,
+        generation_params: Optional[dict] = None,
     ) -> GenerationResult:
         """
         Verteilt die Anfrage an den richtigen Provider (Replicate, OpenAI, Kling etc.)
         """
-        print(f"⏳ UnifiedClient: Starte Request für {model.name} (Provider: {model.provider})...")
+        logger.info("UnifiedClient startet Request für %s (Provider: %s)", model.name, model.provider)
         
         try:
             # --- 1. REPLICATE ---
             if model.provider == "replicate":
-                return self._run_replicate(model, prompt, media_files)
+                return self._run_replicate(model, prompt, media_files, generation_params=generation_params or {})
 
             elif model.provider == "openai":
                 img_path = _first_image_path(media_files)
@@ -114,12 +119,12 @@ class UnifiedAIClient:
                 return GenerationResult(success=False, error=f"Unbekannter Provider: {model.provider}")
 
         except Exception as e:
-            print(f"❌ API Error ({model.provider}): {e}")
+            logger.exception("API Error (%s): %s", model.provider, e)
             return GenerationResult(success=False, error=str(e))
 
     # --- PROVIDER IMPLEMENTIERUNGEN ---
 
-    def _run_replicate(self, model, prompt, media_files):
+    def _run_replicate(self, model, prompt, media_files, generation_params=None):
         with replicate_run_slot():
             file_paths = [mf.path for mf in (media_files or []) if mf.path] if media_files else []
             file_urls = file_paths
@@ -141,6 +146,20 @@ class UnifiedAIClient:
                 input_data["safety_tolerance"] = 5
             if "minimax" in (model.key or ""):
                 input_data["prompt_optimizer"] = True
+            # Optional model runtime params coming from WebApp.
+            if isinstance(generation_params, dict):
+                for k, v in generation_params.items():
+                    if v is None:
+                        continue
+                    # prompt wird ausschließlich aus Chat/Prompt-Flow gesetzt
+                    if k == "prompt":
+                        continue
+                    # Leere Listen/Strings nicht überschreiben
+                    if isinstance(v, list) and not v:
+                        continue
+                    if isinstance(v, str) and v.strip() == "":
+                        continue
+                    input_data[k] = v
             output = replicate.run(model.replicate_id, input=input_data)
 
             return self._normalize_replicate_output(output)
