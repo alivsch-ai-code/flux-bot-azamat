@@ -5,7 +5,7 @@ import threading
 import time
 
 import telebot
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 
 # --- 1. KONFIGURATION (lädt .env via settings) ---
 from src.config.settings import config
@@ -43,6 +43,27 @@ def webapp():
         return html, 200, {"Content-Type": "text/html; charset=utf-8"}
     except FileNotFoundError:
         return "<h1>Web App nicht gefunden</h1>", 404, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route('/webapp-react')
+def webapp_react():
+    """Telegram Mini App – React-Frontend (webapp-react/dist)."""
+    dist_dir = os.path.join(os.path.dirname(__file__), "webapp-react", "dist")
+    try:
+        return send_from_directory(dist_dir, "index.html")
+    except Exception:
+        return "<h1>React Web App Build nicht gefunden (webapp-react/dist/index.html)</h1>", 404, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route('/webapp-react/<path:filename>')
+def webapp_react_assets(filename: str):
+    """Serve assets from Vite build output."""
+    dist_dir = os.path.join(os.path.dirname(__file__), "webapp-react", "dist")
+    try:
+        return send_from_directory(dist_dir, filename)
+    except Exception:
+        # For SPA-like UX (query-param routing) we only expect real assets here.
+        return "", 404
 
 @app.route('/api/webapp_action', methods=['POST'])
 def api_webapp_action():

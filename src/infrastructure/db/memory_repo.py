@@ -1,5 +1,6 @@
 from src.domain.interfaces import UserRepository
 from src.domain.entities import User
+from src.config.settings import config
 
 class InMemoryUserRepo(UserRepository):
     def __init__(self):
@@ -11,7 +12,7 @@ class InMemoryUserRepo(UserRepository):
         # Fall 1: User existiert noch nicht im Speicher
         if user_id not in self.users:
             # Wir erstellen ein temporäres Objekt (Default: Guest)
-            return User(id=user_id, username="Guest", credits=50)
+            return User(id=user_id, username="Guest", credits=int(config.START_CREDITS))
         
         # Fall 2: User existiert -> Daten laden
         u_data = self.users[user_id]
@@ -30,7 +31,7 @@ class InMemoryUserRepo(UserRepository):
             self.users[user_id] = {
                 "id": user_id, 
                 "username": username, 
-                "credits": global_defaults.START_CREDITS
+                "credits": int(config.START_CREDITS),
             }
 
     def update_credits(self, user_id: int, amount: int, reason: str = ""):
@@ -41,7 +42,7 @@ class InMemoryUserRepo(UserRepository):
             self.users[user_id] = {
                 "id": user_id, 
                 "username": "Unknown", 
-                "credits": 50 + amount
+                "credits": int(config.START_CREDITS) + amount,
             }
 
     def get_user_credits(self, user_id: int) -> int:
