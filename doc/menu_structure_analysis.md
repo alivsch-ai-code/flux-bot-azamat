@@ -48,7 +48,7 @@ Damit werden z.B. Claude Sonnet, GPT-4o, Gemini korrekt unter „Text / Chat“ 
 |----------------------------|-----------------------------|-------------------------------------------------|
 | Inline-Menü (commands)     | `keyboards.get_dynamic_model_menu` | Aus DB: menu_path pro Modell          |
 | Reply-Keyboard             | `keyboards.get_main_reply_keyboard`| Fix: Bild, Video, Audio, Text, Tools  |
-| Web-App                    | `webapp/index.html`         | Fix: gleiche 5 Karten                           |
+| Web-App                    | React `/webapp`              | Fix: gleiche 5 Karten                           |
 | API `/api/models`          | `main.py`                   | path=root → Subkategorien, path=X → Modelle     |
 
 ---

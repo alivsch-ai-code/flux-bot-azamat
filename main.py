@@ -5,7 +5,7 @@ import threading
 import time
 
 import telebot
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, redirect, request, send_from_directory
 
 # --- 1. KONFIGURATION (lädt .env via settings) ---
 from src.config.settings import config
@@ -33,40 +33,45 @@ _bot_instance = None
 def health_check():
     return "🤖 System Status: ONLINE", 200
 
+def _webapp_react_dist_dir() -> str:
+    return os.path.join(os.path.dirname(__file__), "webapp-react", "dist")
+
+
 @app.route('/webapp')
 def webapp():
-    """Telegram Mini App – default route (prefers React build, fallback HTML)."""
-    react_path = os.path.join(os.path.dirname(__file__), "webapp-react", "dist", "index.html")
-    legacy_path = os.path.join(os.path.dirname(__file__), "webapp", "index.html")
-    try:
-        # Activate React UI by default when the build artifact exists.
-        path = react_path if os.path.exists(react_path) else legacy_path
-        with open(path, "r", encoding="utf-8") as f:
-            html = f.read()
-        return html, 200, {"Content-Type": "text/html; charset=utf-8"}
-    except FileNotFoundError:
-        return "<h1>Web App nicht gefunden</h1>", 404, {"Content-Type": "text/html; charset=utf-8"}
+    """Telegram Mini App – React (Vite build under webapp-react/dist)."""
+    dist_dir = _webapp_react_dist_dir()
+    index_path = os.path.join(dist_dir, "index.html")
+    if not os.path.isfile(index_path):
+        return (
+            "<h1>Web App Build nicht gefunden</h1><p>Führe <code>npm run build --prefix webapp-react</code> aus.</p>",
+            404,
+            {"Content-Type": "text/html; charset=utf-8"},
+        )
+    return send_from_directory(dist_dir, "index.html")
 
 
-@app.route('/webapp-react')
-def webapp_react():
-    """Telegram Mini App – React-Frontend (webapp-react/dist)."""
-    dist_dir = os.path.join(os.path.dirname(__file__), "webapp-react", "dist")
-    try:
-        return send_from_directory(dist_dir, "index.html")
-    except Exception:
-        return "<h1>React Web App Build nicht gefunden (webapp-react/dist/index.html)</h1>", 404, {"Content-Type": "text/html; charset=utf-8"}
-
-
-@app.route('/webapp-react/<path:filename>')
-def webapp_react_assets(filename: str):
-    """Serve assets from Vite build output."""
-    dist_dir = os.path.join(os.path.dirname(__file__), "webapp-react", "dist")
+@app.route('/webapp/<path:filename>')
+def webapp_assets(filename: str):
+    """Static assets from Vite output (e.g. /webapp/assets/…)."""
+    dist_dir = _webapp_react_dist_dir()
     try:
         return send_from_directory(dist_dir, filename)
     except Exception:
-        # For SPA-like UX (query-param routing) we only expect real assets here.
         return "", 404
+
+
+@app.route("/webapp-react")
+@app.route("/webapp-react/")
+def webapp_react_legacy_redirect():
+    """Alte BotFather-URLs (base war /webapp-react/); jetzt einheitlich /webapp/."""
+    return redirect("/webapp", code=308)
+
+
+@app.route("/webapp-react/<path:filename>")
+def webapp_react_legacy_assets_redirect(filename: str):
+    return redirect(f"/webapp/{filename}", code=308)
+
 
 @app.route('/api/webapp_action', methods=['POST'])
 def api_webapp_action():

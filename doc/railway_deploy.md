@@ -49,8 +49,7 @@ Alternative (empfohlen, im Repo versioniert): Über `nixpacks.toml` im Repo-Root
 ### 4. Web-App mit BotFather
 
 1. [@BotFather](https://t.me/BotFather) → `/setmenubutton`
-2. URL: `https://flux-bot-azamat-production.up.railway.app/webapp-react` (React Dual-Variante)
-   (alternativ für die alte HTML-UI: `/webapp`)
+2. URL: `https://flux-bot-azamat-production.up.railway.app/webapp` (React Mini App; `/webapp-react` leitet nach `/webapp` um)
 
 ### 5. Port
 

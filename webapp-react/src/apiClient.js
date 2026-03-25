@@ -61,7 +61,7 @@ export async function sendWebappAction(action, payload = {}) {
   const initData = getInitData();
 
   // Diese Actions sollen die Telegram Mini App nicht automatisch schließen.
-  // (entspricht dem Verhalten in `webapp/index.html`)
+  // Mini App soll z. B. bei Sprachwechsel offen bleiben.
   const noClose =
     action?.startsWith('set_lang_') ||
     action === 'toggle_opt' ||

@@ -44,7 +44,7 @@ app.run(host='0.0.0.0', port=config.PORT, use_reloader=False)
 ```
 
 - Der eingebaute Flask-Server ist **single-threaded**
-- Endpunkte: `/api/webapp_action`, `/api/models`, `/webapp`
+- Endpunkte: `/api/webapp_action`, `/api/models`, `/webapp` (React-Build)
 - **40 User** rufen gleichzeitig z.B. `/api/models` auf → maximal **ein Request zur Zeit**
 - Folge: Lange Wartezeiten, Timeouts, schlechte UX
 
