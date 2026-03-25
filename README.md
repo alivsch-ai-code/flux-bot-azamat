@@ -73,7 +73,7 @@ python main.py
 | `ADMIN_ID` | (Optional) | Telegram user ID for admin commands |
 | `REPLICATE_MAX_CONCURRENT` | | Max parallel Replicate requests (default: 1) |
 
-**Daily News (DB):** Optional `daily_posts` rows by date. `message_text` can be a single HTML string or JSON `{"de":"…","en":"…","ru":"…","kk":"…"}` for per-user language. Example: `python tools/seed_daily_alexa_plus_tomorrow.py` (requires `DATABASE_URL`).
+**Daily News (DB):** Optional `daily_posts` rows by date. `message_text` can be a single HTML string or JSON `{"de":"…","en":"…","ru":"…","kk":"…"}` for per-user language. Example: `python archive/legacy_tools/seed_daily_alexa_plus_tomorrow.py` (requires `DATABASE_URL`).
 
 ---
 
