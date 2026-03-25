@@ -35,9 +35,12 @@ def health_check():
 
 @app.route('/webapp')
 def webapp():
-    """Telegram Mini App – HTML-Menü"""
-    path = os.path.join(os.path.dirname(__file__), "webapp", "index.html")
+    """Telegram Mini App – default route (prefers React build, fallback HTML)."""
+    react_path = os.path.join(os.path.dirname(__file__), "webapp-react", "dist", "index.html")
+    legacy_path = os.path.join(os.path.dirname(__file__), "webapp", "index.html")
     try:
+        # Activate React UI by default when the build artifact exists.
+        path = react_path if os.path.exists(react_path) else legacy_path
         with open(path, "r", encoding="utf-8") as f:
             html = f.read()
         return html, 200, {"Content-Type": "text/html; charset=utf-8"}
