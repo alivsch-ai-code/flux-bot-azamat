@@ -335,7 +335,14 @@ def api_models():
                         or m.example_data.get("url")
                         or ""
                     )
-                items.append({"key": m.key, "name": m.name, "final_cost": cost, "example_image_url": example_url})
+                items.append({
+                    "key": m.key,
+                    "name": m.name,
+                    "final_cost": cost,
+                    "example_image_url": example_url,
+                    "model_type": m.type or [],
+                    "provider": getattr(m, "provider", "") or "",
+                })
             elif path == "root" and "/" not in m.menu_path and m.menu_path != "root":
                 sub_cats.add(m.menu_path)
             elif path != "root" and m.menu_path.startswith(path + "/"):

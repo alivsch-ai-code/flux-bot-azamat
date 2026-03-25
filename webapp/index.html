@@ -142,6 +142,18 @@
     .model-card:active { transform: scale(0.99); }
     .model-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
     .model-logo { width: 28px; height: 28px; object-fit: contain; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); }
+    .model-logo-fallback {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      font-size: 16px;
+      user-select: none;
+    }
     .model-name { font-weight: 600; font-size: 0.94rem; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .model-cost { font-size: 0.8rem; font-weight: 700; color: var(--accent); }
     .back-btn {
@@ -735,7 +747,19 @@
       const freeLabel = t('webapp_free') || 'FREE';
       const modelHtml = models.map(m => {
         const logoUrl = m.example_image_url || "";
-        const logoHtml = logoUrl ? `<img class="model-logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(m.name)}" onerror="this.style.display='none'">` : "";
+        let fallbackEmoji = "✨";
+        const types = Array.isArray(m.model_type) ? m.model_type : [];
+        const typeStr = String(types.join(" ")).toLowerCase();
+        const nameStr = String(m.name || "").toLowerCase();
+        if (typeStr.includes("text") || nameStr.includes("text") || nameStr.includes("chat")) fallbackEmoji = "💬";
+        else if (typeStr.includes("video")) fallbackEmoji = "🎬";
+        else if (typeStr.includes("audio")) fallbackEmoji = "🎙️";
+        else if (typeStr.includes("image")) fallbackEmoji = "🖼️";
+        else if (typeStr.includes("tool") || typeStr.includes("tools")) fallbackEmoji = "🛠️";
+
+        const logoHtml = logoUrl
+          ? `<img class="model-logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(m.name)}" onerror="this.style.display='none'">`
+          : `<div class="model-logo-fallback" title="No logo">${fallbackEmoji}</div>`;
         return `
           <div class="model-card" data-key="${escapeHtml(m.key)}">
             <div class="model-left">
