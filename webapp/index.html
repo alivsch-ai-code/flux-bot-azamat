@@ -961,9 +961,18 @@
               // in der Praxis um 0..1 URI handelt (z.B. `control_image`, `mask`).
               // Darum erlauben wir auch `array`-Inputs für das Upload-UI.
               const typeStr = String(p.type || "").toLowerCase();
-              const isUriLikeInputType = !p.type || typeStr === "string" || typeStr === "array";
-              const wantsImage = kl.includes("image") || kl.includes("img");
-              const wantsUriLike = fmt.includes("uri") || fmt === "" || fmt === "uri";
+              // Einige Replicate-Schemas liefern `type: any` oder sehr abweichende `type`-Werte.
+              // Für Uploads brauchen wir im Frontend nur, dass wir einen URI-Wert setzen können.
+              const isUriLikeInputType = !p.type || typeStr === "string" || typeStr === "array" || typeStr === "any";
+              const wantsImage = kl.includes("image") || kl.includes("img") || kl.includes("mask");
+              // Format kann z.B. "uri", aber auch "uri-reference", "url" oder "path" sein.
+              const wantsUriLike =
+                fmt.includes("uri") ||
+                fmt.includes("url") ||
+                fmt.includes("path") ||
+                fmt === "" ||
+                fmt === "uri" ||
+                fmt === "url";
               const wantsUriImageUpload = isUriLikeInputType && wantsImage && wantsUriLike;
               if (wantsUriImageUpload) {
                 const defVal = (p.default ?? "");
