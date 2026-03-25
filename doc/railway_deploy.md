@@ -27,6 +27,8 @@ Railway ist die aktuelle Haupt-Deployment-Plattform (schneller Start, kein Cold-
 | **Start Command** | `python main.py` |
 | **Root Directory** | (leer, wenn Repo-Root) |
 
+Alternative (empfohlen, im Repo versioniert): Über `nixpacks.toml` im Repo-Root ist der Build- und Startprozess bereits fest definiert. Dann muss in Railway kein manueller Build Command gepflegt werden.
+
 ### 3. Umgebungsvariablen
 
 | Variable | Beschreibung |
