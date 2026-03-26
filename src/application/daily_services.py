@@ -5,6 +5,7 @@ import re
 import time
 import threading
 import logging
+from urllib.parse import urlparse
 from datetime import datetime
 
 import feedparser
@@ -389,6 +390,31 @@ class DailyService:
             pass
         return None
 
+    @staticmethod
+    def _is_http_url(value: str | None) -> bool:
+        if not isinstance(value, str) or not value.strip():
+            return False
+        try:
+            p = urlparse(value.strip())
+            return p.scheme in ("http", "https") and bool(p.netloc)
+        except Exception:
+            return False
+
+    def _send_news_image_with_retry(self, target_id: int, image_url: str, retries: int = 3, delay_s: float = 2.0) -> bool:
+        """
+        Versucht das News-Bild mehrfach zu senden, falls CDN/URL noch nicht sofort verfügbar ist.
+        """
+        for attempt in range(1, retries + 1):
+            try:
+                self.bot.send_photo(target_id, image_url)
+                return True
+            except Exception as e:
+                if attempt >= retries:
+                    logger.warning("Daily News image send failed for %s after %s attempts: %s", target_id, retries, e)
+                    return False
+                time.sleep(delay_s)
+        return False
+
     def _maybe_send_ai_news_post(self):
         """5×/Tag: Holt AI-News aus RSS, fasst/übersetzt mit Gemini und postet inkl. Nano-Banana-Bild."""
         return self._dispatch_ai_news_post(force=False)
@@ -504,6 +530,33 @@ class DailyService:
         first_sent_to = None
         first_type = None
         image_model = self._resolve_news_image_model()
+        # Bild nur EINMAL pro News-Batch generieren (stabiler bei mehreren laufenden Pipelines).
+        batch_image_url = None
+        if image_model:
+            image_prompt = (
+                "Create a visually striking editorial AI-news image, futuristic and clean, "
+                "no text, no logos, no watermarks. Themes:\n\n"
+                f"{news_block}\n\n"
+                "Style: modern digital illustration, cinematic lighting, high detail."
+            )
+            # Für globale System-Posts genügt ein stabiler User-Kontext.
+            gen_user_id = next((uid for r_type, uid, _lang in recipients if r_type == "user"), recipients[0][1])
+            ok_img, img_result = self.generation_service.process_request(
+                gen_user_id,
+                image_model,
+                image_prompt,
+                media_files=None,
+                no_charge=True,
+            )
+            if ok_img:
+                candidate_url = self._extract_first_media_url(img_result)
+                if self._is_http_url(candidate_url):
+                    batch_image_url = candidate_url
+                else:
+                    logger.warning("Daily News image generated but URL invalid/empty: %r", candidate_url)
+            else:
+                logger.warning("Daily News image generation failed: %s", img_result)
+
         for target_type, target_id, lang in targets:
             prompt_tpl = get_text("azamat_news_summary_prompt", lang)
             prompt = f"{prompt_tpl}\n\n---\n{news_block}\n---\n\nOutput ONLY the summarized news text."
@@ -518,27 +571,10 @@ class DailyService:
             if target_type == "user":
                 append_global_chat_event(self.db, target_id, "assistant", text)
 
-            # Optionales Daily-News-Bild via Nano Banana
-            if image_model:
-                image_prompt = (
-                    "Create a visually striking editorial AI-news image, futuristic and clean, "
-                    "no text, no logos, no watermarks. Themes:\n\n"
-                    f"{news_block}\n\n"
-                    "Style: modern digital illustration, cinematic lighting, high detail."
-                )
-                ok_img, img_result = self.generation_service.process_request(
-                    user_id_for_gen,
-                    image_model,
-                    image_prompt,
-                    media_files=None,
-                    no_charge=True,
-                )
-                if ok_img:
-                    image_url = self._extract_first_media_url(img_result)
-                    if image_url:
-                        self.bot.send_photo(target_id, image_url)
-                        if target_type == "user":
-                            append_global_chat_event(self.db, target_id, "assistant", "[daily_news_image]")
+            # Optionales Daily-News-Bild (vorher einmalig generiert) mit Retry senden.
+            if batch_image_url and self._send_news_image_with_retry(target_id, batch_image_url):
+                if target_type == "user":
+                    append_global_chat_event(self.db, target_id, "assistant", "[daily_news_image]")
             if first_sent_to is None:
                 first_sent_to = target_id
                 first_type = target_type
