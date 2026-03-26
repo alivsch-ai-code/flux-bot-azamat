@@ -286,6 +286,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
       const p = schemaProps?.[k] || {};
       if (!p) continue;
       if (raw === '' || raw === null || raw === undefined) continue;
+      if (Array.isArray(raw) && raw.length === 0) continue;
       if (typeof raw === 'number' && Number.isNaN(raw)) continue;
 
       const casted = castForPayload(k, raw);
@@ -399,6 +400,12 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
 
   async function handleSubmit(action) {
     if (submitting) return;
+    const isAnyUploadInProgress =
+      referenceUploading || Object.values(uploadingMap || {}).some(Boolean);
+    if (isAnyUploadInProgress) {
+      showErrorOverlay('Bitte warte bis alle Uploads fertig sind.');
+      return;
+    }
     const promptTrim = (promptText || '').trim();
 
     if (!isText && schemaRequired.includes('prompt') && !promptTrim) {
