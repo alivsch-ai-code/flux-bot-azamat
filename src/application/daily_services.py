@@ -16,11 +16,27 @@ from src.utils.strings import get_random_daily_fallback, get_text
 
 logger = logging.getLogger(__name__)
 
-# Google News RSS für AI-Themen
-AI_NEWS_RSS_URL = os.getenv(
-    "AI_NEWS_RSS_URL",
+# Multi-RSS für AI-Themen (inkl. OpenAI Blog)
+DEFAULT_AI_NEWS_RSS_URLS = [
     "https://news.google.com/rss/search?q=Artificial+Intelligence&hl=en-US&gl=US&ceid=US:en",
-)
+    "https://openai.com/blog/rss.xml",
+]
+
+
+def _parse_rss_urls() -> list[str]:
+    raw = (os.getenv("AI_NEWS_RSS_URLS") or "").strip()
+    if raw:
+        urls = [u.strip() for u in raw.split(",") if u.strip()]
+        if urls:
+            return urls
+    # Backward compatibility: altes Einzel-Env behalten
+    single = (os.getenv("AI_NEWS_RSS_URL") or "").strip()
+    if single:
+        return [single]
+    return DEFAULT_AI_NEWS_RSS_URLS
+
+
+AI_NEWS_RSS_URLS = _parse_rss_urls()
 
 # Fallback nur 1× pro Tag senden, wenn keine DB-Nachricht
 _last_fallback_date = None
@@ -279,25 +295,101 @@ class DailyService:
             logger.info("Azamat Greeting: %s/%s gesendet.", success, len(users))
 
     def _fetch_ai_news_from_rss(self, max_items: int = 2) -> list:
-        """Lädt die neuesten AI-News von Google News RSS. Gibt Liste von {title, snippet, link} zurück."""
+        """
+        Lädt aktuelle AI-News aus mehreren RSS-Feeds und dedupliziert Einträge.
+        Rückgabe: Liste von {title, snippet, link, source, published_ts}
+        """
         try:
-            feed = feedparser.parse(AI_NEWS_RSS_URL)
-            items = getattr(feed, "entries", [])[:max_items]
-            result = []
-            for entry in items:
-                title = getattr(entry, "title", "") or ""
-                # description kann HTML enthalten
-                desc = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
-                desc = re.sub(r"<[^>]+>", "", desc)
-                link = getattr(entry, "link", "") or ""
-                result.append({"title": title, "snippet": desc[:300], "link": link})
-            return result
+            combined = []
+            for url in AI_NEWS_RSS_URLS:
+                feed = feedparser.parse(url)
+                feed_title = getattr(feed.feed, "title", "") or url
+                entries = getattr(feed, "entries", [])[: max(2, max_items * 3)]
+                for entry in entries:
+                    title = (getattr(entry, "title", "") or "").strip()
+                    # description kann HTML enthalten
+                    desc = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
+                    desc = re.sub(r"<[^>]+>", "", desc).strip()
+                    link = (getattr(entry, "link", "") or "").strip()
+                    published = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
+                    published_ts = int(time.mktime(published)) if published else 0
+                    if title:
+                        combined.append(
+                            {
+                                "title": title,
+                                "snippet": desc[:300],
+                                "link": link,
+                                "source": feed_title,
+                                "published_ts": published_ts,
+                            }
+                        )
+
+            # Dedupe per Link (fallback: Titel)
+            seen = set()
+            deduped = []
+            for item in sorted(combined, key=lambda x: x.get("published_ts", 0), reverse=True):
+                k = item.get("link") or item.get("title")
+                if not k or k in seen:
+                    continue
+                seen.add(k)
+                deduped.append(item)
+                if len(deduped) >= max_items:
+                    break
+            return deduped
         except Exception as e:
             logger.warning("RSS-Fetch fehlgeschlagen: %s", e)
             return []
 
+    def _resolve_news_image_model(self):
+        """
+        Sucht ein Bildmodell für Daily-News.
+        Priorität:
+        1) AZAMAT_NEWS_IMAGE_MODEL_KEY
+        2) bekannte Keys
+        3) Modellname/replicate_id mit 'nano-banana'
+        """
+        candidates = []
+        env_key = (os.getenv("AZAMAT_NEWS_IMAGE_MODEL_KEY") or "").strip()
+        if env_key:
+            candidates.append(env_key)
+        candidates.extend(["nano-banana-pro", "nano-banana", "google-nano-banana-pro", "google-nano-banana"])
+        for key in candidates:
+            model = self.db.get_model_by_key(key)
+            if model and model.is_active and "image" in (model.type or []):
+                return model
+        for model in self.db.get_all_models():
+            rep_id = (model.replicate_id or "").lower()
+            name = (model.name or "").lower()
+            if not model.is_active:
+                continue
+            if "image" not in (model.type or []):
+                continue
+            if "nano-banana" in rep_id or "nano banana" in name:
+                return model
+        return None
+
+    @staticmethod
+    def _extract_first_media_url(result_data):
+        if not result_data:
+            return None
+        if isinstance(result_data, str):
+            return result_data.strip() or None
+        if isinstance(result_data, (list, tuple)):
+            for it in result_data:
+                if isinstance(it, str) and it.strip():
+                    return it.strip()
+            return None
+        # Bei Generator/Iterator aus manchen Clients
+        try:
+            for it in result_data:
+                if isinstance(it, str) and it.strip():
+                    return it.strip()
+        except Exception:
+            pass
+        return None
+
     def _maybe_send_ai_news_post(self):
-        """5×/Tag: Holt 2 Latest AI-News von Google RSS, fasst/übersetzt mit Gemini, sendet spannend mit Emojis."""
+        """5×/Tag: Holt AI-News aus RSS, fasst/übersetzt mit Gemini und postet inkl. Nano-Banana-Bild."""
         if not self.generation_service:
             return
         max_per_day = int(os.getenv("AZAMAT_RANDOM_POSTS_PER_DAY", "5"))
@@ -317,7 +409,7 @@ class DailyService:
             return
 
         news_block = "\n\n".join(
-            f"News {i+1}:\nTitle: {n['title']}\nSnippet: {n['snippet']}\nLink: {n.get('link', '')}"
+            f"News {i+1}:\nSource: {n.get('source','')}\nTitle: {n['title']}\nSnippet: {n['snippet']}\nLink: {n.get('link', '')}"
             for i, n in enumerate(news_items)
         )
 
@@ -346,6 +438,30 @@ class DailyService:
             self.bot.send_message(target_id, text, parse_mode="HTML")
             if target_type == "user":
                 append_global_chat_event(self.db, target_id, "assistant", text)
+
+            # Optionales Daily-News-Bild via Nano Banana
+            image_model = self._resolve_news_image_model()
+            if image_model:
+                image_prompt = (
+                    "Create a visually striking editorial AI-news image, futuristic and clean, "
+                    "no text, no logos, no watermarks. Themes:\n\n"
+                    f"{news_block}\n\n"
+                    "Style: modern digital illustration, cinematic lighting, high detail."
+                )
+                ok_img, img_result = self.generation_service.process_request(
+                    user_id_for_gen,
+                    image_model,
+                    image_prompt,
+                    media_files=None,
+                    no_charge=True,
+                )
+                if ok_img:
+                    image_url = self._extract_first_media_url(img_result)
+                    if image_url:
+                        self.bot.send_photo(target_id, image_url)
+                        if target_type == "user":
+                            append_global_chat_event(self.db, target_id, "assistant", "[daily_news_image]")
+
             self.db.increment_azamat_random_count_today()
             label = "group" if target_type == "group" else "user"
             logger.info("Azamat AI News an %s %s gesendet.", label, target_id)
