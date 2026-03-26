@@ -42,6 +42,9 @@ class Settings:
         self.REFERRAL_REWARD = 50
         #GROUP CHAT MODEL
         self.GEMINI_GROUP_MODEL = "google-gemini-2-5-flash"
+        # Globale Chat-Session-Zusammenfassung: nach N Nachrichten wird via Gemini komprimiert.
+        self.CHAT_SUMMARIZE_AT = max(5, int(os.getenv("CHAT_SUMMARIZE_AT", "20")))
+        self.GLOBAL_CHAT_SESSION_KEY = os.getenv("GLOBAL_CHAT_SESSION_KEY", "__global_chat__")
         self._MAX_WEBAPP_PROMPT_LEN = 12000
         self.CREDIT_PACKAGES = [
             ("S", "100 Credits", 50, 100),   

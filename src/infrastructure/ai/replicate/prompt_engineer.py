@@ -1,6 +1,7 @@
 import os
 import replicate
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,15 @@ RULES:
 2. Add keywords for lighting, texture, camera angle, and style.
 3. If no style is specified, assume "Photorealistic, 8k, highly detailed".
 4. RETURN ONLY THE RAW OPTIMIZED PROMPT. NO EXPLANATION, NO QUOTES.
+"""
+
+NEGATIVE_PROMPT_SYSTEM = """
+You are an expert prompt engineer for AI image generation.
+Create a concise negative prompt that helps avoid typical artifacts and undesired outcomes.
+RULES:
+1. Keep it in English.
+2. Return only comma-separated negative terms/phrases.
+3. No explanations, no labels, no quotes.
 """
 
 def optimize_prompt_via_llm(user_prompt: str):
@@ -65,6 +75,71 @@ def optimize_prompt_via_llm(user_prompt: str):
     except Exception as e:
         logger.warning("Gemini Prompt Optimierung fehlgeschlagen: %s", e)
         return user_prompt # Fallback: Original zurückgeben
+
+
+def optimize_prompt_bundle_via_llm(user_prompt: str) -> dict:
+    """
+    Optimiert den normalen Prompt und erzeugt optional einen negativen Prompt.
+    Rückgabeformat:
+    {
+      "optimized_prompt": str,
+      "negative_prompt": str | None,
+    }
+    """
+    optimized = optimize_prompt_via_llm(user_prompt)
+    negative = None
+    api_token = os.getenv("REPLICATE_API_TOKEN")
+    if not api_token:
+        return {"optimized_prompt": optimized, "negative_prompt": None}
+    try:
+        client = replicate.Client(api_token=api_token)
+        combo_prompt = (
+            "Return ONLY valid compact JSON with keys "
+            '"optimized_prompt" and "negative_prompt".\n'
+            f"USER INPUT: {user_prompt}\n"
+            f"OPTIMIZED PROMPT CANDIDATE: {optimized}\n"
+            "JSON:"
+        )
+        output = client.run(
+            MODEL_ID,
+            input={
+                "prompt": combo_prompt,
+                "system_instruction": (
+                    "You are a prompt optimizer. "
+                    "Generate both an improved positive prompt and a useful negative prompt. "
+                    "Output only JSON."
+                ),
+                "temperature": 0.2,
+                "max_output_tokens": 300,
+                "top_p": 0.9,
+            },
+        )
+        raw = "".join([str(x) for x in output]).strip().strip("`")
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            opt = (data.get("optimized_prompt") or "").strip()
+            neg = (data.get("negative_prompt") or "").strip()
+            if opt:
+                optimized = opt
+            negative = neg or None
+    except Exception:
+        # Fallback: versuche separaten Negative-Prompt ohne Flow-Abbruch.
+        try:
+            client = replicate.Client(api_token=api_token)
+            output = client.run(
+                MODEL_ID,
+                input={
+                    "prompt": f"{NEGATIVE_PROMPT_SYSTEM}\n\nUSER INPUT: {user_prompt}\n\nNEGATIVE PROMPT:",
+                    "temperature": 0.2,
+                    "max_tokens": 160,
+                    "top_p": 0.9,
+                },
+            )
+            neg_raw = "".join([str(x) for x in output]).strip().strip('"').strip("'").strip("`")
+            negative = neg_raw or None
+        except Exception:
+            negative = None
+    return {"optimized_prompt": optimized, "negative_prompt": negative}
 
 
 # System-Instruction NUR für Chat-Zusammenfassung – komplett getrennt von Bild-Prompt-Optimierung!
