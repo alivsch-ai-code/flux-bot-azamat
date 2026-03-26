@@ -133,6 +133,7 @@ def get_settings_menu(settings: dict, lang: str = "de") -> types.InlineKeyboardM
     
     daily_txt = get_text("btn_daily_on", lang) if settings.get("daily_msg", True) else get_text("btn_daily_off", lang)
     markup.add(btn(daily_txt, "toggle_daily"))
+    markup.add(btn(get_text("btn_clear_history", lang), "clear_history"))
 
     markup.add(btn(get_text("btn_back", lang), "nav_main"))
     return markup

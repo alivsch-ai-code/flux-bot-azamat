@@ -130,6 +130,18 @@ STRINGS = {
     "btn_opt_off": { "en": "⚪️ Prompt Magic: OFF", "de": "⚪️ Prompt Magie: AUS", "ru": "⚪️ Magic: ВЫКЛ", "kk": "⚪️ Magic: ӨШІРУ" },
     "btn_daily_on": { "en": "📰 Daily News: ON", "de": "📰 Tägliche News: AN", "ru": "📰 Новости: ВКЛ", "kk": "📰 Жаңалықтар: ҚОСУ" },
     "btn_daily_off": { "en": "🔕 Daily News: OFF", "de": "🔕 Tägliche News: AUS", "ru": "🔕 Новости: ВЫКЛ", "kk": "🔕 Жаңалықтар: ӨШІРУ" },
+    "btn_clear_history": {
+        "en": "🧹 Clear Chat History",
+        "de": "🧹 Chat-Verlauf löschen",
+        "ru": "🧹 Очистить историю чата",
+        "kk": "🧹 Чат тарихын тазалау"
+    },
+    "history_cleared": {
+        "en": "✅ Chat history deleted.",
+        "de": "✅ Chat-Verlauf gelöscht.",
+        "ru": "✅ История чата удалена.",
+        "kk": "✅ Чат тарихы өшірілді."
+    },
     "lang_selected": { "en": "✅ Language set to English.", "de": "✅ Sprache auf Deutsch gesetzt.", "ru": "✅ Язык изменен на Русский.", "kk": "✅ Тіл Қазақшаға өзгертілді." },
 
     # --- ERRORS & STATUS ---
@@ -245,6 +257,12 @@ STRINGS = {
         "de": "🌐 Sprache",
         "ru": "🌐 Язык",
         "kk": "🌐 Тіл"
+    },
+    "grp_btn_clear_history": {
+        "en": "🧹 Clear Group History",
+        "de": "🧹 Gruppenverlauf löschen",
+        "ru": "🧹 Очистить историю группы",
+        "kk": "🧹 Топ тарихын тазалау"
     },
     "grp_credits_sent": {
         "en": "✅ I've sent you a private message with the shop!",

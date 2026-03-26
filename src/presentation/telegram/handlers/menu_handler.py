@@ -22,6 +22,7 @@ from src.config.settings import config
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.chat_debounce import cancel_pending_batch
 from src.presentation.telegram.handlers.common import clear_context, get_context, set_context
+from src.presentation.telegram.handlers.gen.chat_sessions import append_global_chat_event
 from src.presentation.telegram.handlers.group_handler import get_group_menu_markup
 from src.presentation.telegram.handlers.gen import ctx_media_to_list
 from src.presentation.telegram.handlers.gen.media_helpers import schema_requires_media
@@ -792,6 +793,18 @@ def register(bot: TeleBot, generation_service, db) -> None:
             bot.answer_callback_query(call.id, get_text(status_key, lang))
         except Exception:
             pass
+
+    @bot.callback_query_handler(func=lambda c: c.data == "clear_history")
+    def handle_clear_history(call):
+        user_id = call.message.chat.id
+        settings = db.get_user_settings(user_id)
+        lang = settings["lang"]
+        try:
+            db.clear_chat_session(user_id)
+            append_global_chat_event(db, user_id, "system", "User cleared chat history.")
+            bot.answer_callback_query(call.id, get_text("history_cleared", lang))
+        except Exception:
+            bot.answer_callback_query(call.id)
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith("set_lang_"))
     def handle_set_lang(call):

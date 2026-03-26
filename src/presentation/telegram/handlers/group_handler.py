@@ -39,6 +39,7 @@ def get_group_menu_markup(db, chat_id: int, user_name: str = "") -> tuple:
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(types.InlineKeyboardButton(get_text("grp_btn_credits", lang), callback_data="grp_shop"))
     markup.add(types.InlineKeyboardButton(get_text("grp_btn_lang", lang), callback_data="grp_lang_menu"))
+    markup.add(types.InlineKeyboardButton(get_text("grp_btn_clear_history", lang), callback_data="grp_clear_history"))
     return text, markup
 
 
@@ -156,6 +157,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(types.InlineKeyboardButton(get_text("grp_btn_credits", lang), callback_data="grp_shop"))
         markup.add(types.InlineKeyboardButton(get_text("grp_btn_lang", lang), callback_data="grp_lang_menu"))
+        markup.add(types.InlineKeyboardButton(get_text("grp_btn_clear_history", lang), callback_data="grp_clear_history"))
         bot.send_message(chat_id, text, reply_markup=markup, parse_mode="HTML")
 
     # --- /shop in Gruppe ---
@@ -251,7 +253,20 @@ def register(bot: TeleBot, generation_service, db) -> None:
             markup = types.InlineKeyboardMarkup(row_width=1)
             markup.add(types.InlineKeyboardButton(get_text("grp_btn_credits", new_lang), callback_data="grp_shop"))
             markup.add(types.InlineKeyboardButton(get_text("grp_btn_lang", new_lang), callback_data="grp_lang_menu"))
+            markup.add(types.InlineKeyboardButton(get_text("grp_btn_clear_history", new_lang), callback_data="grp_clear_history"))
             try:
                 bot.edit_message_text(text, chat_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
             except Exception:
                 bot.send_message(chat_id, text, reply_markup=markup, parse_mode="HTML")
+
+    @bot.callback_query_handler(func=lambda c: c.data == "grp_clear_history" and _is_group(c))
+    def group_cb_clear_history(call):
+        chat_id = call.message.chat.id
+        lang = get_group_lang(chat_id)
+        session_id = -abs(chat_id)
+        model_key = f"{GEMINI_GROUP_MODEL}_group"
+        try:
+            db.clear_chat_session(session_id, model_key=model_key)
+            bot.answer_callback_query(call.id, get_text("history_cleared", lang))
+        except Exception:
+            bot.answer_callback_query(call.id)
