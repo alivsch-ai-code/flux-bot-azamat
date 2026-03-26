@@ -45,6 +45,7 @@ _last_errors_cleanup_date = None
 _last_azamat_slots_done = set()
 
 AZAMAT_GREETING_MODEL = "google-gemini-2-5-flash"
+RSS_WATCH_MIN_INTERVAL_SECONDS = max(300, int(os.getenv("RSS_WATCH_MIN_INTERVAL_SECONDS", "7200")))
 
 
 def _resolve_daily_message_text(raw: str | None, lang: str) -> str:
@@ -120,8 +121,8 @@ class DailyService:
                 # Azamat 2× täglich: generierte Begrüßung an bekannte User
                 self._maybe_send_azamat_greetings()
 
-                # Azamat News: 2 Latest AI-News von Google RSS → Gemini → User/Gruppen (bis zu N/Tag)
-                self._maybe_send_ai_news_post()
+                # RSS-Watcher: Bei neuen Meldungen an alle senden (mind. Cooldown dazwischen).
+                self._maybe_broadcast_new_rss_news()
 
             except Exception as e:
                 logger.warning("Fehler im Daily Service Loop: %s", e)
@@ -395,33 +396,92 @@ class DailyService:
     def trigger_ai_news_post(self) -> dict:
         """
         Manueller Admin-Trigger für AI-News.
-        Erzwingt einen Lauf unabhängig von Zufallsrate/Tageslimit.
+        Erzwingt einen Lauf unabhängig von Zufallsrate/Tageslimit und sendet an ALLE Empfänger.
         """
-        return self._dispatch_ai_news_post(force=True)
+        return self._dispatch_ai_news_post(force=True, broadcast_all=True)
 
-    def _dispatch_ai_news_post(self, force: bool = False) -> dict:
+    @staticmethod
+    def _build_news_signature(news_items: list[dict]) -> str:
+        """Stabile Signatur aus den Top-News (Link/Titel), um neue Meldungen zu erkennen."""
+        parts = []
+        for n in news_items[:3]:
+            link = (n.get("link") or "").strip()
+            title = (n.get("title") or "").strip()
+            parts.append(link or title)
+        return "|".join(parts).strip()
+
+    def _maybe_broadcast_new_rss_news(self) -> None:
+        """
+        Beobachtet RSS und sendet bei neuen Meldungen an ALLE Empfänger.
+        Sicherheitsnetz:
+        - nur wenn Signatur neu ist
+        - mindestens RSS_WATCH_MIN_INTERVAL_SECONDS zwischen Aussendungen
+        """
+        news_items = self._fetch_ai_news_from_rss(max_items=2)
+        if len(news_items) < 2:
+            return
+        signature = self._build_news_signature(news_items)
+        if not signature:
+            return
+
+        last_sig = self.db.get_bot_setting("rss_last_sent_signature", "")
+        if signature == last_sig:
+            return
+
+        now_ts = int(time.time())
+        last_ts_raw = self.db.get_bot_setting("rss_last_sent_ts", "0")
+        try:
+            last_ts = int((last_ts_raw or "0").strip())
+        except (ValueError, TypeError):
+            last_ts = 0
+
+        if last_ts > 0 and (now_ts - last_ts) < RSS_WATCH_MIN_INTERVAL_SECONDS:
+            return
+
+        result = self._dispatch_ai_news_post(
+            force=True,
+            broadcast_all=True,
+            preloaded_news_items=news_items,
+        )
+        if result.get("ok"):
+            self.db.set_bot_setting("rss_last_sent_signature", signature)
+            self.db.set_bot_setting("rss_last_sent_ts", str(now_ts))
+
+    def _dispatch_ai_news_post(
+        self,
+        force: bool = False,
+        broadcast_all: bool = False,
+        preloaded_news_items: list[dict] | None = None,
+    ) -> dict:
         """
         Gemeinsame Dispatch-Logik für Scheduler und manuellen Trigger.
         Rückgabe:
-        {ok: bool, reason: str, sent_to: int|None, target_type: str|None}
+        {
+          ok: bool,
+          reason: str,
+          sent_to: int|None,
+          target_type: str|None,
+          sent_count: int,
+          total_recipients: int,
+        }
         """
         if not self.generation_service:
-            return {"ok": False, "reason": "generation_service_missing", "sent_to": None, "target_type": None}
+            return {"ok": False, "reason": "generation_service_missing", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
         max_per_day = int(os.getenv("AZAMAT_RANDOM_POSTS_PER_DAY", "5"))
         if max_per_day <= 0 and not force:
-            return {"ok": False, "reason": "disabled_by_limit", "sent_to": None, "target_type": None}
+            return {"ok": False, "reason": "disabled_by_limit", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
         sent_today = self.db.get_azamat_random_count_today()
         if sent_today >= max_per_day and not force:
-            return {"ok": False, "reason": "daily_limit_reached", "sent_to": None, "target_type": None}
+            return {"ok": False, "reason": "daily_limit_reached", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
         if not force and random.random() > 0.10:
-            return {"ok": False, "reason": "random_skip", "sent_to": None, "target_type": None}
+            return {"ok": False, "reason": "random_skip", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
         model = self.db.get_model_by_key(AZAMAT_GREETING_MODEL)
         if not model or "text" not in (model.type or []):
-            return {"ok": False, "reason": "text_model_missing", "sent_to": None, "target_type": None}
+            return {"ok": False, "reason": "text_model_missing", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
 
-        news_items = self._fetch_ai_news_from_rss(max_items=2)
+        news_items = preloaded_news_items if preloaded_news_items is not None else self._fetch_ai_news_from_rss(max_items=2)
         if len(news_items) < 2:
-            return {"ok": False, "reason": "not_enough_news_items", "sent_to": None, "target_type": None}
+            return {"ok": False, "reason": "not_enough_news_items", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
 
         news_block = "\n\n".join(
             f"News {i+1}:\nSource: {n.get('source','')}\nTitle: {n['title']}\nSnippet: {n['snippet']}\nLink: {n.get('link', '')}"
@@ -437,25 +497,28 @@ class DailyService:
             lang = settings.get("lang", "en")
             recipients.append(("user", user_id, lang))
         if not recipients:
-            return {"ok": False, "reason": "no_recipients", "sent_to": None, "target_type": None}
+            return {"ok": False, "reason": "no_recipients", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
 
-        target_type, target_id, lang = random.choice(recipients)
-        prompt_tpl = get_text("azamat_news_summary_prompt", lang)
-        prompt = f"{prompt_tpl}\n\n---\n{news_block}\n---\n\nOutput ONLY the summarized news text."
-        user_id_for_gen = target_id if target_type == "user" else (self.db.get_subscribed_users() or [target_id])[0]
-        ok, result = self.generation_service.process_request(
-            user_id_for_gen, model, prompt, media_files=None, no_charge=True
-        )
-        if not ok or not result or not str(result).strip():
-            return {"ok": False, "reason": "summary_generation_failed", "sent_to": None, "target_type": None}
-        text = str(result).strip()
-        try:
+        targets = recipients if broadcast_all else [random.choice(recipients)]
+        sent_count = 0
+        first_sent_to = None
+        first_type = None
+        image_model = self._resolve_news_image_model()
+        for target_type, target_id, lang in targets:
+            prompt_tpl = get_text("azamat_news_summary_prompt", lang)
+            prompt = f"{prompt_tpl}\n\n---\n{news_block}\n---\n\nOutput ONLY the summarized news text."
+            user_id_for_gen = target_id if target_type == "user" else (self.db.get_subscribed_users() or [target_id])[0]
+            ok, result = self.generation_service.process_request(
+                user_id_for_gen, model, prompt, media_files=None, no_charge=True
+            )
+            if not ok or not result or not str(result).strip():
+                continue
+            text = str(result).strip()
             self.bot.send_message(target_id, text, parse_mode="HTML")
             if target_type == "user":
                 append_global_chat_event(self.db, target_id, "assistant", text)
 
             # Optionales Daily-News-Bild via Nano Banana
-            image_model = self._resolve_news_image_model()
             if image_model:
                 image_prompt = (
                     "Create a visually striking editorial AI-news image, futuristic and clean, "
@@ -476,11 +539,23 @@ class DailyService:
                         self.bot.send_photo(target_id, image_url)
                         if target_type == "user":
                             append_global_chat_event(self.db, target_id, "assistant", "[daily_news_image]")
+            if first_sent_to is None:
+                first_sent_to = target_id
+                first_type = target_type
+            sent_count += 1
+            time.sleep(0.05)
 
-            if not force:
-                self.db.increment_azamat_random_count_today()
-            label = "group" if target_type == "group" else "user"
-            logger.info("Azamat AI News an %s %s gesendet (force=%s).", label, target_id, force)
-            return {"ok": True, "reason": "sent", "sent_to": target_id, "target_type": target_type}
-        except Exception:
-            return {"ok": False, "reason": "telegram_send_failed", "sent_to": None, "target_type": None}
+        if sent_count <= 0:
+            return {"ok": False, "reason": "summary_generation_failed", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": len(targets)}
+
+        if not force:
+            self.db.increment_azamat_random_count_today()
+        logger.info("Azamat AI News dispatch done: sent=%s/%s (force=%s, broadcast_all=%s).", sent_count, len(targets), force, broadcast_all)
+        return {
+            "ok": True,
+            "reason": "sent",
+            "sent_to": first_sent_to,
+            "target_type": first_type,
+            "sent_count": sent_count,
+            "total_recipients": len(targets),
+        }

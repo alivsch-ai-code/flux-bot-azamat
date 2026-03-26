@@ -528,11 +528,11 @@ def register(bot: TeleBot, generation_service, db, daily_service=None) -> None:
         try:
             result = daily_service.trigger_ai_news_post()
             if result.get("ok"):
-                target_type = result.get("target_type") or "unknown"
-                sent_to = result.get("sent_to")
+                sent_count = int(result.get("sent_count") or 0)
+                total = int(result.get("total_recipients") or 0)
                 bot.reply_to(
                     message,
-                    f"✅ Daily News manuell ausgelöst.\nEmpfänger: {target_type} {sent_to}",
+                    f"✅ Daily News manuell ausgelöst.\nGesendet an: {sent_count}/{total} Empfänger",
                     parse_mode="HTML",
                 )
             else:
