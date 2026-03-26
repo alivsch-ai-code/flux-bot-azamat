@@ -578,14 +578,19 @@ class DailyService:
             if not ok or not result or not str(result).strip():
                 continue
             text = str(result).strip()
-            self.bot.send_message(target_id, text, parse_mode="HTML")
-            if target_type == "user":
-                append_global_chat_event(self.db, target_id, "assistant", text)
-
-            # Optionales Daily-News-Bild (vorher einmalig generiert) mit Retry senden.
-            if batch_image_url and self._send_news_image_with_retry(target_id, batch_image_url):
+            try:
+                self.bot.send_message(target_id, text, parse_mode="HTML")
                 if target_type == "user":
-                    append_global_chat_event(self.db, target_id, "assistant", "[daily_news_image]")
+                    append_global_chat_event(self.db, target_id, "assistant", text)
+
+                # Optionales Daily-News-Bild (vorher einmalig generiert) mit Retry senden.
+                if batch_image_url and self._send_news_image_with_retry(target_id, batch_image_url):
+                    if target_type == "user":
+                        append_global_chat_event(self.db, target_id, "assistant", "[daily_news_image]")
+            except Exception as e:
+                # WICHTIG: Einzelne fehlgeschlagene Chats dürfen den Broadcast nicht abbrechen.
+                logger.warning("Daily News send failed for %s (%s): %s", target_type, target_id, e)
+                continue
             if first_sent_to is None:
                 first_sent_to = target_id
                 first_type = target_type
