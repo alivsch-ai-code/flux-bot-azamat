@@ -170,6 +170,8 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                     bundle = optimize_prompt_bundle_via_llm(msg.text)
                     optimized = bundle.get("optimized_prompt") or msg.text
                     negative_prompt = bundle.get("negative_prompt")
+                    if not settings.get("auto_negative_prompt", True):
+                        negative_prompt = None
                     supports_negative = bool(model and _model_supports_negative_prompt(model))
                     if not supports_negative:
                         negative_prompt = None

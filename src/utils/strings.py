@@ -128,6 +128,8 @@ STRINGS = {
     "btn_lang": { "en": "🌐 Language: {lang}", "de": "🌐 Sprache: {lang}", "ru": "🌐 Язык: {lang}", "kk": "🌐 Тіл: {lang}" },
     "btn_opt_on": { "en": "✨ Prompt Magic: ON", "de": "✨ Prompt Magie: AN", "ru": "✨ Magic: ВКЛ", "kk": "✨ Magic: ҚОСУ" },
     "btn_opt_off": { "en": "⚪️ Prompt Magic: OFF", "de": "⚪️ Prompt Magie: AUS", "ru": "⚪️ Magic: ВЫКЛ", "kk": "⚪️ Magic: ӨШІРУ" },
+    "btn_neg_on": { "en": "🧠 Auto Negative Prompt: ON", "de": "🧠 Auto Negative Prompt: AN", "ru": "🧠 Auto Negative Prompt: ВКЛ", "kk": "🧠 Auto Negative Prompt: ҚОСУ" },
+    "btn_neg_off": { "en": "⚪️ Auto Negative Prompt: OFF", "de": "⚪️ Auto Negative Prompt: AUS", "ru": "⚪️ Auto Negative Prompt: ВЫКЛ", "kk": "⚪️ Auto Negative Prompt: ӨШІРУ" },
     "btn_daily_on": { "en": "📰 Daily News: ON", "de": "📰 Tägliche News: AN", "ru": "📰 Новости: ВКЛ", "kk": "📰 Жаңалықтар: ҚОСУ" },
     "btn_daily_off": { "en": "🔕 Daily News: OFF", "de": "🔕 Tägliche News: AUS", "ru": "🔕 Новости: ВЫКЛ", "kk": "🔕 Жаңалықтар: ӨШІРУ" },
     "btn_clear_history": {

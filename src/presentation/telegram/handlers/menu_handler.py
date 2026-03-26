@@ -794,6 +794,25 @@ def register(bot: TeleBot, generation_service, db) -> None:
         except Exception:
             pass
 
+    @bot.callback_query_handler(func=lambda c: c.data == "toggle_neg")
+    def handle_toggle_neg(call):
+        user_id = call.message.chat.id
+        settings = db.get_user_settings(user_id)
+        new_val = 0 if settings.get("auto_negative_prompt", True) else 1
+        db.update_setting(user_id, "auto_negative_prompt", new_val)
+
+        new_settings = db.get_user_settings(user_id)
+        lang = new_settings["lang"]
+        bot.edit_message_reply_markup(
+            user_id,
+            call.message.message_id,
+            reply_markup=keyboards.get_settings_menu(new_settings, lang),
+        )
+        try:
+            bot.answer_callback_query(call.id)
+        except Exception:
+            pass
+
     @bot.callback_query_handler(func=lambda c: c.data == "clear_history")
     def handle_clear_history(call):
         user_id = call.message.chat.id

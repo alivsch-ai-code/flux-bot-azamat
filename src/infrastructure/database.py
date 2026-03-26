@@ -93,6 +93,7 @@ class DatabaseManager:
                         credits INTEGER DEFAULT 150,
                         language TEXT DEFAULT 'de',
                         auto_opt INTEGER DEFAULT 1,
+                        auto_negative_prompt INTEGER DEFAULT 1,
                         daily_msg INTEGER DEFAULT 1,
                         last_model_key TEXT,
                         is_chat_mode INTEGER DEFAULT 0
@@ -222,7 +223,8 @@ class DatabaseManager:
                 # 2. Migration für USERS (WICHTIG für Chat Mode!)
                 user_cols = [
                     ("last_model_key", "TEXT"),
-                    ("is_chat_mode", "INTEGER DEFAULT 0")
+                    ("is_chat_mode", "INTEGER DEFAULT 0"),
+                    ("auto_negative_prompt", "INTEGER DEFAULT 1"),
                 ]
                 for col, dtype in user_cols:
                     c.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {dtype}")
@@ -481,13 +483,21 @@ class DatabaseManager:
         with self.lock:
             conn = self._get_connection()
             c = conn.cursor()
-            c.execute("SELECT language, auto_opt, daily_msg FROM users WHERE user_id = %s", (user_id,))
+            c.execute(
+                "SELECT language, auto_opt, auto_negative_prompt, daily_msg FROM users WHERE user_id = %s",
+                (user_id,),
+            )
             result = c.fetchone()
             conn.close()
             if result:
                 lang = result[0] if result[0] and result[0].strip() in ("de", "en", "ru", "kk") else "en"
-                return {"lang": lang, "auto_opt": bool(result[1]), "daily_msg": bool(result[2])}
-            return {"lang": "en", "auto_opt": True, "daily_msg": True}
+                return {
+                    "lang": lang,
+                    "auto_opt": bool(result[1]),
+                    "auto_negative_prompt": bool(result[2]),
+                    "daily_msg": bool(result[3]),
+                }
+            return {"lang": "en", "auto_opt": True, "auto_negative_prompt": True, "daily_msg": True}
 
     def add_user_if_not_exists(self, user_id, username):
         with self.lock:
@@ -501,7 +511,7 @@ class DatabaseManager:
         with self.lock:
             conn = self._get_connection()
             c = conn.cursor()
-            if column in ["language", "auto_opt", "daily_msg"]:
+            if column in ["language", "auto_opt", "auto_negative_prompt", "daily_msg"]:
                 c.execute(f"UPDATE users SET {column} = %s WHERE user_id = %s", (value, user_id))
                 conn.commit()
             conn.close()

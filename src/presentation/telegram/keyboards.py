@@ -130,6 +130,13 @@ def get_settings_menu(settings: dict, lang: str = "de") -> types.InlineKeyboardM
     
     opt_txt = get_text("btn_opt_on", lang) if settings.get("auto_opt", True) else get_text("btn_opt_off", lang)
     markup.add(btn(opt_txt, "toggle_opt"))
+
+    neg_txt = (
+        get_text("btn_neg_on", lang)
+        if settings.get("auto_negative_prompt", True)
+        else get_text("btn_neg_off", lang)
+    )
+    markup.add(btn(neg_txt, "toggle_neg"))
     
     daily_txt = get_text("btn_daily_on", lang) if settings.get("daily_msg", True) else get_text("btn_daily_off", lang)
     markup.add(btn(daily_txt, "toggle_daily"))
