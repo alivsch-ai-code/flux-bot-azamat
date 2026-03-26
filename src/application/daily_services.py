@@ -358,7 +358,8 @@ class DailyService:
         env_key = (os.getenv("AZAMAT_NEWS_IMAGE_MODEL_KEY") or "").strip()
         if env_key:
             candidates.append(env_key)
-        candidates.extend(["nano-banana-pro", "nano-banana", "google-nano-banana-pro", "google-nano-banana"])
+        # User-Wunsch: Standardmäßig das einfache Nano Banana verwenden (nicht Pro).
+        candidates.extend(["nano-banana", "google-nano-banana", "nano-banana-pro", "google-nano-banana-pro"])
         for key in candidates:
             model = self.db.get_model_by_key(key)
             # Admin-spezifischer Key/known key: Typ notfalls tolerieren, solange aktiv.
