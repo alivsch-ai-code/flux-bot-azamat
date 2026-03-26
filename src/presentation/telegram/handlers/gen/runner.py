@@ -29,6 +29,7 @@ from src.presentation.telegram.handlers.gen import (
     smart_update_status,
 )
 from src.presentation.telegram.handlers.gen.chat_sessions import (
+    append_global_chat_event,
     append_with_summary_if_needed,
     build_chat_prompt_from_messages,
 )
@@ -161,6 +162,7 @@ def create_run_generation(bot, db, generation_service, get_lang):
                         raw = result[0] if isinstance(result, list) and result else result
                         assistant_text = raw if isinstance(raw, str) else str(raw)
                         if assistant_text.strip():
+                            append_global_chat_event(db, user_id, "assistant", assistant_text)
                             append_with_summary_if_needed(
                                 db,
                                 user_id,

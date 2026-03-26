@@ -11,7 +11,11 @@ from telebot import TeleBot, types
 
 from src.config.settings import config
 from src.presentation.telegram.handlers.chat_debounce import schedule_batched_text_message
-from src.presentation.telegram.handlers.gen.chat_sessions import append_with_summary_if_needed, build_chat_prompt_from_messages
+from src.presentation.telegram.handlers.gen.chat_sessions import (
+    append_global_chat_event,
+    append_with_summary_if_needed,
+    build_chat_prompt_from_messages,
+)
 from src.presentation.telegram.handlers.payment_handler import show_shop_logic
 from src.utils.strings import get_text
 
@@ -56,6 +60,7 @@ def _try_send_one_time_greeting(bot: TeleBot, db, generation_service, user_id: i
         return
     try:
         bot.send_message(user_id, str(result), parse_mode="HTML")
+        append_global_chat_event(db, user_id, "assistant", str(result))
         db.mark_group_greeting_sent(user_id)
     except Exception as e:
         logger.debug("Could not send group greeting DM to %s: %s", user_id, e)
@@ -129,6 +134,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
                 max_messages=20,
                 summarize_at=20,
             )
+            append_global_chat_event(db, last_uid, "assistant", str(result))
         except Exception:
             pass
         try:
@@ -187,6 +193,10 @@ def register(bot: TeleBot, generation_service, db) -> None:
             return
 
         user_name = msg.from_user.first_name or msg.from_user.username or "User"
+        try:
+            append_global_chat_event(db, user_id, "user", msg.text.strip(), user_name=user_name)
+        except Exception:
+            pass
         item = (user_id, user_name, msg.text.strip())
         schedule_batched_text_message(chat_id, item, flush_group_batch)
 

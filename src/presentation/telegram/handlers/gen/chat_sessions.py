@@ -10,6 +10,8 @@ kompakten System-Eintrag. Privat: alle 5 Nachrichten. Gruppen: Puffer bis 20, da
 
 from typing import List, Dict
 
+from src.config.settings import config
+
 from src.infrastructure.ai.replicate.prompt_engineer import summarize_conversation_via_llm
 
 
@@ -78,4 +80,32 @@ def append_with_summary_if_needed(
 
     db.save_chat_session(user_id, model_key, messages)
     return messages
+
+
+def append_global_chat_event(
+    db,
+    user_id: int,
+    role: str,
+    content: str,
+    user_name: str | None = None,
+) -> List[Dict]:
+    """
+    Schreibt Events in eine globale Session pro User (unabhängig vom Modell/Flow).
+    Diese Timeline enthält z. B. User-Texte, Daily-News und Bot-Systemnachrichten.
+    """
+    text = (content or "").strip()
+    if not text:
+        return db.get_chat_session(user_id, config.GLOBAL_CHAT_SESSION_KEY)
+    payload: Dict = {"role": role, "content": text}
+    if user_name:
+        payload["user_name"] = user_name
+    threshold = int(getattr(config, "CHAT_SUMMARIZE_AT", 20) or 20)
+    return append_with_summary_if_needed(
+        db,
+        user_id,
+        config.GLOBAL_CHAT_SESSION_KEY,
+        payload,
+        max_messages=threshold,
+        summarize_at=threshold,
+    )
 

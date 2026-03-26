@@ -11,6 +11,7 @@ import feedparser
 
 from telebot import types
 
+from src.presentation.telegram.handlers.gen.chat_sessions import append_global_chat_event
 from src.utils.strings import get_random_daily_fallback, get_text
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,11 @@ class DailyService:
                         sent = True
 
                     if sent:
+                        # Daily-Ausspielungen in globale Chat-Session des Users schreiben.
+                        if out_text:
+                            append_global_chat_event(self.db, user_id, "assistant", out_text)
+                        elif img_path and img_path.strip():
+                            append_global_chat_event(self.db, user_id, "assistant", "[daily_image]")
                         success_count += 1
 
                     # Kurze Pause, um Telegram Limits (Rate Limits) nicht zu verletzen
@@ -195,6 +201,7 @@ class DailyService:
                     markup = types.InlineKeyboardMarkup()
                     markup.add(types.InlineKeyboardButton(get_text("kb_main", lang), callback_data="nav_main"))
                     self.bot.send_message(user_id, text, parse_mode="HTML", reply_markup=markup)
+                    append_global_chat_event(self.db, user_id, "assistant", text)
                     success += 1
                     time.sleep(0.05)
                 except Exception:
@@ -262,6 +269,7 @@ class DailyService:
                 if not ok or not result:
                     continue
                 self.bot.send_message(user_id, str(result), parse_mode="HTML")
+                append_global_chat_event(self.db, user_id, "assistant", str(result))
                 self.db.mark_azamat_greeting_sent(user_id, today, slot)
                 success += 1
                 time.sleep(0.08)
@@ -336,6 +344,8 @@ class DailyService:
         text = str(result).strip()
         try:
             self.bot.send_message(target_id, text, parse_mode="HTML")
+            if target_type == "user":
+                append_global_chat_event(self.db, target_id, "assistant", text)
             self.db.increment_azamat_random_count_today()
             label = "group" if target_type == "group" else "user"
             logger.info("Azamat AI News an %s %s gesendet.", label, target_id)
