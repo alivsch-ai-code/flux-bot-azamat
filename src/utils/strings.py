@@ -85,6 +85,23 @@ STRINGS = {
     },
     "model_example_intro": { "en": "<b>Here is our example:</b>", "de": "<b>Hier ist unser Beispiel:</b>", "ru": "<b>Вот пример:</b>", "kk": "<b>Мысал:</b>" },
     "model_req_prompt": { "en": "\n✍️ <b>Write your prompt:</b>", "de": "\n✍️ <b>Schreibe deinen Prompt:</b>", "ru": "\n✍️ <b>Напишите промт:</b>", "kk": "\n✍️ <b>Сұранысты жазыңыз:</b>" },
+    "model_req_prompt_with_model": {
+        "en": "🤖 <b>Model:</b> {model}\n\n✍️ <b>Write your next prompt:</b>",
+        "de": "🤖 <b>Modell:</b> {model}\n\n✍️ <b>Schreibe deinen nächsten Prompt:</b>",
+        "ru": "🤖 <b>Модель:</b> {model}\n\n✍️ <b>Напишите следующий промт:</b>",
+        "kk": "🤖 <b>Модель:</b> {model}\n\n✍️ <b>Келесі сұранысты жазыңыз:</b>"
+    },
+    "reuse_media_offer": {
+        "en": "📎 <b>{count} uploaded image(s) found.</b>\nReuse them for ~{minutes} min?",
+        "de": "📎 <b>{count} hochgeladene Bild(er) gefunden.</b>\nFür ~{minutes} Min wiederverwenden?",
+        "ru": "📎 <b>Найдено загруженных изображений: {count}.</b>\nИспользовать их повторно ~{minutes} мин?",
+        "kk": "📎 <b>{count} жүктелген сурет табылды.</b>\nОларды ~{minutes} мин қайта қолдану керек пе?"
+    },
+    "btn_reuse_media_yes": { "en": "♻️ Reuse images", "de": "♻️ Bilder wiederverwenden", "ru": "♻️ Повторно использовать", "kk": "♻️ Қайта қолдану" },
+    "btn_reuse_media_no": { "en": "🆕 New images", "de": "🆕 Neue Bilder", "ru": "🆕 Новые изображения", "kk": "🆕 Жаңа суреттер" },
+    "reuse_media_enabled": { "en": "✅ Images will be reused.", "de": "✅ Bilder werden wiederverwendet.", "ru": "✅ Изображения будут использованы повторно.", "kk": "✅ Суреттер қайта қолданылады." },
+    "reuse_media_disabled": { "en": "🗑️ Reuse disabled. Upload new images if needed.", "de": "🗑️ Wiederverwendung deaktiviert. Bei Bedarf neue Bilder hochladen.", "ru": "🗑️ Повторное использование отключено. При необходимости загрузите новые изображения.", "kk": "🗑️ Қайта қолдану өшірілді. Қажет болса жаңа сурет жүктеңіз." },
+    "reuse_media_expired": { "en": "⏰ Uploaded images expired. Please upload again.", "de": "⏰ Hochgeladene Bilder sind abgelaufen. Bitte neu hochladen.", "ru": "⏰ Загруженные изображения истекли. Загрузите снова.", "kk": "⏰ Жүктелген суреттер мерзімі бітті. Қайта жүктеңіз." },
     "model_req_image": { "en": "\n📸 <b>Please upload an image:</b>", "de": "\n📸 <b>Bitte lade ein Bild hoch:</b>", "ru": "\n📸 <b>Загрузите фото:</b>", "kk": "\n📸 <b>Сурет жүктеңіз:</b>" },
     "model_req_media": {
         "en": "\n📎 <b>Upload media:</b> Images, videos or documents. Send multiple files, then write your prompt.",

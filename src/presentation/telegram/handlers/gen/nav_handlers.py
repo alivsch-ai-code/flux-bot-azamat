@@ -11,6 +11,7 @@ Alle Handler nutzen keyboards.get_dynamic_model_menu, get_chat_mode_ask_menu usw
 """
 
 import logging
+import time
 
 from urllib.parse import quote
 from telebot import TeleBot, types
@@ -247,6 +248,34 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
             types.InlineKeyboardButton("📚 Verlauf behalten", callback_data="stop_chat_keep"),
         )
         bot.edit_message_text(text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+
+    @bot.callback_query_handler(func=lambda c: c.data in ("reuse_media_yes", "reuse_media_no"))
+    def handle_reuse_media_decision(call):
+        if _show_group_menu_if_group(call):
+            return
+        user_id = call.message.chat.id
+        lang = get_lang(user_id)
+        ctx = get_context(user_id) or {}
+        recent = list(ctx.get("recent_media_paths") or [])
+        expires_at = int(ctx.get("recent_media_expires_at") or 0)
+        is_valid = bool(recent) and int(time.time()) <= expires_at
+        if call.data == "reuse_media_yes":
+            if is_valid:
+                ctx["media_paths"] = recent
+                set_context(user_id, ctx)
+                bot.answer_callback_query(call.id, get_text("reuse_media_enabled", lang))
+            else:
+                ctx["media_paths"] = []
+                ctx["recent_media_paths"] = []
+                ctx["recent_media_expires_at"] = 0
+                set_context(user_id, ctx)
+                bot.answer_callback_query(call.id, get_text("reuse_media_expired", lang))
+        else:
+            ctx["media_paths"] = []
+            ctx["recent_media_paths"] = []
+            ctx["recent_media_expires_at"] = 0
+            set_context(user_id, ctx)
+            bot.answer_callback_query(call.id, get_text("reuse_media_disabled", lang))
 
     @bot.callback_query_handler(func=lambda c: c.data in ("stop_chat_clear", "stop_chat_keep"))
     def handle_stop_chat_decision(call):

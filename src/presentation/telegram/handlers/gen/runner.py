@@ -37,6 +37,7 @@ from src.utils.gimmicks import get_random_tip
 from src.utils.strings import get_text
 
 logger = logging.getLogger(__name__)
+REUSABLE_MEDIA_TTL_SECONDS = 240
 
 
 def create_run_generation(bot, db, generation_service, get_lang):
@@ -182,30 +183,56 @@ def create_run_generation(bot, db, generation_service, get_lang):
                         from src.presentation.telegram.handlers.common import set_context
 
                         menu_path = (ctx or {}).get("menu_path", model.menu_path or "image")
+                        prev_media = list((ctx or {}).get("media_paths") or [])
+                        reusable_media = []
+                        for item in prev_media:
+                            if isinstance(item, dict):
+                                p = str(item.get("path") or "")
+                                t = str(item.get("type") or "image")
+                                if p.startswith("http://") or p.startswith("https://"):
+                                    reusable_media.append({"path": p, "type": t})
+                            elif isinstance(item, str) and (item.startswith("http://") or item.startswith("https://")):
+                                reusable_media.append({"path": item, "type": "image"})
+                        expires_at = int(time.time()) + REUSABLE_MEDIA_TTL_SECONDS if reusable_media else 0
                         new_ctx = {
                             "model_key": model.key,
                             "step": "waiting_for_prompt",
                             "media_paths": [],
+                            "recent_media_paths": reusable_media,
+                            "recent_media_expires_at": expires_at,
                             "generation_options": {},
                             "menu_path": menu_path,
                         }
                         set_context(user_id, new_ctx)
-                        menu_mode = db.get_bot_setting("menu_mode", "commands")
-                        if menu_mode == "keyboard":
-                            bot.send_message(
-                                user_id,
-                                get_text("model_req_prompt", lang),
-                                parse_mode="HTML",
+                        prompt_msg = get_text("model_req_prompt_with_model", lang).format(model=model.name)
+                        if reusable_media:
+                            ttl_minutes = max(1, int(REUSABLE_MEDIA_TTL_SECONDS / 60))
+                            prompt_msg += "\n\n" + get_text("reuse_media_offer", lang).format(
+                                count=len(reusable_media), minutes=ttl_minutes
                             )
-                        else:
+                        menu_mode = db.get_bot_setting("menu_mode", "commands")
+                        back_markup = None
+                        if menu_mode != "keyboard":
                             from src.config.settings import config
                             webapp_url = (config.APP_URL or "").rstrip("/")
                             back_markup = keyboards.get_image_loop_buttons(
                                 lang, menu_mode, webapp_url, model.key, menu_path or "image",
                             )
+                            if reusable_media:
+                                back_markup.row(
+                                    types.InlineKeyboardButton(get_text("btn_reuse_media_yes", lang), callback_data="reuse_media_yes"),
+                                    types.InlineKeyboardButton(get_text("btn_reuse_media_no", lang), callback_data="reuse_media_no"),
+                                )
+                        if menu_mode == "keyboard":
                             bot.send_message(
                                 user_id,
-                                get_text("model_req_prompt", lang),
+                                prompt_msg,
+                                parse_mode="HTML",
+                            )
+                        else:
+                            bot.send_message(
+                                user_id,
+                                prompt_msg,
                                 reply_markup=back_markup,
                                 parse_mode="HTML",
                             )
