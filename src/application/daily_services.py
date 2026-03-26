@@ -350,6 +350,10 @@ class DailyService:
         2) bekannte Keys
         3) Modellname/replicate_id mit 'nano-banana'
         """
+        def _supports_image(model) -> bool:
+            # robust gegen unterschiedliche Typwerte wie "image_generation"
+            return any("image" in str(t).lower() for t in (model.type or []))
+
         candidates = []
         env_key = (os.getenv("AZAMAT_NEWS_IMAGE_MODEL_KEY") or "").strip()
         if env_key:
@@ -357,16 +361,15 @@ class DailyService:
         candidates.extend(["nano-banana-pro", "nano-banana", "google-nano-banana-pro", "google-nano-banana"])
         for key in candidates:
             model = self.db.get_model_by_key(key)
-            if model and model.is_active and "image" in (model.type or []):
+            # Admin-spezifischer Key/known key: Typ notfalls tolerieren, solange aktiv.
+            if model and model.is_active:
                 return model
         for model in self.db.get_all_models():
             rep_id = (model.replicate_id or "").lower()
             name = (model.name or "").lower()
             if not model.is_active:
                 continue
-            if "image" not in (model.type or []):
-                continue
-            if "nano-banana" in rep_id or "nano banana" in name:
+            if ("nano-banana" in rep_id or "nano banana" in name) and _supports_image(model):
                 return model
         return None
 
@@ -374,6 +377,13 @@ class DailyService:
     def _extract_first_media_url(result_data):
         if not result_data:
             return None
+        # Replicate FileOutput/Objekte liefern URL als Attribut.
+        if hasattr(result_data, "url"):
+            try:
+                url = str(getattr(result_data, "url") or "").strip()
+                return url or None
+            except Exception:
+                pass
         if isinstance(result_data, str):
             return result_data.strip() or None
         if isinstance(result_data, (list, tuple)):
