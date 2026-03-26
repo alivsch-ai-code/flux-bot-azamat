@@ -65,13 +65,15 @@ def test_once_off_writes_user_and_assistant_to_chat_history(monkeypatch):
 
     assert generation_service.process_request.call_count == 1
 
-    # once_off speichert user+assistant jeweils via save_chat_session
-    assert db.save_chat_session.call_count == 2
+    # once_off speichert user+assistant in der Modell-History.
+    # Zusätzlich kann globales Session-Logging weitere save_chat_session-Calls auslösen.
+    model_calls = [c for c in db.save_chat_session.call_args_list if c.args[1] == "m1"]
+    assert len(model_calls) == 2
 
-    first_messages = db.save_chat_session.call_args_list[0].args[2]
+    first_messages = model_calls[0].args[2]
     assert any(m.get("role") == "user" and m.get("content") == "Hello" for m in first_messages)
 
-    second_messages = db.save_chat_session.call_args_list[1].args[2]
+    second_messages = model_calls[1].args[2]
     assert any(m.get("role") == "user" and m.get("content") == "Hello" for m in second_messages)
     assert any(m.get("role") == "assistant" and m.get("content") == "assistant answer" for m in second_messages)
 
