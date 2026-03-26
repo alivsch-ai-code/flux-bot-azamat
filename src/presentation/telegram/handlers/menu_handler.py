@@ -361,7 +361,7 @@ def process_webapp_action(
                 logger.warning("Invalid buy_credits action %r: %s", action, e)
 
 
-def register(bot: TeleBot, generation_service, db) -> None:
+def register(bot: TeleBot, generation_service, db, daily_service=None) -> None:
     def get_lang(user_id):
         return db.get_user_settings(user_id)["lang"]
 
@@ -516,6 +516,34 @@ def register(bot: TeleBot, generation_service, db) -> None:
                 f"❌ Fehler beim Neuladen der Modelle: {e}",
                 parse_mode="HTML",
             )
+
+    @bot.message_handler(commands=['trigger_daily_news'])
+    def admin_trigger_daily_news(message):
+        user_id = message.chat.id
+        if ADMIN_ID and user_id != ADMIN_ID:
+            return
+        if not daily_service:
+            bot.reply_to(message, "❌ DailyService ist nicht verfügbar.")
+            return
+        try:
+            result = daily_service.trigger_ai_news_post()
+            if result.get("ok"):
+                target_type = result.get("target_type") or "unknown"
+                sent_to = result.get("sent_to")
+                bot.reply_to(
+                    message,
+                    f"✅ Daily News manuell ausgelöst.\nEmpfänger: {target_type} {sent_to}",
+                    parse_mode="HTML",
+                )
+            else:
+                bot.reply_to(
+                    message,
+                    f"⚠️ Trigger ausgeführt, aber nichts gesendet.\nGrund: <code>{result.get('reason','unknown')}</code>",
+                    parse_mode="HTML",
+                )
+        except Exception as e:
+            logger.exception("Admin trigger_daily_news failed: %s", e)
+            bot.reply_to(message, f"❌ Fehler beim Triggern der Daily News: {e}")
 
     # 0c. Web App Data (Mini App sendet Aktionen – funktioniert nur bei Keyboard-Button, nicht Menü-Button)
     @bot.message_handler(content_types=['web_app_data'])

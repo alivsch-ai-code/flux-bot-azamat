@@ -390,23 +390,38 @@ class DailyService:
 
     def _maybe_send_ai_news_post(self):
         """5×/Tag: Holt AI-News aus RSS, fasst/übersetzt mit Gemini und postet inkl. Nano-Banana-Bild."""
+        return self._dispatch_ai_news_post(force=False)
+
+    def trigger_ai_news_post(self) -> dict:
+        """
+        Manueller Admin-Trigger für AI-News.
+        Erzwingt einen Lauf unabhängig von Zufallsrate/Tageslimit.
+        """
+        return self._dispatch_ai_news_post(force=True)
+
+    def _dispatch_ai_news_post(self, force: bool = False) -> dict:
+        """
+        Gemeinsame Dispatch-Logik für Scheduler und manuellen Trigger.
+        Rückgabe:
+        {ok: bool, reason: str, sent_to: int|None, target_type: str|None}
+        """
         if not self.generation_service:
-            return
+            return {"ok": False, "reason": "generation_service_missing", "sent_to": None, "target_type": None}
         max_per_day = int(os.getenv("AZAMAT_RANDOM_POSTS_PER_DAY", "5"))
-        if max_per_day <= 0:
-            return
+        if max_per_day <= 0 and not force:
+            return {"ok": False, "reason": "disabled_by_limit", "sent_to": None, "target_type": None}
         sent_today = self.db.get_azamat_random_count_today()
-        if sent_today >= max_per_day:
-            return
-        if random.random() > 0.10:
-            return
+        if sent_today >= max_per_day and not force:
+            return {"ok": False, "reason": "daily_limit_reached", "sent_to": None, "target_type": None}
+        if not force and random.random() > 0.10:
+            return {"ok": False, "reason": "random_skip", "sent_to": None, "target_type": None}
         model = self.db.get_model_by_key(AZAMAT_GREETING_MODEL)
         if not model or "text" not in (model.type or []):
-            return
+            return {"ok": False, "reason": "text_model_missing", "sent_to": None, "target_type": None}
 
         news_items = self._fetch_ai_news_from_rss(max_items=2)
         if len(news_items) < 2:
-            return
+            return {"ok": False, "reason": "not_enough_news_items", "sent_to": None, "target_type": None}
 
         news_block = "\n\n".join(
             f"News {i+1}:\nSource: {n.get('source','')}\nTitle: {n['title']}\nSnippet: {n['snippet']}\nLink: {n.get('link', '')}"
@@ -422,7 +437,7 @@ class DailyService:
             lang = settings.get("lang", "en")
             recipients.append(("user", user_id, lang))
         if not recipients:
-            return
+            return {"ok": False, "reason": "no_recipients", "sent_to": None, "target_type": None}
 
         target_type, target_id, lang = random.choice(recipients)
         prompt_tpl = get_text("azamat_news_summary_prompt", lang)
@@ -432,7 +447,7 @@ class DailyService:
             user_id_for_gen, model, prompt, media_files=None, no_charge=True
         )
         if not ok or not result or not str(result).strip():
-            return
+            return {"ok": False, "reason": "summary_generation_failed", "sent_to": None, "target_type": None}
         text = str(result).strip()
         try:
             self.bot.send_message(target_id, text, parse_mode="HTML")
@@ -462,8 +477,10 @@ class DailyService:
                         if target_type == "user":
                             append_global_chat_event(self.db, target_id, "assistant", "[daily_news_image]")
 
-            self.db.increment_azamat_random_count_today()
+            if not force:
+                self.db.increment_azamat_random_count_today()
             label = "group" if target_type == "group" else "user"
-            logger.info("Azamat AI News an %s %s gesendet.", label, target_id)
+            logger.info("Azamat AI News an %s %s gesendet (force=%s).", label, target_id, force)
+            return {"ok": True, "reason": "sent", "sent_to": target_id, "target_type": target_type}
         except Exception:
-            pass
+            return {"ok": False, "reason": "telegram_send_failed", "sent_to": None, "target_type": None}

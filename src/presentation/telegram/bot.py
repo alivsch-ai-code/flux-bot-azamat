@@ -51,11 +51,12 @@ def setup_bot(bot: TeleBot, generation_service, db) -> None:
         except Exception as e:
             logger.debug("Menü-Button Reset: %s", e)
 
+    daily = DailyService(bot, db, generation_service)
+
     group_handler.register(bot, generation_service, db)
-    menu_handler.register(bot, generation_service, db)
+    menu_handler.register(bot, generation_service, db, daily_service=daily)
     payment_handler.register(bot, db)
     gen_handler.register(bot, generation_service, db)
 
-    daily = DailyService(bot, db, generation_service)
     daily.start()
     
