@@ -249,7 +249,7 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
         )
         bot.edit_message_text(text, user_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
 
-    @bot.callback_query_handler(func=lambda c: c.data in ("reuse_media_yes", "reuse_media_no"))
+    @bot.callback_query_handler(func=lambda c: c.data in ("reuse_media_yes", "reuse_media_no", "reuse_media_text"))
     def handle_reuse_media_decision(call):
         if _show_group_menu_if_group(call):
             return
@@ -258,6 +258,8 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
         ctx = get_context(user_id) or {}
         recent = list(ctx.get("recent_media_paths") or [])
         expires_at = int(ctx.get("recent_media_expires_at") or 0)
+        last_prompt = str(ctx.get("last_prompt") or "").strip()
+        model_key = str(ctx.get("model_key") or "").strip()
         is_valid = bool(recent) and int(time.time()) <= expires_at
         if call.data == "reuse_media_yes":
             if is_valid:
@@ -270,12 +272,45 @@ def register_nav_handlers(bot: TeleBot, db, get_lang) -> None:
                 ctx["recent_media_expires_at"] = 0
                 set_context(user_id, ctx)
                 bot.answer_callback_query(call.id, get_text("reuse_media_expired", lang))
-        else:
+        elif call.data == "reuse_media_no":
             ctx["media_paths"] = []
-            ctx["recent_media_paths"] = []
-            ctx["recent_media_expires_at"] = 0
+            # Prompt bewusst behalten; User kann neue Bilder hochladen und denselben Prompt erneut nutzen.
+            if last_prompt:
+                ctx["pending_webapp_prompt"] = last_prompt
             set_context(user_id, ctx)
             bot.answer_callback_query(call.id, get_text("reuse_media_disabled", lang))
+            if config.APP_URL and model_key:
+                webapp_url = config.APP_URL.rstrip("/") + "/webapp?model=" + quote(model_key, safe="")
+                if last_prompt:
+                    webapp_url += "&prompt=" + quote(last_prompt, safe="")
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=webapp_url)))
+                bot.send_message(user_id, get_text("reuse_media_open_webapp", lang), reply_markup=markup, parse_mode="HTML")
+        else:
+            # Nur Text: Medien leeren, Prompt behalten und zurück in die Prompt/WebApp-UX.
+            ctx["media_paths"] = []
+            if last_prompt:
+                ctx["pending_webapp_prompt"] = last_prompt
+            set_context(user_id, ctx)
+            bot.answer_callback_query(call.id, get_text("btn_reuse_media_text", lang))
+            model_name = model_key or "-"
+            if model_key:
+                model = db.get_model_by_key(model_key)
+                if model and model.name:
+                    model_name = model.name
+            bot.send_message(
+                user_id,
+                get_text("model_req_prompt_with_model", lang).format(model=model_name),
+                reply_markup=keyboards.get_back_menu(lang, target=f"sel_{model_key}") if model_key else None,
+                parse_mode="HTML",
+            )
+            if config.APP_URL and model_key:
+                webapp_url = config.APP_URL.rstrip("/") + "/webapp?model=" + quote(model_key, safe="")
+                if last_prompt:
+                    webapp_url += "&prompt=" + quote(last_prompt, safe="")
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton(get_text("menu_mode_webapp", lang), web_app=types.WebAppInfo(url=webapp_url)))
+                bot.send_message(user_id, get_text("reuse_media_open_webapp", lang), reply_markup=markup, parse_mode="HTML")
 
     @bot.callback_query_handler(func=lambda c: c.data in ("stop_chat_clear", "stop_chat_keep"))
     def handle_stop_chat_decision(call):

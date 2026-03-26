@@ -99,9 +99,16 @@ STRINGS = {
     },
     "btn_reuse_media_yes": { "en": "♻️ Reuse images", "de": "♻️ Bilder wiederverwenden", "ru": "♻️ Повторно использовать", "kk": "♻️ Қайта қолдану" },
     "btn_reuse_media_no": { "en": "🆕 New images", "de": "🆕 Neue Bilder", "ru": "🆕 Новые изображения", "kk": "🆕 Жаңа суреттер" },
+    "btn_reuse_media_text": { "en": "📝 Text only", "de": "📝 Nur Text", "ru": "📝 Только текст", "kk": "📝 Тек мәтін" },
     "reuse_media_enabled": { "en": "✅ Images will be reused.", "de": "✅ Bilder werden wiederverwendet.", "ru": "✅ Изображения будут использованы повторно.", "kk": "✅ Суреттер қайта қолданылады." },
     "reuse_media_disabled": { "en": "🗑️ Reuse disabled. Upload new images if needed.", "de": "🗑️ Wiederverwendung deaktiviert. Bei Bedarf neue Bilder hochladen.", "ru": "🗑️ Повторное использование отключено. При необходимости загрузите новые изображения.", "kk": "🗑️ Қайта қолдану өшірілді. Қажет болса жаңа сурет жүктеңіз." },
     "reuse_media_expired": { "en": "⏰ Uploaded images expired. Please upload again.", "de": "⏰ Hochgeladene Bilder sind abgelaufen. Bitte neu hochladen.", "ru": "⏰ Загруженные изображения истекли. Загрузите снова.", "kk": "⏰ Жүктелген суреттер мерзімі бітті. Қайта жүктеңіз." },
+    "reuse_media_open_webapp": {
+        "en": "🌐 Continue in WebApp. Last prompt is prefilled.",
+        "de": "🌐 In der WebApp weitermachen. Letzter Prompt ist vorausgefüllt.",
+        "ru": "🌐 Продолжить в WebApp. Последний промт уже подставлен.",
+        "kk": "🌐 WebApp-та жалғастыру. Соңғы сұраныс алдын ала қойылды."
+    },
     "model_req_image": { "en": "\n📸 <b>Please upload an image:</b>", "de": "\n📸 <b>Bitte lade ein Bild hoch:</b>", "ru": "\n📸 <b>Загрузите фото:</b>", "kk": "\n📸 <b>Сурет жүктеңіз:</b>" },
     "model_req_media": {
         "en": "\n📎 <b>Upload media:</b> Images, videos or documents. Send multiple files, then write your prompt.",

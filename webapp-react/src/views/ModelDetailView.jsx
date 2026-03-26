@@ -174,7 +174,9 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
   useEffect(() => {
     if (!model) return;
 
-    setPromptText('');
+    const params = new URLSearchParams(window.location.search || '');
+    const prefillPrompt = (params.get('prompt') || '').trim();
+    setPromptText(prefillPrompt);
     setNegativePromptText('');
 
     const durEnum = (opt.duration && Array.isArray(opt.duration.enum) && opt.duration.enum.length) ? opt.duration.enum : [5, 6, 7, 8];

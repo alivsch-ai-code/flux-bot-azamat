@@ -200,6 +200,7 @@ def create_run_generation(bot, db, generation_service, get_lang):
                             "media_paths": [],
                             "recent_media_paths": reusable_media,
                             "recent_media_expires_at": expires_at,
+                            "last_prompt": (prompt or "").strip(),
                             "generation_options": {},
                             "menu_path": menu_path,
                         }
@@ -222,6 +223,9 @@ def create_run_generation(bot, db, generation_service, get_lang):
                                 back_markup.row(
                                     types.InlineKeyboardButton(get_text("btn_reuse_media_yes", lang), callback_data="reuse_media_yes"),
                                     types.InlineKeyboardButton(get_text("btn_reuse_media_no", lang), callback_data="reuse_media_no"),
+                                )
+                                back_markup.row(
+                                    types.InlineKeyboardButton(get_text("btn_reuse_media_text", lang), callback_data="reuse_media_text"),
                                 )
                         if menu_mode == "keyboard":
                             bot.send_message(
