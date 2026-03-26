@@ -108,10 +108,27 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     return Object.keys(props).filter((k) => {
       const p = props[k] || {};
       const kl = String(k).toLowerCase();
-      if (['prompt', 'negative_prompt', 'image', 'images', 'start_image', 'end_image', 'reference_images', 'duration', 'resolution', 'aspect_ratio', 'generate_audio'].includes(kl))
+      if (['prompt', 'negative_prompt', 'image', 'images', 'start_image', 'end_image', 'reference_images', 'duration', 'resolution', 'aspect_ratio', 'generate_audio', 'messages', 'system_prompt'].includes(kl))
         return false;
       if (p.readOnly) return false;
-      return ['string', 'number', 'integer', 'boolean'].includes(p.type) || Array.isArray(p.enum);
+      // Include uri-like arrays as dynamic fields (e.g. image_input for Nano Banana Pro).
+      const isArrayUriLike =
+        p.type === 'array' &&
+        (
+          String(p.format || '').toLowerCase().includes('uri') ||
+          String(p.items?.format || '').toLowerCase().includes('uri') ||
+          String(p.items?.type || '').toLowerCase() === 'string'
+        );
+      const looksConfigLikeWithoutType =
+        !p.type &&
+        (
+          p.default !== undefined ||
+          Array.isArray(p.enum) ||
+          Array.isArray(p.anyOf) ||
+          Array.isArray(p.oneOf) ||
+          Array.isArray(p.allOf)
+        );
+      return ['string', 'number', 'integer', 'boolean'].includes(p.type) || Array.isArray(p.enum) || isArrayUriLike || looksConfigLikeWithoutType;
     });
   }, [schemaProps]);
 
@@ -223,7 +240,31 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     }
     if (type === 'integer') return Number.parseInt(raw, 10);
     if (type === 'number') return Number(raw);
+    if (!type) {
+      // Fallback when schema omits "type" but provides defaults/ref blocks.
+      if (typeof p?.default === 'boolean') {
+        if (typeof raw === 'boolean') return raw;
+        return String(raw) === 'true';
+      }
+      if (typeof p?.default === 'number') return Number(raw);
+    }
     return raw;
+  }
+
+  function getFieldOptions(p) {
+    if (!p || typeof p !== 'object') return [];
+    if (Array.isArray(p.enum) && p.enum.length) return p.enum;
+    const fromBlocks = [];
+    for (const blockName of ['oneOf', 'anyOf', 'allOf']) {
+      const arr = p[blockName];
+      if (!Array.isArray(arr)) continue;
+      for (const item of arr) {
+        if (!item || typeof item !== 'object') continue;
+        if (Array.isArray(item.enum) && item.enum.length) fromBlocks.push(...item.enum);
+        if (Object.prototype.hasOwnProperty.call(item, 'const')) fromBlocks.push(item.const);
+      }
+    }
+    return [...new Set(fromBlocks)];
   }
 
   function buildGenerationOptionsPayload() {
@@ -293,6 +334,33 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
       const url = data.urls[0];
       setDynamicValues((prev) => ({ ...prev, [k]: url }));
       setUploadStatusMap((prev) => ({ ...prev, [k]: '✓ 1 URL' }));
+      setTimeout(() => setUploadStatusMap((prev) => ({ ...prev, [k]: '' })), 2500);
+    } catch {
+      showErrorOverlay('Verbindungsfehler');
+    } finally {
+      setUploadingMap((prev) => ({ ...prev, [k]: false }));
+    }
+  }
+
+  async function handleUploadDynamicKeyMultiple(k, files) {
+    if (!k) return;
+    const arr = Array.isArray(files) ? files : [];
+    if (arr.length === 0) return;
+    setUploadingMap((prev) => ({ ...prev, [k]: true }));
+    setUploadStatusMap((prev) => ({ ...prev, [k]: '⏳ Upload...' }));
+    try {
+      const res = await uploadReferenceFiles(arr);
+      const data = await res.json().catch(() => ({}));
+      if (!data?.ok || !Array.isArray(data.urls) || !data.urls.length) {
+        showErrorOverlay(data?.error || 'Upload fehlgeschlagen');
+        return;
+      }
+      setDynamicValues((prev) => {
+        const oldVal = prev?.[k];
+        const oldArr = Array.isArray(oldVal) ? oldVal : (oldVal ? [oldVal] : []);
+        return { ...prev, [k]: [...oldArr, ...data.urls] };
+      });
+      setUploadStatusMap((prev) => ({ ...prev, [k]: `✓ ${data.urls.length} URL(s)` }));
       setTimeout(() => setUploadStatusMap((prev) => ({ ...prev, [k]: '' })), 2500);
     } catch {
       showErrorOverlay('Verbindungsfehler');
@@ -417,7 +485,9 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     if (wantsUriImageUpload) {
       const status = uploadStatusMap?.[k] || '';
       const uploading = !!uploadingMap?.[k];
-      const displayVal = currentValue ? '✓ hochgeladen' : '';
+      const isArrayField = String(p?.type || '').toLowerCase() === 'array';
+      const currentUrls = Array.isArray(currentValue) ? currentValue : (currentValue ? [currentValue] : []);
+      const displayVal = currentUrls.length ? `✓ ${currentUrls.length} URL(s)` : '';
 
       return (
         <div className="gen-row" key={k}>
@@ -425,6 +495,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
           <div className="ref-upload-toolbar">
             <input
               type="file"
+              multiple={isArrayField}
               style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
               accept="image/jpeg,image/png,image/webp"
               ref={(el) => {
@@ -433,7 +504,11 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
               onChange={(e) => {
                 const files = e.target.files;
                 if (!files || !files.length) return;
-                handleUploadDynamicKey(k, files[0]);
+                if (isArrayField) {
+                  handleUploadDynamicKeyMultiple(k, Array.from(files));
+                } else {
+                  handleUploadDynamicKey(k, files[0]);
+                }
                 e.target.value = '';
               }}
             />
@@ -471,8 +546,9 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
       );
     }
 
-    if (Array.isArray(p.enum) && p.enum.length) {
-      const opts = p.enum || [];
+    const fieldOptions = getFieldOptions(p);
+    if (fieldOptions.length) {
+      const opts = fieldOptions;
       const selected = (currentValue === '' || currentValue === null || currentValue === undefined) ? (p.default ?? opts[0]) : currentValue;
       return (
         <div className="gen-row" key={k}>
