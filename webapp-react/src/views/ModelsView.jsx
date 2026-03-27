@@ -1,5 +1,20 @@
 import React from 'react';
 
+function folderIcon(slug) {
+  const s = String(slug || '').toLowerCase();
+  if (s.includes('favorites') || s.includes('favoriten') || s.includes('favourites')) return '⭐';
+  if (s.includes('google')) return '🧠';
+  if (s.includes('flux')) return '✨';
+  if (s.includes('openai')) return '🤖';
+  if (s.includes('ideogram')) return '🧩';
+  if (s.includes('recraft')) return '🪄';
+  if (s.includes('stability')) return '🌀';
+  if (s.includes('video')) return '🎬';
+  if (s.includes('image')) return '🎨';
+  if (s.includes('audio')) return '🎙️';
+  return '📁';
+}
+
 function fallbackEmojiForModel(model) {
   const types = Array.isArray(model?.model_type) ? model.model_type : [];
   const typeStr = String(types.join(' ')).toLowerCase();
@@ -46,7 +61,7 @@ export default function ModelsView({ title, folders, models, freeLabel, loading,
             >
               <div className="model-left">
                 <div className="model-logo-fallback" style={{ borderColor: 'rgba(99,102,241,0.35)' }}>
-                  📁
+                  {folderIcon(label)}
                 </div>
                 <span className="model-name">{label}</span>
               </div>

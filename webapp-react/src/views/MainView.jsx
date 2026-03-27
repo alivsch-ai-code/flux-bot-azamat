@@ -1,8 +1,9 @@
 import React from 'react';
 
-function Card({ icon, label, desc, onClick }) {
+function Card({ icon, label, desc, tone = 'default', onClick }) {
   return (
-    <div className="card" onClick={onClick} role="button" tabIndex={0}>
+    <div className={`card card-tone-${tone}`} onClick={onClick} role="button" tabIndex={0}>
+      <div className="card-animated-bg" aria-hidden="true" />
       <div className="card-icon">{icon}</div>
       <div className="card-label">{label}</div>
       <div className="card-desc">{desc}</div>
@@ -28,15 +29,15 @@ export default function MainView({ t, onNavigateModels, onOpenShop, onOpenSettin
       <div className="section">
         <div className="section-title">{t('webapp_categories', 'Kategorien')}</div>
         <div className="grid">
-          <Card icon="🎨" label={t('menu_image', 'Bild Studio')} desc={t('webapp_desc_image', 'Flux, DALL-E, SD')} onClick={() => onNavigateModels('image')} />
-          <Card icon="🎬" label={t('menu_video', 'Video Studio')} desc={t('webapp_desc_video', 'Kling, Wan, Hunyuan')} onClick={() => onNavigateModels('video')} />
-          <Card icon="🎙️" label={t('menu_audio', 'Audio Studio')} desc={t('webapp_desc_audio', 'Music & Voice')} onClick={() => onNavigateModels('audio')} />
-          <Card icon="📝" label={t('menu_text', 'Text / Chat')} desc={t('webapp_desc_text', 'LLMs & Chat')} onClick={() => onNavigateModels('text')} />
-          <Card icon="🛠️" label={t('menu_tools', 'Werkzeuge')} desc={t('webapp_desc_tools', 'Profi Tools')} onClick={() => onNavigateModels('tools')} />
+          <Card icon="🎨" tone="image" label={t('menu_image', 'Bild Studio')} desc={t('webapp_desc_image', 'Flux, DALL-E, SD')} onClick={() => onNavigateModels('image')} />
+          <Card icon="🎬" tone="video" label={t('menu_video', 'Video Studio')} desc={t('webapp_desc_video', 'Kling, Wan, Hunyuan')} onClick={() => onNavigateModels('video')} />
+          <Card icon="🎙️" tone="audio" label={t('menu_audio', 'Audio Studio')} desc={t('webapp_desc_audio', 'Music & Voice')} onClick={() => onNavigateModels('audio')} />
+          <Card icon="📝" tone="text" label={t('menu_text', 'Text / Chat')} desc={t('webapp_desc_text', 'LLMs & Chat')} onClick={() => onNavigateModels('text')} />
+          <Card icon="🛠️" tone="tools" label={t('menu_tools', 'Werkzeuge')} desc={t('webapp_desc_tools', 'Profi Tools')} onClick={() => onNavigateModels('tools')} />
 
-          <Card icon="💎" label={t('webapp_credits_buy', 'Credits kaufen')} desc={t('webapp_shop_sub', 'Sicher per Telegram Stars')} onClick={onOpenShop} />
-          <Card icon="⚙️" label={t('webapp_settings', 'Einstellungen')} desc={''} onClick={onOpenSettings} />
-          <Card icon="👤" label={t('menu_profile', 'Profil')} desc={''} onClick={onOpenProfile} />
+          <Card icon="💎" tone="shop" label={t('webapp_credits_buy', 'Credits kaufen')} desc={t('webapp_shop_sub', 'Sicher per Telegram Stars')} onClick={onOpenShop} />
+          <Card icon="⚙️" tone="settings" label={t('webapp_settings', 'Einstellungen')} desc={''} onClick={onOpenSettings} />
+          <Card icon="👤" tone="profile" label={t('menu_profile', 'Profil')} desc={''} onClick={onOpenProfile} />
         </div>
       </div>
     </div>

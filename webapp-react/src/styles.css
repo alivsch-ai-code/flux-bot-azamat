@@ -64,7 +64,13 @@ body {
 
 .top-bar .credits {
   color: var(--accent);
-  font-weight: 700;
+  font-weight: 740;
+  letter-spacing: 0.01em;
+}
+
+.top-bar .user {
+  font-weight: 620;
+  letter-spacing: -0.01em;
 }
 
 .header {
@@ -97,6 +103,59 @@ body {
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(8px) saturate(112%);
   animation: rise-in 360ms ease both;
+  position: relative;
+  overflow: hidden;
+}
+
+.card-animated-bg {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  opacity: 0.7;
+  filter: blur(18px) saturate(120%);
+  transform: translateZ(0);
+  animation: card-float 9s ease-in-out infinite;
+}
+
+.card-tone-image .card-animated-bg {
+  background: radial-gradient(circle at 15% 20%, rgba(10, 132, 255, 0.42), transparent 52%),
+    radial-gradient(circle at 80% 82%, rgba(100, 210, 255, 0.3), transparent 48%);
+}
+
+.card-tone-video .card-animated-bg {
+  background: radial-gradient(circle at 20% 25%, rgba(94, 92, 230, 0.45), transparent 55%),
+    radial-gradient(circle at 75% 78%, rgba(191, 90, 242, 0.28), transparent 52%);
+}
+
+.card-tone-audio .card-animated-bg {
+  background: radial-gradient(circle at 18% 20%, rgba(48, 209, 88, 0.36), transparent 52%),
+    radial-gradient(circle at 82% 80%, rgba(100, 210, 255, 0.25), transparent 50%);
+}
+
+.card-tone-text .card-animated-bg {
+  background: radial-gradient(circle at 20% 20%, rgba(255, 159, 10, 0.38), transparent 50%),
+    radial-gradient(circle at 83% 82%, rgba(255, 69, 58, 0.2), transparent 48%);
+}
+
+.card-tone-tools .card-animated-bg {
+  background: radial-gradient(circle at 20% 18%, rgba(99, 102, 241, 0.35), transparent 52%),
+    radial-gradient(circle at 80% 80%, rgba(10, 132, 255, 0.22), transparent 48%);
+}
+
+.card-tone-shop .card-animated-bg {
+  background: radial-gradient(circle at 18% 22%, rgba(255, 214, 10, 0.35), transparent 52%),
+    radial-gradient(circle at 80% 75%, rgba(255, 159, 10, 0.22), transparent 48%);
+}
+
+.card-tone-settings .card-animated-bg,
+.card-tone-profile .card-animated-bg {
+  background: radial-gradient(circle at 20% 20%, rgba(174, 174, 178, 0.22), transparent 50%),
+    radial-gradient(circle at 80% 82%, rgba(94, 92, 230, 0.16), transparent 46%);
+}
+
+.card > *:not(.card-animated-bg) {
+  position: relative;
+  z-index: 1;
 }
 
 .card:hover {
@@ -264,9 +323,10 @@ body {
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 4px 20px var(--glow-accent);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  transition: transform 0.17s ease, box-shadow 0.17s ease, filter 0.17s ease;
   position: relative;
   overflow: hidden;
+  letter-spacing: 0.01em;
 }
 
 .btn-start::before {
@@ -300,7 +360,8 @@ body {
   border-radius: var(--radius-md);
   font-size: 0.95rem;
   font-family: inherit;
-  font-weight: 600;
+  font-weight: 620;
+  letter-spacing: 0.005em;
   cursor: pointer;
   transition: transform 0.14s ease, border-color 0.14s ease, background-color 0.14s ease;
 }
@@ -482,6 +543,18 @@ body {
   color: var(--text-muted);
   line-height: 1.35;
   animation: fade-in 220ms ease-out;
+}
+
+@keyframes card-float {
+  0% {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(3%, 2%, 0) scale(1.05);
+  }
+  100% {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
 }
 
 @keyframes rise-in {
