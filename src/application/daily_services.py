@@ -318,6 +318,16 @@ class DailyService:
                     desc = re.sub(r"<[^>]+>", "", desc_html).strip()
                     raw_link = (getattr(entry, "link", "") or "").strip()
                     link = self._normalize_news_link(raw_link, desc_html)
+                    if (not link or "news.google.com" in (urlparse(link).netloc or "").lower()):
+                        src = getattr(entry, "source", None) or {}
+                        src_href = ""
+                        try:
+                            src_href = (src.get("href", "") if isinstance(src, dict) else getattr(src, "href", "")) or ""
+                        except Exception:
+                            src_href = ""
+                        src_href = src_href.strip()
+                        if self._is_http_url(src_href):
+                            link = src_href
                     published = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
                     published_ts = int(time.mktime(published)) if published else 0
                     if title:
@@ -335,7 +345,13 @@ class DailyService:
             seen = set()
             deduped = []
             for item in sorted(combined, key=lambda x: x.get("published_ts", 0), reverse=True):
-                k = item.get("link") or item.get("title")
+                link = (item.get("link") or "").strip()
+                host = (urlparse(link).netloc or "").lower() if link else ""
+                # Google-RSS-Links können wechseln; für stabile Dedupe lieber Titel+Quelle.
+                if "news.google.com" in host or not link:
+                    k = f"{(item.get('source') or '').strip()}::{(item.get('title') or '').strip()}".lower()
+                else:
+                    k = link
                 if not k or k in seen:
                     continue
                 seen.add(k)
@@ -370,13 +386,24 @@ class DailyService:
                     if DailyService._is_http_url(candidate) and "news.google.com" not in urlparse(candidate).netloc.lower():
                         return candidate
 
-            # Fallback: versuche erste externe URL aus HTML-Snippet zu ziehen.
-            for m in re.finditer(r"https?://[^\s\"'<>]+", desc_html or ""):
-                candidate = unquote((m.group(0) or "").strip())
+            # Fallback 1: href-Links aus HTML-Snippet extrahieren.
+            html_blob = html.unescape(desc_html or "")
+            for m in re.finditer(r'href=["\']([^"\']+)["\']', html_blob, flags=re.IGNORECASE):
+                candidate = unquote((m.group(1) or "").strip())
                 if DailyService._is_http_url(candidate):
                     c_host = (urlparse(candidate).netloc or "").lower()
                     if "news.google.com" not in c_host and "google.com" not in c_host:
                         return candidate
+
+            # Fallback 2: erste externe URL aus Textfragment ziehen.
+            for m in re.finditer(r"https?://[^\s\"'<>]+", html_blob):
+                candidate = unquote((m.group(0) or "").strip())
+                candidate = candidate.replace("&amp;", "&")
+                if DailyService._is_http_url(candidate):
+                    c_host = (urlparse(candidate).netloc or "").lower()
+                    if "news.google.com" not in c_host and "google.com" not in c_host:
+                        return candidate
+
         except Exception:
             pass
         return link
@@ -430,12 +457,26 @@ class DailyService:
             for it in result_data:
                 if isinstance(it, str) and it.strip():
                     return it.strip()
+                if hasattr(it, "url"):
+                    try:
+                        url = str(getattr(it, "url") or "").strip()
+                        if url:
+                            return url
+                    except Exception:
+                        pass
             return None
         # Bei Generator/Iterator aus manchen Clients
         try:
             for it in result_data:
                 if isinstance(it, str) and it.strip():
                     return it.strip()
+                if hasattr(it, "url"):
+                    try:
+                        url = str(getattr(it, "url") or "").strip()
+                        if url:
+                            return url
+                    except Exception:
+                        pass
         except Exception:
             pass
         return None
@@ -463,7 +504,8 @@ class DailyService:
         """
         for attempt in range(1, retries + 1):
             try:
-                self.bot.send_photo(target_id, image_url, caption=caption, parse_mode="HTML" if caption else None)
+                # Kein HTML-ParseMode bei Captions: vermeidet Parse-Fehler durch LLM-Text.
+                self.bot.send_photo(target_id, image_url, caption=caption)
                 return True
             except Exception as e:
                 if attempt >= retries:
@@ -471,6 +513,40 @@ class DailyService:
                     return False
                 time.sleep(delay_s)
         return False
+
+    def _generate_news_image_url_with_retry(self, recipients: list[tuple], news_block: str, image_model, retries: int = 2, delay_s: float = 2.0) -> str | None:
+        """
+        Generiert das News-Bild und wartet/retried bis eine gültige URL verfügbar ist.
+        """
+        if not image_model:
+            return None
+        if not recipients:
+            return None
+        gen_user_id = next((uid for r_type, uid, _lang in recipients if r_type == "user"), recipients[0][1])
+        image_prompt = (
+            "Create a visually striking editorial AI-news image, futuristic and clean, "
+            "no text, no logos, no watermarks. Themes:\n\n"
+            f"{news_block}\n\n"
+            "Style: modern digital illustration, cinematic lighting, high detail."
+        )
+        for attempt in range(1, retries + 1):
+            ok_img, img_result = self.generation_service.process_request(
+                gen_user_id,
+                image_model,
+                image_prompt,
+                media_files=None,
+                no_charge=True,
+            )
+            if ok_img:
+                candidate_url = self._extract_first_media_url(img_result)
+                if self._is_http_url(candidate_url):
+                    return candidate_url
+                logger.warning("Daily News image result without valid URL (attempt %s/%s): %r", attempt, retries, candidate_url)
+            else:
+                logger.warning("Daily News image generation failed (attempt %s/%s): %s", attempt, retries, img_result)
+            if attempt < retries:
+                time.sleep(delay_s)
+        return None
 
     def _maybe_send_ai_news_post(self):
         """5×/Tag: Holt AI-News aus RSS, fasst/übersetzt mit Gemini und postet inkl. Nano-Banana-Bild."""
@@ -490,7 +566,12 @@ class DailyService:
         for n in news_items[:3]:
             link = (n.get("link") or "").strip()
             title = (n.get("title") or "").strip()
-            parts.append(link or title)
+            source = (n.get("source") or "").strip().lower()
+            host = (urlparse(link).netloc or "").lower() if link else ""
+            if "news.google.com" in host or not link:
+                parts.append(f"{source}:{title.lower()}")
+            else:
+                parts.append(link)
         return "|".join(parts).strip()
 
     def _maybe_broadcast_new_rss_news(self) -> None:
@@ -500,6 +581,18 @@ class DailyService:
         - nur wenn Signatur neu ist
         - mindestens RSS_WATCH_MIN_INTERVAL_SECONDS zwischen Aussendungen
         """
+        now_ts = int(time.time())
+        # Hard cooldown im Runtime-Kontext: verhindert Doppelposts im Minutentakt.
+        if self._last_rss_sent_ts_runtime > 0 and (now_ts - self._last_rss_sent_ts_runtime) < RSS_WATCH_MIN_INTERVAL_SECONDS:
+            return
+
+        # Lokaler Guard: schützt vor doppeltem Versand, falls DB-Setting verzögert/fehlerhaft ist.
+        if (
+            self._last_rss_signature_runtime
+            and (now_ts - self._last_rss_sent_ts_runtime) < RSS_WATCH_MIN_INTERVAL_SECONDS
+        ):
+            return
+
         news_items = self._fetch_ai_news_from_rss(max_items=2)
         if len(news_items) < 2:
             return
@@ -511,8 +604,6 @@ class DailyService:
         if signature == last_sig:
             return
 
-        now_ts = int(time.time())
-        # Lokaler Guard: schützt vor doppeltem Versand, falls DB-Setting verzögert/fehlerhaft ist.
         if (
             self._last_rss_signature_runtime
             and signature == self._last_rss_signature_runtime
@@ -582,23 +673,23 @@ class DailyService:
         )
 
         def _build_sources_footer(lang: str) -> str:
-            # Kompakte, mehrsprachige Quellenangabe als HTML.
+            # Kompakte, mehrsprachige Quellenangabe als Plaintext mit direkten URLs.
             labels = {
                 "de": "Quellen",
                 "ru": "Источники",
                 "kk": "Дереккөздер",
             }
             label = labels.get(lang, "Sources")
-            lines = [f"<b>{label}:</b>"]
+            lines = [f"{label}:"]
             for n in news_items[:2]:
                 link = (n.get("link") or "").strip()
-                source_name = html.escape((n.get("source") or "News").strip())
-                title = html.escape((n.get("title") or "").strip())
-                anchor_text = source_name if source_name else (title or "News")
+                source_name = (n.get("source") or "News").strip()
+                title = (n.get("title") or "").strip()
+                display = source_name if source_name else (title or "News")
                 if link:
-                    lines.append(f"• <a href=\"{link}\">{anchor_text}</a>")
+                    lines.append(f"- {display}: {link}")
                 elif title:
-                    lines.append(f"• {title}")
+                    lines.append(f"- {title}")
             return "\n".join(lines)
 
         # Telegram caption limit (photo captions max ~1024 chars).
@@ -619,15 +710,19 @@ class DailyService:
         if not recipients:
             return {"ok": False, "reason": "no_recipients", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
 
-        # Dedupe schützt vor doppelter Zustellung an dieselbe Gruppe/User-ID.
+        # Dedupe über chat_id (unabhängig vom Typ), damit Gruppe nicht zusätzlich als "User" bedient wird.
+        # Wenn dieselbe chat_id in beiden Listen ist, gewinnt die Gruppen-Variante.
         dedup = []
-        seen_targets = set()
+        seen_chat_ids = set()
         for t_type, t_id, t_lang in recipients:
-            key = (t_type, int(t_id))
-            if key in seen_targets:
+            try:
+                cid = int(t_id)
+            except Exception:
                 continue
-            seen_targets.add(key)
-            dedup.append((t_type, t_id, t_lang))
+            if cid in seen_chat_ids:
+                continue
+            seen_chat_ids.add(cid)
+            dedup.append((t_type, cid, t_lang))
 
         targets = dedup if broadcast_all else [random.choice(dedup)]
         sent_count = 0
@@ -636,32 +731,8 @@ class DailyService:
         image_model = self._resolve_news_image_model()
         # Summary wird einmal pro Sprache erzeugt und dann wiederverwendet.
         summary_by_lang: dict[str, str] = {}
-        # Bild nur EINMAL pro News-Batch generieren (stabiler bei mehreren laufenden Pipelines).
-        batch_image_url = None
-        if image_model:
-            image_prompt = (
-                "Create a visually striking editorial AI-news image, futuristic and clean, "
-                "no text, no logos, no watermarks. Themes:\n\n"
-                f"{news_block}\n\n"
-                "Style: modern digital illustration, cinematic lighting, high detail."
-            )
-            # Für globale System-Posts genügt ein stabiler User-Kontext.
-            gen_user_id = next((uid for r_type, uid, _lang in recipients if r_type == "user"), recipients[0][1])
-            ok_img, img_result = self.generation_service.process_request(
-                gen_user_id,
-                image_model,
-                image_prompt,
-                media_files=None,
-                no_charge=True,
-            )
-            if ok_img:
-                candidate_url = self._extract_first_media_url(img_result)
-                if self._is_http_url(candidate_url):
-                    batch_image_url = candidate_url
-                else:
-                    logger.warning("Daily News image generated but URL invalid/empty: %r", candidate_url)
-            else:
-                logger.warning("Daily News image generation failed: %s", img_result)
+        # Bild wird einmal pro Batch generiert; Trigger wartet bis URL vorhanden oder Retry-Limit erreicht.
+        batch_image_url = self._generate_news_image_url_with_retry(dedup, news_block, image_model, retries=3, delay_s=2.0)
 
         for target_type, target_id, lang in targets:
             lang_key = (lang or "en").strip() or "en"
@@ -694,9 +765,9 @@ class DailyService:
                     if sent_img:
                         pass
                     else:
-                        self.bot.send_message(target_id, final_text, parse_mode="HTML")
+                        self.bot.send_message(target_id, final_text)
                 else:
-                    self.bot.send_message(target_id, final_text, parse_mode="HTML")
+                    self.bot.send_message(target_id, final_text)
 
                 if target_type == "user":
                     append_global_chat_event(self.db, target_id, "assistant", final_text)
@@ -712,6 +783,12 @@ class DailyService:
 
         if sent_count <= 0:
             return {"ok": False, "reason": "summary_generation_failed", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": len(targets)}
+
+        # Runtime-Marker auch für manuelle Trigger setzen (schützt vor sofortigen Doppelposts).
+        self._last_rss_sent_ts_runtime = int(time.time())
+        sig_now = self._build_news_signature(news_items)
+        if sig_now:
+            self._last_rss_signature_runtime = sig_now
 
         if not force:
             self.db.increment_azamat_random_count_today()
