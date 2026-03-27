@@ -5,6 +5,7 @@ import re
 import time
 import threading
 import logging
+import html
 from urllib.parse import urlparse
 from datetime import datetime
 
@@ -411,13 +412,20 @@ class DailyService:
         except Exception:
             return False
 
-    def _send_news_image_with_retry(self, target_id: int, image_url: str, retries: int = 3, delay_s: float = 2.0) -> bool:
+    def _send_news_image_with_retry(
+        self,
+        target_id: int,
+        image_url: str,
+        caption: str | None = None,
+        retries: int = 3,
+        delay_s: float = 2.0,
+    ) -> bool:
         """
         Versucht das News-Bild mehrfach zu senden, falls CDN/URL noch nicht sofort verfügbar ist.
         """
         for attempt in range(1, retries + 1):
             try:
-                self.bot.send_photo(target_id, image_url)
+                self.bot.send_photo(target_id, image_url, caption=caption, parse_mode="HTML" if caption else None)
                 return True
             except Exception as e:
                 if attempt >= retries:
@@ -525,6 +533,33 @@ class DailyService:
             for i, n in enumerate(news_items)
         )
 
+        def _build_sources_footer(lang: str) -> str:
+            # Kompakte, mehrsprachige Quellenangabe als HTML.
+            labels = {
+                "de": "Quellen",
+                "ru": "Источники",
+                "kk": "Дереккөздер",
+            }
+            label = labels.get(lang, "Sources")
+            lines = [f"<b>{label}:</b>"]
+            for n in news_items[:2]:
+                link = (n.get("link") or "").strip()
+                source_name = html.escape((n.get("source") or "News").strip())
+                title = html.escape((n.get("title") or "").strip())
+                anchor_text = source_name if source_name else (title or "News")
+                if link:
+                    lines.append(f"• <a href=\"{link}\">{anchor_text}</a>")
+                elif title:
+                    lines.append(f"• {title}")
+            return "\n".join(lines)
+
+        # Telegram caption limit (photo captions max ~1024 chars).
+        def _cap_caption(text: str, max_len: int = 1000) -> str:
+            t = (text or "").strip()
+            if len(t) <= max_len:
+                return t
+            return (t[: max_len - 3]).rstrip() + "..."
+
         recipients = []
         for chat_id in self.db.get_all_tracked_groups():
             lang = self.db.get_group_language(chat_id)
@@ -536,11 +571,23 @@ class DailyService:
         if not recipients:
             return {"ok": False, "reason": "no_recipients", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
 
-        targets = recipients if broadcast_all else [random.choice(recipients)]
+        # Dedupe schützt vor doppelter Zustellung an dieselbe Gruppe/User-ID.
+        dedup = []
+        seen_targets = set()
+        for t_type, t_id, t_lang in recipients:
+            key = (t_type, int(t_id))
+            if key in seen_targets:
+                continue
+            seen_targets.add(key)
+            dedup.append((t_type, t_id, t_lang))
+
+        targets = dedup if broadcast_all else [random.choice(dedup)]
         sent_count = 0
         first_sent_to = None
         first_type = None
         image_model = self._resolve_news_image_model()
+        # Summary wird einmal pro Sprache erzeugt und dann wiederverwendet.
+        summary_by_lang: dict[str, str] = {}
         # Bild nur EINMAL pro News-Batch generieren (stabiler bei mehreren laufenden Pipelines).
         batch_image_url = None
         if image_model:
@@ -569,24 +616,42 @@ class DailyService:
                 logger.warning("Daily News image generation failed: %s", img_result)
 
         for target_type, target_id, lang in targets:
-            prompt_tpl = get_text("azamat_news_summary_prompt", lang)
-            prompt = f"{prompt_tpl}\n\n---\n{news_block}\n---\n\nOutput ONLY the summarized news text."
-            user_id_for_gen = target_id if target_type == "user" else (self.db.get_subscribed_users() or [target_id])[0]
-            ok, result = self.generation_service.process_request(
-                user_id_for_gen, model, prompt, media_files=None, no_charge=True
-            )
-            if not ok or not result or not str(result).strip():
-                continue
-            text = str(result).strip()
-            try:
-                self.bot.send_message(target_id, text, parse_mode="HTML")
-                if target_type == "user":
-                    append_global_chat_event(self.db, target_id, "assistant", text)
+            lang_key = (lang or "en").strip() or "en"
+            if lang_key not in summary_by_lang:
+                prompt_tpl = get_text("azamat_news_summary_prompt", lang_key)
+                prompt = f"{prompt_tpl}\n\n---\n{news_block}\n---\n\nOutput ONLY the summarized news text."
+                user_id_for_gen = target_id if target_type == "user" else (self.db.get_subscribed_users() or [target_id])[0]
+                ok, result = self.generation_service.process_request(
+                    user_id_for_gen, model, prompt, media_files=None, no_charge=True
+                )
+                if not ok or not result or not str(result).strip():
+                    continue
+                summary_text = str(result).strip()
+                summary_by_lang[lang_key] = summary_text
 
-                # Optionales Daily-News-Bild (vorher einmalig generiert) mit Retry senden.
-                if batch_image_url and self._send_news_image_with_retry(target_id, batch_image_url):
-                    if target_type == "user":
-                        append_global_chat_event(self.db, target_id, "assistant", "[daily_news_image]")
+            text = summary_by_lang.get(lang_key, "").strip()
+            if not text:
+                continue
+            final_text = f"{text}\n\n{_build_sources_footer(lang_key)}"
+            try:
+                # Anforderung: Bild + Text in EINER Nachricht.
+                if batch_image_url:
+                    sent_img = self._send_news_image_with_retry(
+                        target_id,
+                        batch_image_url,
+                        caption=_cap_caption(final_text),
+                        retries=3,
+                        delay_s=2.0,
+                    )
+                    if sent_img:
+                        pass
+                    else:
+                        self.bot.send_message(target_id, final_text, parse_mode="HTML")
+                else:
+                    self.bot.send_message(target_id, final_text, parse_mode="HTML")
+
+                if target_type == "user":
+                    append_global_chat_event(self.db, target_id, "assistant", final_text)
             except Exception as e:
                 # WICHTIG: Einzelne fehlgeschlagene Chats dürfen den Broadcast nicht abbrechen.
                 logger.warning("Daily News send failed for %s (%s): %s", target_type, target_id, e)
