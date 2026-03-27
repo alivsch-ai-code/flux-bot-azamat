@@ -6,7 +6,7 @@ import time
 import threading
 import logging
 import html
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from datetime import datetime
 
 import feedparser
@@ -80,6 +80,9 @@ class DailyService:
         self.db = db
         self.generation_service = generation_service
         self.running = False
+        # Laufzeit-Guard gegen Doppelversand bei kurz aufeinanderfolgenden Loop-Läufen.
+        self._last_rss_signature_runtime = ""
+        self._last_rss_sent_ts_runtime = 0
 
     def start(self):
         """Startet den Hintergrund-Service in einem separaten Thread."""
@@ -311,9 +314,10 @@ class DailyService:
                 for entry in entries:
                     title = (getattr(entry, "title", "") or "").strip()
                     # description kann HTML enthalten
-                    desc = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
-                    desc = re.sub(r"<[^>]+>", "", desc).strip()
-                    link = (getattr(entry, "link", "") or "").strip()
+                    desc_html = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
+                    desc = re.sub(r"<[^>]+>", "", desc_html).strip()
+                    raw_link = (getattr(entry, "link", "") or "").strip()
+                    link = self._normalize_news_link(raw_link, desc_html)
                     published = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
                     published_ts = int(time.mktime(published)) if published else 0
                     if title:
@@ -342,6 +346,40 @@ class DailyService:
         except Exception as e:
             logger.warning("RSS-Fetch fehlgeschlagen: %s", e)
             return []
+
+    @staticmethod
+    def _normalize_news_link(raw_link: str, desc_html: str = "") -> str:
+        """
+        Versucht Google-Redirect-Links auf die Original-Quelle umzuschreiben.
+        Fallback bleibt der ursprüngliche Link.
+        """
+        link = (raw_link or "").strip()
+        if not link:
+            return ""
+        try:
+            parsed = urlparse(link)
+            host = (parsed.netloc or "").lower()
+            if "news.google.com" not in host:
+                return link
+
+            qs = parse_qs(parsed.query or "", keep_blank_values=False)
+            for key in ("url", "u", "q"):
+                vals = qs.get(key) or []
+                for val in vals:
+                    candidate = unquote((val or "").strip())
+                    if DailyService._is_http_url(candidate) and "news.google.com" not in urlparse(candidate).netloc.lower():
+                        return candidate
+
+            # Fallback: versuche erste externe URL aus HTML-Snippet zu ziehen.
+            for m in re.finditer(r"https?://[^\s\"'<>]+", desc_html or ""):
+                candidate = unquote((m.group(0) or "").strip())
+                if DailyService._is_http_url(candidate):
+                    c_host = (urlparse(candidate).netloc or "").lower()
+                    if "news.google.com" not in c_host and "google.com" not in c_host:
+                        return candidate
+        except Exception:
+            pass
+        return link
 
     def _resolve_news_image_model(self):
         """
@@ -474,6 +512,14 @@ class DailyService:
             return
 
         now_ts = int(time.time())
+        # Lokaler Guard: schützt vor doppeltem Versand, falls DB-Setting verzögert/fehlerhaft ist.
+        if (
+            self._last_rss_signature_runtime
+            and signature == self._last_rss_signature_runtime
+            and (now_ts - self._last_rss_sent_ts_runtime) < RSS_WATCH_MIN_INTERVAL_SECONDS
+        ):
+            return
+
         last_ts_raw = self.db.get_bot_setting("rss_last_sent_ts", "0")
         try:
             last_ts = int((last_ts_raw or "0").strip())
@@ -491,6 +537,8 @@ class DailyService:
         if result.get("ok"):
             self.db.set_bot_setting("rss_last_sent_signature", signature)
             self.db.set_bot_setting("rss_last_sent_ts", str(now_ts))
+            self._last_rss_signature_runtime = signature
+            self._last_rss_sent_ts_runtime = now_ts
 
     def _dispatch_ai_news_post(
         self,
