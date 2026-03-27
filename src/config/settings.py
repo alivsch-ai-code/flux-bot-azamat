@@ -46,10 +46,12 @@ class Settings:
         self.CHAT_SUMMARIZE_AT = max(5, int(os.getenv("CHAT_SUMMARIZE_AT", "20")))
         self.GLOBAL_CHAT_SESSION_KEY = os.getenv("GLOBAL_CHAT_SESSION_KEY", "__global_chat__")
         self._MAX_WEBAPP_PROMPT_LEN = 12000
+        # (label, Anzeige, Preis in Telegram Stars XTR, Credits) — kleinste Zahlung ist 1 ⭐️
         self.CREDIT_PACKAGES = [
-            ("S", "100 Credits", 50, 100),   
-            ("M", "500 Credits", 200, 500),  
-            ("L", "1500 Credits", 500, 1500)
+            ("XXS", "1 Credit (Test)", 1, 1),
+            ("S", "100 Credits", 50, 100),
+            ("M", "500 Credits", 200, 500),
+            ("L", "1500 Credits", 500, 1500),
         ]
 
         # Max. parallele Replicate-Predictions (replicate.run). 1 = streng nacheinander.
