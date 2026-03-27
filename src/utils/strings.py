@@ -248,6 +248,12 @@ STRINGS = {
     "webapp_open_shop": { "en": "💎 Open Shop in the App", "de": "💎 Shop in der App öffnen", "ru": "💎 Открыть магазин в приложении", "kk": "💎 Дүкенді қолданбада ашу" },
     "webapp_open_settings": { "en": "⚙️ Open Settings in the App", "de": "⚙️ Einstellungen in der App öffnen", "ru": "⚙️ Открыть настройки в приложении", "kk": "⚙️ Параметрлерді қолданбада ашу" },
     "webapp_open_profile": { "en": "👤 Open Profile in the App", "de": "👤 Profil in der App öffnen", "ru": "👤 Открыть профиль в приложении", "kk": "👤 Профильді қолданбада ашу" },
+    "webapp_generation_started": {
+        "en": "⏳ Generation started. We will notify you when it is finished.",
+        "de": "⏳ Generierung gestartet. Wir informieren dich, sobald sie fertig ist.",
+        "ru": "⏳ Генерация запущена. Мы сообщим вам, когда она завершится.",
+        "kk": "⏳ Генерация басталды. Аяқталған кезде сізге хабарлаймыз."
+    },
     "webapp_media_choose": { "en": "✅ Media received. Open the App to choose a model:", "de": "✅ Medium erhalten. Öffne die App, um ein Modell zu wählen:", "ru": "✅ Медиа получено. Откройте приложение для выбора модели:", "kk": "✅ Медиа алынды. Модельді таңдау үшін қолданбаны ашыңыз:" },
     "webapp_prompt_magic": { "en": "✨ Prompt Magic", "de": "✨ Prompt Magie", "ru": "✨ Magic", "kk": "✨ Magic" },
     "webapp_daily_news": { "en": "📰 Daily News", "de": "📰 Tägliche News", "ru": "📰 Новости", "kk": "📰 Жаңалықтар" },
@@ -431,6 +437,7 @@ WEBAPP_STRING_KEYS = [
     "webapp_credits_remaining", "webapp_user",
     "webapp_desc_image", "webapp_desc_video", "webapp_desc_audio", "webapp_desc_text", "webapp_desc_tools",
     "webapp_prompt_magic", "webapp_daily_news", "webapp_shop_title", "webapp_shop_package",
+    "webapp_generation_started",
     "btn_opt_on", "btn_opt_off", "btn_daily_on", "btn_daily_off",
     "menu_image", "menu_video", "menu_audio", "menu_text", "menu_tools", "menu_profile",
 ]

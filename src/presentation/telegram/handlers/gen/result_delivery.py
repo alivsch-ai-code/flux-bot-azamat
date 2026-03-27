@@ -23,6 +23,19 @@ logger = logging.getLogger(__name__)
 MAX_URL_LENGTH = 400
 
 
+def _has_media_type(model, token: str) -> bool:
+    types = getattr(model, "type", None) or []
+    t = (token or "").strip().lower()
+    if not t:
+        return False
+    for mt in types:
+        cur = str(mt or "").strip().lower()
+        # Robust für Werte wie "image_generation", "video_generation", etc.
+        if cur == t or t in cur:
+            return True
+    return False
+
+
 def _parse_raw_result(raw):
     """Wandelt API-Roh-Ergebnis in (res_bytes, res) um. res = URL oder None."""
     if isinstance(raw, bytes):
@@ -150,7 +163,7 @@ def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, pro
             return get_text("media_send_failed", lang)
         return f"{res[:400]}\n\n💰 {cost} Credits" if len(res) > 400 else f"{res}\n\n💰 {cost} Credits"
 
-    is_media_model = model.type and ("video" in model.type or "audio" in model.type or "image" in model.type)
+    is_media_model = _has_media_type(model, "video") or _has_media_type(model, "audio") or _has_media_type(model, "image")
     sent = False
 
     # Mehrfach-Bilder (z.B. Premium Pipeline mit 4 Headshots)
@@ -172,9 +185,9 @@ def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, pro
         sent = _try_send_as_file(bot, user_id, res_bytes, res, caption, model)
     if not sent and is_valid_url and is_media_model and not url_too_long:
         try:
-            if model.type and "video" in model.type:
+            if _has_media_type(model, "video"):
                 bot.send_video(user_id, res, caption=caption)
-            elif model.type and "audio" in model.type:
+            elif _has_media_type(model, "audio"):
                 bot.send_audio(user_id, res, caption=caption)
             else:
                 bot.send_photo(user_id, res, caption=caption)

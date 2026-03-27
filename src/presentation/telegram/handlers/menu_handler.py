@@ -102,6 +102,12 @@ def process_webapp_action(
         text, markup = get_group_menu_markup(db, user_id, "")
         bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
         return
+
+    def _send_generation_started_notice() -> None:
+        try:
+            bot.send_message(user_id, get_text("webapp_generation_started", lang))
+        except Exception:
+            pass
     def get_lang(uid):
         return db.get_user_settings(uid)["lang"]
     lang = get_lang(user_id)
@@ -237,6 +243,7 @@ def process_webapp_action(
                 "menu_path": model.menu_path or "root",
             }
             set_context(user_id, ctx_pre)
+            _send_generation_started_notice()
             run_fn(user_id, model_key, prompt_trim, ctx_media_to_list(ctx_pre), is_chat=False)
             _remove_reply_keyboard_silently(bot, user_id)
             return
@@ -269,6 +276,7 @@ def process_webapp_action(
             prompt_trim = _trim_webapp_prompt(pl.get("prompt"))
             if prompt_trim and _webapp_run_generation:
                 user_name = getattr(db, "get_user_username_or_name", lambda _u: None)(user_id) or "User"
+                _send_generation_started_notice()
                 _webapp_run_generation(
                     user_id,
                     model_key,
@@ -295,6 +303,7 @@ def process_webapp_action(
             }
             set_context(user_id, ctx_pre)
             user_name = getattr(db, "get_user_username_or_name", lambda _u: None)(user_id) or "User"
+            _send_generation_started_notice()
             _webapp_run_generation(
                 user_id,
                 model_key,

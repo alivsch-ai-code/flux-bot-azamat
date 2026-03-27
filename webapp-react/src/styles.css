@@ -1,10 +1,15 @@
 :root {
-  --tg-theme-bg-color: #0c1017;
-  --tg-theme-text-color: #e8edf4;
-  --tg-theme-button-color: #22d3d8;
-  --tg-theme-button-text-color: #061016;
+  --tg-theme-bg-color: #0b0f17;
+  --tg-theme-text-color: #f4f7ff;
+  --tg-theme-button-color: #0a84ff;
+  --tg-theme-button-text-color: #f6f9ff;
   --tg-secondary-bg: rgba(255, 255, 255, 0.06);
   --tg-hint-color: rgba(232, 237, 244, 0.55);
+  --apple-blue: #0a84ff;
+  --apple-indigo: #5e5ce6;
+  --apple-cyan: #64d2ff;
+  --apple-green: #30d158;
+  --apple-orange: #ff9f0a;
   --accent: var(--tg-theme-button-color);
   --accent-contrast: var(--tg-theme-button-text-color);
   --surface: var(--tg-secondary-bg);
@@ -20,14 +25,23 @@
   --glow-accent: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   padding: 16px;
-  background-color: var(--tg-theme-bg-color);
+  background: radial-gradient(1200px 700px at 20% -10%, rgba(10, 132, 255, 0.2), transparent 55%),
+    radial-gradient(1200px 700px at 100% 0%, rgba(94, 92, 230, 0.16), transparent 52%),
+    var(--tg-theme-bg-color);
   color: var(--tg-theme-text-color);
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  animation: page-enter 420ms ease-out;
 }
 
 .hidden {
@@ -44,6 +58,8 @@ body {
   margin-bottom: 18px;
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(10px) saturate(115%);
+  animation: rise-in 380ms ease both;
 }
 
 .top-bar .credits {
@@ -79,12 +95,14 @@ body {
   border: 1px solid var(--border);
   text-align: center;
   box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(8px) saturate(112%);
+  animation: rise-in 360ms ease both;
 }
 
 .card:hover {
   border-color: var(--border-strong);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+  box-shadow: 0 16px 46px rgba(10, 132, 255, 0.2), var(--shadow-md);
+  transform: translateY(-3px) scale(1.01);
 }
 
 .card:active {
@@ -164,6 +182,15 @@ body {
   justify-content: space-between;
   margin-bottom: 10px;
   border: 1px solid var(--border);
+  backdrop-filter: blur(8px) saturate(112%);
+  animation: rise-in 300ms ease both;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.model-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--apple-blue) 36%, transparent);
+  box-shadow: 0 14px 30px rgba(10, 132, 255, 0.18);
 }
 
 .model-left {
@@ -229,7 +256,7 @@ body {
   width: 100%;
   padding: 15px 18px;
   margin: 18px 0 10px;
-  background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 72%, #0a3d42) 100%);
+  background: linear-gradient(130deg, var(--apple-blue) 0%, var(--apple-indigo) 58%, var(--apple-cyan) 100%);
   color: var(--accent-contrast);
   border: none;
   border-radius: var(--radius-md);
@@ -238,6 +265,23 @@ body {
   cursor: pointer;
   box-shadow: 0 4px 20px var(--glow-accent);
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-start::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -130%;
+  width: 65%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.26), transparent);
+  transition: left 0.45s ease;
+}
+
+.btn-start:hover::before {
+  left: 135%;
 }
 
 .btn-start:disabled {
@@ -258,6 +302,13 @@ body {
   font-family: inherit;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, background-color 0.14s ease;
+}
+
+.btn-secondary:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--apple-blue) 35%, transparent);
+  background: color-mix(in srgb, var(--surface-raised) 82%, var(--apple-blue));
 }
 
 .chat-mode-btns {
@@ -278,6 +329,10 @@ body {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
+  min-width: 0;
+  overflow: hidden;
+  backdrop-filter: blur(10px) saturate(115%);
+  animation: rise-in 420ms ease both;
 }
 
 .gen-options h3 {
@@ -294,6 +349,7 @@ body {
   grid-template-columns: 1fr;
   gap: 8px;
   margin-bottom: 12px;
+  min-width: 0;
 }
 
 .gen-row label {
@@ -308,6 +364,7 @@ body {
 .gen-row select,
 .gen-row textarea {
   width: 100%;
+  max-width: 100%;
   padding: 12px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
@@ -315,6 +372,16 @@ body {
   color: var(--tg-theme-text-color);
   font-size: 0.92rem;
   font-family: inherit;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.gen-row input:focus,
+.gen-row select:focus,
+.gen-row textarea:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--apple-blue) 58%, transparent);
+  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.22);
+  background: color-mix(in srgb, var(--tg-theme-bg-color) 82%, var(--apple-blue));
 }
 
 .gen-row textarea {
@@ -347,6 +414,8 @@ body {
 
 .detail-view {
   padding: 0 2px;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .detail-preview {
@@ -405,5 +474,53 @@ body {
 .btn-ref-upload:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.submit-hint {
+  margin-top: 8px;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  animation: fade-in 220ms ease-out;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    filter: saturate(85%);
+  }
+  to {
+    opacity: 1;
+    filter: saturate(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 

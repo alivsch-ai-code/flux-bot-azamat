@@ -67,6 +67,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
 
   const [submitting, setSubmitting] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
+  const [submitInfo, setSubmitInfo] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -225,6 +226,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     setReferenceUploading(false);
     setSubmitting(false);
     setOptimizing(false);
+    setSubmitInfo('');
   }, [modelKey, model]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const baseCost = Number(model?.final_cost || 0);
@@ -416,6 +418,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     }
 
     setSubmitting(true);
+    setSubmitInfo(t('webapp_generation_started', '⏳ Generierung gestartet. Wir informieren dich, sobald sie fertig ist.'));
     try {
       const payload = {};
       if (promptTrim) payload.prompt = promptTrim;
@@ -430,6 +433,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
       await sendWebappAction(action, payload);
     } catch {
       showErrorOverlay('Fehler');
+      setSubmitInfo('');
     } finally {
       setSubmitting(false);
     }
@@ -749,6 +753,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
             🚀 Start ({startButtonLabel})
           </button>
         )}
+        {submitInfo ? <div className="submit-hint">{submitInfo}</div> : null}
       </div>
     </div>
   );
