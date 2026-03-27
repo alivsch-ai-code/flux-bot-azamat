@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from datetime import datetime
 
 import feedparser
+import requests
 
 from telebot import types
 
@@ -318,25 +319,30 @@ class DailyService:
                     desc = re.sub(r"<[^>]+>", "", desc_html).strip()
                     raw_link = (getattr(entry, "link", "") or "").strip()
                     link = self._normalize_news_link(raw_link, desc_html)
+                    src_title = ""
                     if (not link or "news.google.com" in (urlparse(link).netloc or "").lower()):
                         src = getattr(entry, "source", None) or {}
                         src_href = ""
                         try:
+                            src_title = (src.get("title", "") if isinstance(src, dict) else getattr(src, "title", "")) or ""
                             src_href = (src.get("href", "") if isinstance(src, dict) else getattr(src, "href", "")) or ""
                         except Exception:
+                            src_title = ""
                             src_href = ""
                         src_href = src_href.strip()
                         if self._is_http_url(src_href):
                             link = src_href
+                    link = self._resolve_final_news_url(link)
                     published = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
                     published_ts = int(time.mktime(published)) if published else 0
                     if title:
+                        source_label = self._clean_source_label(feed_title, src_title, link)
                         combined.append(
                             {
                                 "title": title,
                                 "snippet": desc[:300],
                                 "link": link,
-                                "source": feed_title,
+                                "source": source_label,
                                 "published_ts": published_ts,
                             }
                         )
@@ -362,6 +368,43 @@ class DailyService:
         except Exception as e:
             logger.warning("RSS-Fetch fehlgeschlagen: %s", e)
             return []
+
+    @staticmethod
+    def _clean_source_label(feed_title: str, source_title: str, link: str) -> str:
+        """
+        Verhindert generische Labels wie 'Artificial Intelligence - Google News'
+        und bevorzugt Publisher-Name bzw. Host.
+        """
+        st = (source_title or "").strip()
+        ft = (feed_title or "").strip()
+        if st and "google news" not in st.lower():
+            return st
+        if ft and "google news" not in ft.lower():
+            return ft
+        host = (urlparse((link or "").strip()).netloc or "").lower()
+        host = host.replace("www.", "")
+        return host or "News"
+
+    @staticmethod
+    def _resolve_final_news_url(link: str, timeout_s: float = 5.0) -> str:
+        """
+        Löst Redirect-Links (insb. news.google.com) auf finalen Artikel-Link auf.
+        Bei Fehlern bleibt Original-Link erhalten.
+        """
+        raw = (link or "").strip()
+        if not raw or not DailyService._is_http_url(raw):
+            return raw
+        host = (urlparse(raw).netloc or "").lower()
+        if "news.google.com" not in host and "google.com" not in host:
+            return raw
+        try:
+            resp = requests.get(raw, allow_redirects=True, timeout=timeout_s, headers={"User-Agent": "Mozilla/5.0"})
+            final_url = (resp.url or "").strip()
+            if DailyService._is_http_url(final_url):
+                return final_url
+        except Exception:
+            pass
+        return raw
 
     @staticmethod
     def _normalize_news_link(raw_link: str, desc_html: str = "") -> str:
