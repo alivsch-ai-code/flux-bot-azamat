@@ -183,6 +183,7 @@ export default function AppShell() {
           folders={modelsData.folders}
           models={modelsData.models}
           favoritesModels={modelsData.favorites_models || []}
+          t={t}
           freeLabel={freeLabel}
           loading={loading}
           currentPath={currentPath}

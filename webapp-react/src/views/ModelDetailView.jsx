@@ -439,14 +439,14 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     }
   }
 
-  if (loading) return <div className="loading">Lade Modell...</div>;
+  if (loading) return <div className="loading">{t('webapp_loading_model', 'Lade Modell...')}</div>;
   if (error) return <div className="loading">{error}</div>;
-  if (!model || !model.ok) return <div className="loading">Model not found</div>;
+  if (!model || !model.ok) return <div className="loading">{t('webapp_model_not_found', 'Model not found')}</div>;
 
   const types = model.model_type || [];
   const fallbackEmoji = fallbackEmojiForModelDetail(types, model.name);
   const imgHtml = model.example_image_url ? (
-    <img className="detail-preview" src={model.example_image_url} alt="Beispiel" onError={(e) => (e.currentTarget.style.display = 'none')} />
+    <img className="detail-preview" src={model.example_image_url} alt={t('webapp_example', 'Beispiel')} onError={(e) => (e.currentTarget.style.display = 'none')} />
   ) : (
     <div className="detail-preview-fallback">{fallbackEmoji}</div>
   );
@@ -617,34 +617,34 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
       <div className="detail-desc">{model.description}</div>
       {exampleBlock}
 
-      <div className="detail-cost">💰 Kosten: {baseCost} Credits</div>
+      <div className="detail-cost">💰 {t('webapp_cost', 'Kosten')}: {baseCost} Credits</div>
 
       <div className="gen-options" id="model-input-block">
-        <h3>✍️ {isText ? 'Eingabe (optional)' : 'Prompt'}</h3>
+        <h3>✍️ {isText ? t('webapp_input_optional', 'Eingabe (optional)') : t('webapp_prompt', 'Prompt')}</h3>
         <div className="gen-row">
-          <label>{isText ? 'Prompt / erste Nachricht' : 'Prompt' + (schemaRequired.includes('prompt') ? ' *' : '')}</label>
+          <label>{isText ? t('webapp_prompt_first_message', 'Prompt / erste Nachricht') : t('webapp_prompt', 'Prompt') + (schemaRequired.includes('prompt') ? ' *' : '')}</label>
           <textarea rows={isText ? 3 : 4} placeholder={promptPlaceholder} value={promptText} onChange={(e) => setPromptText(e.target.value)} />
         </div>
         <div className="gen-row">
           <button type="button" className="btn-secondary btn-optimize-paid" onClick={handleOptimizePaid} disabled={optimizing}>
-            {optimizing ? '⏳ …' : '✨ Optimize (+3 ⭐)'}
+            {optimizing ? '⏳ …' : `✨ ${t('webapp_optimize_paid', 'Optimize (+3 ⭐)')}`}
           </button>
         </div>
         {!isText && hasNegativeInSchema ? (
           <div className="gen-row">
-            <label>Negative prompt (optional)</label>
-            <textarea rows={2} placeholder="Was vermeiden..." value={negativePromptText} onChange={(e) => setNegativePromptText(e.target.value)} />
+            <label>{t('webapp_negative_prompt_optional', 'Negative prompt (optional)')}</label>
+            <textarea rows={2} placeholder={t('webapp_negative_prompt_placeholder', 'Was vermeiden...')} value={negativePromptText} onChange={(e) => setNegativePromptText(e.target.value)} />
           </div>
         ) : null}
       </div>
 
       {shouldShowGenBlock ? (
         <div className="gen-options" id="generation-options">
-          <h3>⚙️ Generation Optionen</h3>
+          <h3>⚙️ {t('webapp_generation_options', 'Generation Optionen')}</h3>
 
           {opt.duration && opt.duration.enabled ? (
             <div className="gen-row">
-              <label>Duration</label>
+              <label>{t('webapp_duration', 'Duration')}</label>
               <select value={durationValue} onChange={(e) => setDuration(Number(e.target.value || 5))}>
                 {durEnum.map((v) => (
                   <option value={v} key={v}>
@@ -657,7 +657,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
 
           {opt.reference_images && opt.reference_images.enabled ? (
             <div className="gen-row">
-              <label>Reference Images (URLs oder Upload)</label>
+              <label>{t('webapp_reference_images', 'Reference Images (URLs oder Upload)')}</label>
               <div className="ref-upload-toolbar">
                 <input
                   type="file"
@@ -673,7 +673,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
                   }}
                 />
                 <button type="button" className="btn-ref-upload" id="gen-reference-upload-btn" disabled={referenceUploading || submitting || optimizing} onClick={() => referenceFileInputRef.current?.click()}>
-                  📎 Bilder hochladen
+                  📎 {t('webapp_upload_images', 'Bilder hochladen')}
                 </button>
                 <span className="gen-hint" style={{ display: referenceUploadStatus ? 'inline' : 'none', margin: 0 }}>
                   {referenceUploadStatus}
@@ -689,11 +689,11 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
           ) : null}
 
           <details className="advanced-details" id="advanced-gen-settings">
-            <summary>⚙️ Erweiterte Einstellungen</summary>
+            <summary>⚙️ {t('webapp_advanced_settings', 'Erweiterte Einstellungen')}</summary>
 
             {resEnum.length ? (
               <div className="gen-row">
-                <label>Resolution</label>
+                <label>{t('webapp_resolution', 'Resolution')}</label>
                 <select value={resolution} onChange={(e) => setResolution(e.target.value)}>
                   {resEnum.map((v, idx) => (
                     <option value={String(v)} key={idx}>
@@ -706,7 +706,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
 
             {ratioEnum.length ? (
               <div className="gen-row">
-                <label>Aspect Ratio</label>
+                <label>{t('webapp_aspect_ratio', 'Aspect Ratio')}</label>
                 <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)}>
                   {ratioEnum.map((v, idx) => (
                     <option value={String(v)} key={idx}>
@@ -719,7 +719,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
 
             {opt.generate_audio && opt.generate_audio.enabled ? (
               <div className="gen-row">
-                <label>Generate Audio</label>
+                <label>{t('webapp_generate_audio', 'Generate Audio')}</label>
                 <select value={generateAudio ? 'true' : 'false'} onChange={(e) => setGenerateAudio(e.target.value === 'true')}>
                   <option value="true">true</option>
                   <option value="false">false</option>
@@ -733,7 +733,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
           {dynamicMediaLikeKeys.map((k) => renderDynamicField(k))}
 
           <div className="detail-cost" style={{ marginTop: 12 }}>
-            💰 Kosten: {computedCost} Credits
+            💰 {t('webapp_cost', 'Kosten')}: {computedCost} Credits
           </div>
         </div>
       ) : null}
@@ -742,15 +742,15 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
         {isText ? (
           <div className="chat-mode-btns">
             <button type="button" className="btn-start" disabled={submitting} onClick={() => handleSubmit(`chat_mode_yes_${model.key}`)}>
-              ✅ Chat starten
+              ✅ {t('webapp_start_chat', 'Chat starten')}
             </button>
             <button type="button" className="btn-secondary" disabled={submitting} onClick={() => handleSubmit(`chat_mode_no_${model.key}`)}>
-              ❌ Einmaliger Prompt
+              ❌ {t('webapp_single_prompt', 'Einmaliger Prompt')}
             </button>
           </div>
         ) : (
           <button type="button" className="btn-start" disabled={submitting} onClick={() => handleSubmit(`start_gen_${model.key}`)}>
-            🚀 Start ({startButtonLabel})
+            🚀 {t('webapp_start', 'Start')} ({startButtonLabel})
           </button>
         )}
         {submitInfo ? <div className="submit-hint">{submitInfo}</div> : null}

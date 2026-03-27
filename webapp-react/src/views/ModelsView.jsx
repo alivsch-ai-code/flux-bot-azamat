@@ -6,6 +6,14 @@ function folderIcon(slug) {
   if (s.includes('google')) return '🧠';
   if (s.includes('flux')) return '✨';
   if (s.includes('openai')) return '🤖';
+  if (s.includes('anthropic')) return '🧠';
+  if (s.includes('deepseek')) return '🔎';
+  if (s.includes('xai')) return '❌';
+  if (s.includes('meta')) return 'Ⓜ️';
+  if (s.includes('qwen')) return '🛰️';
+  if (s.includes('minimax')) return '🎞️';
+  if (s.includes('tencent')) return '🟦';
+  if (s.includes('kling')) return '⚡';
   if (s.includes('ideogram')) return '🧩';
   if (s.includes('recraft')) return '🪄';
   if (s.includes('stability')) return '🌀';
@@ -20,6 +28,14 @@ function folderLogoUrl(slug) {
   // Official brand marks via Simple Icons CDN.
   if (s.includes('google')) return 'https://cdn.simpleicons.org/google/4285F4';
   if (s.includes('openai')) return 'https://cdn.simpleicons.org/openai/FFFFFF';
+  if (s.includes('anthropic')) return 'https://cdn.simpleicons.org/anthropic/FFFFFF';
+  if (s.includes('deepseek')) return 'https://cdn.simpleicons.org/deepseek/64D2FF';
+  if (s.includes('xai')) return 'https://cdn.simpleicons.org/x/FFFFFF';
+  if (s.includes('meta')) return 'https://cdn.simpleicons.org/meta/5AC8FA';
+  if (s.includes('qwen')) return 'https://cdn.simpleicons.org/alibabadotcom/FF6A00';
+  if (s.includes('minimax')) return 'https://cdn.simpleicons.org/minutemailer/7DE7FF';
+  if (s.includes('tencent')) return 'https://cdn.simpleicons.org/tencentqq/5AC8FA';
+  if (s.includes('kling')) return 'https://cdn.simpleicons.org/lightning/64D2FF';
   if (s.includes('flux')) return 'https://cdn.simpleicons.org/lightning/64D2FF';
   if (s.includes('ideogram')) return 'https://cdn.simpleicons.org/pictureinpicture/64D2FF';
   if (s.includes('recraft')) return 'https://cdn.simpleicons.org/figma/FFFFFF';
@@ -49,24 +65,26 @@ function ModelLogo({ model }) {
   return <div className="model-logo-fallback" title="No logo">{fallbackEmojiForModel(model)}</div>;
 }
 
-export default function ModelsView({ title, folders, models, favoritesModels, freeLabel, loading, currentPath, onBack, onSelectFolder, onSelectModel }) {
+export default function ModelsView({ title, folders, models, favoritesModels, freeLabel, loading, currentPath, onBack, onSelectFolder, onSelectModel, t }) {
   const favoriteModels = Array.isArray(favoritesModels) ? favoritesModels : [];
   const regularModels = models || [];
 
   return (
     <div>
       <div className="back-btn" onClick={onBack} role="button" tabIndex={0}>
-        ← <span>Zurück</span>
+        ← <span>{t ? t('webapp_back', 'Zurück') : 'Zurück'}</span>
       </div>
       <div className="header">
-        <h1>{title || 'Modelle'}</h1>
+        <h1>{title || (t ? t('webapp_models', 'Modelle') : 'Modelle')}</h1>
       </div>
 
-      {loading ? <div className="loading">Laden...</div> : null}
+      {loading ? <div className="loading">{t ? t('webapp_loading', 'Laden...') : 'Laden...'}</div> : null}
 
       <div style={{ marginTop: 10 }}>
         {(folders || []).length ? (
-          <div className="section-title" style={{ marginTop: 8, marginBottom: 8 }}>📁 Ordner</div>
+          <div className="section-title" style={{ marginTop: 8, marginBottom: 8 }}>
+            📁 {t ? t('webapp_folders', 'Ordner') : 'Ordner'}
+          </div>
         ) : null}
         {(folders || []).length ? <div className="folder-grid">
           {(folders || []).map((f) => {
@@ -102,7 +120,9 @@ export default function ModelsView({ title, folders, models, favoritesModels, fr
         </div> : null}
 
         {favoriteModels.length ? (
-          <div className="section-title" style={{ marginTop: 12, marginBottom: 8 }}>⭐ Favoriten</div>
+          <div className="section-title" style={{ marginTop: 12, marginBottom: 8 }}>
+            ⭐ {t ? t('webapp_favorites', 'Favoriten') : 'Favoriten'}
+          </div>
         ) : null}
 
         {favoriteModels.length ? <div className="favorites-grid">{favoriteModels.map((m) => {
@@ -145,7 +165,7 @@ export default function ModelsView({ title, folders, models, favoritesModels, fr
         })}
 
         {(!folders || folders.length === 0) && (!regularModels || regularModels.length === 0) && (!favoriteModels || favoriteModels.length === 0) && !loading ? (
-          <div className="loading">Keine Modelle gefunden.</div>
+          <div className="loading">{t ? t('webapp_no_models', 'Keine Modelle gefunden.') : 'Keine Modelle gefunden.'}</div>
         ) : null}
       </div>
     </div>
