@@ -22,3 +22,10 @@ def test_resolve_json_fallback_en_then_de():
 def test_resolve_invalid_json_returns_raw():
     raw = "{not json"
     assert _resolve_daily_message_text(raw, "de") == raw
+
+
+def test_daily_fallback_sent_date_key_stable():
+    """Regression: Key für bot_settings muss stabil bleiben (Deploy-sichere 1×/Tag-Logik)."""
+    from src.application.daily_services import BOT_SETTING_DAILY_FALLBACK_SENT_DATE
+
+    assert BOT_SETTING_DAILY_FALLBACK_SENT_DATE == "daily_fallback_sent_date"

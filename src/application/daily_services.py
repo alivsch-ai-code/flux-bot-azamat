@@ -41,8 +41,10 @@ def _parse_rss_urls() -> list[str]:
 
 AI_NEWS_RSS_URLS = _parse_rss_urls()
 
-# Fallback nur 1× pro Tag senden, wenn keine DB-Nachricht
-_last_fallback_date = None
+# Fallback nur 1× pro Tag senden, wenn keine DB-Nachricht.
+# Wichtig: Datum in bot_settings persistieren — reiner RAM (früher _last_fallback_date)
+# resettet bei jedem Deploy und hat alle User erneut mit Fallback-Nachrichten genervt.
+BOT_SETTING_DAILY_FALLBACK_SENT_DATE = "daily_fallback_sent_date"
 _last_errors_cleanup_date = None
 # Azamat-Begrüßung: bereits gesendete Slots (date, slot)
 _last_azamat_slots_done = set()
@@ -112,11 +114,11 @@ class DailyService:
                     self.db.mark_post_as_sent(post_id)
                     logger.info("Daily Service: Nachricht %s als gesendet markiert.", post_id)
                 else:
-                    # Kein Post in DB → Fallback: 1× pro Tag „Hallo! Drück /start“ in User-Sprache
-                    global _last_fallback_date
-                    if _last_fallback_date != today:
+                    # Kein Post in DB → Fallback: 1× pro Tag (nur wenn heute noch nicht gesendet)
+                    sent_for = (self.db.get_bot_setting(BOT_SETTING_DAILY_FALLBACK_SENT_DATE, "") or "").strip()
+                    if sent_for != today:
                         self._broadcast_fallback()
-                        _last_fallback_date = today
+                        self.db.set_bot_setting(BOT_SETTING_DAILY_FALLBACK_SENT_DATE, today)
 
                 # generation_errors: Einträge älter als 7 Tage löschen (1× pro Tag)
                 global _last_errors_cleanup_date
