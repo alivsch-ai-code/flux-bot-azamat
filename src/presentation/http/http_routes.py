@@ -396,7 +396,9 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             models = runtime.db.get_all_models()
             sub_cats: set[str] = set()
             items = []
+            favorites_items = []
             path_str = str(path or "root")
+            top_category = path_str.split("/")[0] if path_str != "root" else ""
 
             def _is_under_image_tree(menu_path: str) -> bool:
                 mp = str(menu_path or "")
@@ -404,11 +406,13 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
 
             def _belongs_to_view(m) -> bool:
                 mp = str(getattr(m, "menu_path", "") or "")
-                if path_str == "image/favorites":
-                    return _is_under_image_tree(mp) and bool(getattr(m, "is_favorite", False))
-                if path_str.startswith("image/") and path_str != "image/favorites":
-                    return mp == path_str
                 return mp == path_str
+
+            def _belongs_to_top_category(m) -> bool:
+                if not top_category:
+                    return False
+                mp = str(getattr(m, "menu_path", "") or "")
+                return mp == top_category or mp.startswith(top_category + "/")
 
             for m in models:
                 if _belongs_to_view(m):
@@ -425,14 +429,25 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
                             "provider": getattr(m, "provider", "") or "",
                         }
                     )
+                if bool(getattr(m, "is_favorite", False)) and _belongs_to_top_category(m):
+                    fav_cost = int(m.custom_price if m.custom_price is not None else m.internal_cost)
+                    fav_example_url = _resolve_example_url(getattr(m, "example_data", None))
+                    favorites_items.append(
+                        {
+                            "key": m.key,
+                            "name": m.name,
+                            "final_cost": fav_cost,
+                            "is_favorite": True,
+                            "example_image_url": fav_example_url,
+                            "model_type": m.type or [],
+                            "provider": getattr(m, "provider", "") or "",
+                        }
+                    )
                 elif path_str == "root" and "/" not in m.menu_path and m.menu_path != "root":
                     sub_cats.add(m.menu_path)
-                elif path_str == "image":
-                    # Virtual folder for favorites without moving models away from their brand folders.
-                    if _is_under_image_tree(m.menu_path) and bool(getattr(m, "is_favorite", False)):
-                        sub_cats.add("favorites")
-                    if str(m.menu_path or "").startswith("image/"):
-                        rel = str(m.menu_path)[len("image/") :]
+                elif path_str in ("image", "video", "audio", "text", "tools"):
+                    if str(m.menu_path or "").startswith(path_str + "/"):
+                        rel = str(m.menu_path)[len(path_str) + 1 :]
                         if rel:
                             sub_cats.add(rel.split("/")[0])
                 elif path_str != "root" and str(m.menu_path or "").startswith(path_str + "/"):
@@ -468,7 +483,8 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             title = titles.get(path.split("/")[-1], path.replace("/", " · ").title() if path != "root" else root_title)
             sorted_sub_cats = sorted(sub_cats, key=lambda s: (0, s.lower()) if s.lower() in ("favorites", "favoriten", "favourites") else (1, s.lower()))
             folders = [{"path": seg if path == "root" else f"{path}/{seg}", "slug": seg} for seg in sorted_sub_cats]
-            return jsonify(models=items, folders=folders, title=title)
+            favorites_items = sorted(favorites_items, key=lambda x: (x.get("name") or "").lower())
+            return jsonify(models=items, favorites_models=favorites_items, folders=folders, title=title)
         except Exception as e:
             logger.warning("api_models error: %s", e)
-            return jsonify(models=[], folders=[], title=""), 200
+            return jsonify(models=[], favorites_models=[], folders=[], title=""), 200

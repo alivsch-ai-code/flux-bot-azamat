@@ -53,10 +53,12 @@ export default function AppShell() {
       const data = await loadModels(path || 'root', user.lang);
       const folders = data?.folders || [];
       const models = data?.models || [];
+      const favorites_models = data?.favorites_models || [];
       setModelsData({
         title: data?.title || path || '',
         folders,
         models,
+        favorites_models,
       });
       setCurrentPath(path || 'root');
       setView('models');
@@ -180,6 +182,7 @@ export default function AppShell() {
           title={modelsData.title}
           folders={modelsData.folders}
           models={modelsData.models}
+          favoritesModels={modelsData.favorites_models || []}
           freeLabel={freeLabel}
           loading={loading}
           currentPath={currentPath}

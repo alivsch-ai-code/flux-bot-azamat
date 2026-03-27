@@ -49,7 +49,10 @@ function ModelLogo({ model }) {
   return <div className="model-logo-fallback" title="No logo">{fallbackEmojiForModel(model)}</div>;
 }
 
-export default function ModelsView({ title, folders, models, freeLabel, loading, currentPath, onBack, onSelectFolder, onSelectModel }) {
+export default function ModelsView({ title, folders, models, favoritesModels, freeLabel, loading, currentPath, onBack, onSelectFolder, onSelectModel }) {
+  const favoriteModels = Array.isArray(favoritesModels) ? favoritesModels : [];
+  const regularModels = models || [];
+
   return (
     <div>
       <div className="back-btn" onClick={onBack} role="button" tabIndex={0}>
@@ -62,20 +65,24 @@ export default function ModelsView({ title, folders, models, freeLabel, loading,
       {loading ? <div className="loading">Laden...</div> : null}
 
       <div style={{ marginTop: 10 }}>
-        {(folders || []).map((f) => {
-          const fp = f.path || f.slug;
-          const label = String(f.slug || fp || '').replace(/_/g, ' ');
-          return (
-            <div
-              key={'folder-' + fp}
-              className="model-card"
-              style={{ cursor: 'pointer' }}
-              onClick={() => onSelectFolder(fp)}
-            >
-              <div className="model-left">
+        {(folders || []).length ? (
+          <div className="section-title" style={{ marginTop: 8, marginBottom: 8 }}>📁 Ordner</div>
+        ) : null}
+        {(folders || []).length ? <div className="folder-grid">
+          {(folders || []).map((f) => {
+            const fp = f.path || f.slug;
+            const label = String(f.slug || fp || '').replace(/_/g, ' ');
+            return (
+              <div
+                key={'folder-' + fp}
+                className="folder-tile"
+                onClick={() => onSelectFolder(fp)}
+                role="button"
+                tabIndex={0}
+              >
                 {folderLogoUrl(label) ? (
                   <img
-                    className="model-logo"
+                    className="folder-logo"
                     src={folderLogoUrl(label)}
                     alt={label + ' logo'}
                     onError={(e) => {
@@ -85,23 +92,40 @@ export default function ModelsView({ title, folders, models, freeLabel, loading,
                     }}
                   />
                 ) : null}
-                <div
-                  className="model-logo-fallback"
-                  style={{
-                    borderColor: 'rgba(99,102,241,0.35)',
-                    display: folderLogoUrl(label) ? 'none' : 'flex',
-                  }}
-                >
+                <div className="folder-logo-fallback" style={{ display: folderLogoUrl(label) ? 'none' : 'flex' }}>
                   {folderIcon(label)}
                 </div>
-                <span className="model-name">{label}</span>
+                <div className="folder-title">{label}</div>
               </div>
-              <span className="model-cost">→</span>
+            );
+          })}
+        </div> : null}
+
+        {favoriteModels.length ? (
+          <div className="section-title" style={{ marginTop: 12, marginBottom: 8 }}>⭐ Favoriten</div>
+        ) : null}
+
+        {favoriteModels.length ? <div className="favorites-grid">{favoriteModels.map((m) => {
+          const isFree = (m.final_cost ?? 0) <= 0;
+          const costLabel = isFree ? freeLabel : String(m.final_cost) + ' ⭐';
+          return (
+            <div
+              key={m.key}
+              className="favorite-tile"
+              onClick={() => onSelectModel(m.key)}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="favorite-head">
+                <ModelLogo model={m} />
+                <span className="favorite-name">{m.name}</span>
+              </div>
+              <span className="favorite-cost">{costLabel}</span>
             </div>
           );
-        })}
+        })}</div> : null}
 
-        {(models || []).map((m) => {
+        {regularModels.map((m) => {
           const isFree = (m.final_cost ?? 0) <= 0;
           const costLabel = isFree ? freeLabel : String(m.final_cost) + ' ⭐';
           return (
@@ -120,7 +144,7 @@ export default function ModelsView({ title, folders, models, freeLabel, loading,
           );
         })}
 
-        {(!folders || folders.length === 0) && (!models || models.length === 0) && !loading ? (
+        {(!folders || folders.length === 0) && (!regularModels || regularModels.length === 0) && (!favoriteModels || favoriteModels.length === 0) && !loading ? (
           <div className="loading">Keine Modelle gefunden.</div>
         ) : null}
       </div>
