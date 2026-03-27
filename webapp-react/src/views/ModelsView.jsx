@@ -15,6 +15,19 @@ function folderIcon(slug) {
   return '📁';
 }
 
+function folderLogoUrl(slug) {
+  const s = String(slug || '').toLowerCase();
+  // Official brand marks via Simple Icons CDN.
+  if (s.includes('google')) return 'https://cdn.simpleicons.org/google/4285F4';
+  if (s.includes('openai')) return 'https://cdn.simpleicons.org/openai/FFFFFF';
+  if (s.includes('flux')) return 'https://cdn.simpleicons.org/lightning/64D2FF';
+  if (s.includes('ideogram')) return 'https://cdn.simpleicons.org/pictureinpicture/64D2FF';
+  if (s.includes('recraft')) return 'https://cdn.simpleicons.org/figma/FFFFFF';
+  if (s.includes('stability')) return 'https://cdn.simpleicons.org/stabilityai/FFFFFF';
+  if (s.includes('favorites') || s.includes('favoriten') || s.includes('favourites')) return 'https://cdn.simpleicons.org/apple/FFD60A';
+  return '';
+}
+
 function fallbackEmojiForModel(model) {
   const types = Array.isArray(model?.model_type) ? model.model_type : [];
   const typeStr = String(types.join(' ')).toLowerCase();
@@ -60,7 +73,25 @@ export default function ModelsView({ title, folders, models, freeLabel, loading,
               onClick={() => onSelectFolder(fp)}
             >
               <div className="model-left">
-                <div className="model-logo-fallback" style={{ borderColor: 'rgba(99,102,241,0.35)' }}>
+                {folderLogoUrl(label) ? (
+                  <img
+                    className="model-logo"
+                    src={folderLogoUrl(label)}
+                    alt={label + ' logo'}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      const next = e.currentTarget.nextElementSibling;
+                      if (next) next.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                <div
+                  className="model-logo-fallback"
+                  style={{
+                    borderColor: 'rgba(99,102,241,0.35)',
+                    display: folderLogoUrl(label) ? 'none' : 'flex',
+                  }}
+                >
                   {folderIcon(label)}
                 </div>
                 <span className="model-name">{label}</span>

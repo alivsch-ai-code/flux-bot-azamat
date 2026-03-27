@@ -1,20 +1,20 @@
 :root {
-  --tg-theme-bg-color: #0b0f17;
-  --tg-theme-text-color: #f4f7ff;
-  --tg-theme-button-color: #0a84ff;
-  --tg-theme-button-text-color: #f6f9ff;
-  --tg-secondary-bg: rgba(255, 255, 255, 0.06);
-  --tg-hint-color: rgba(232, 237, 244, 0.55);
-  --apple-blue: #0a84ff;
-  --apple-indigo: #5e5ce6;
-  --apple-cyan: #64d2ff;
-  --apple-green: #30d158;
-  --apple-orange: #ff9f0a;
+  --tg-theme-bg-color: #070b14;
+  --tg-theme-text-color: #eaf1ff;
+  --tg-theme-button-color: #5ac8fa;
+  --tg-theme-button-text-color: #031321;
+  --tg-secondary-bg: rgba(255, 255, 255, 0.05);
+  --tg-hint-color: rgba(222, 233, 250, 0.62);
+  --apple-blue: #5ac8fa;
+  --apple-indigo: #6e6bff;
+  --apple-cyan: #7de7ff;
+  --apple-green: #39d98a;
+  --apple-orange: #ffb84d;
   --accent: var(--tg-theme-button-color);
   --accent-contrast: var(--tg-theme-button-text-color);
   --surface: var(--tg-secondary-bg);
-  --surface-raised: color-mix(in srgb, var(--tg-theme-text-color) 9%, var(--tg-theme-bg-color));
-  --border: color-mix(in srgb, var(--tg-theme-text-color) 14%, transparent);
+  --surface-raised: color-mix(in srgb, var(--tg-theme-text-color) 7%, var(--tg-theme-bg-color));
+  --border: color-mix(in srgb, var(--tg-theme-text-color) 18%, transparent);
   --border-strong: color-mix(in srgb, var(--accent) 35%, transparent);
   --text-muted: var(--tg-hint-color);
   --radius-sm: 10px;
@@ -34,8 +34,9 @@
 body {
   margin: 0;
   padding: 16px;
-  background: radial-gradient(1200px 700px at 20% -10%, rgba(10, 132, 255, 0.2), transparent 55%),
-    radial-gradient(1200px 700px at 100% 0%, rgba(94, 92, 230, 0.16), transparent 52%),
+  background: radial-gradient(1400px 760px at 14% -16%, rgba(90, 200, 250, 0.2), transparent 56%),
+    radial-gradient(1400px 780px at 105% -5%, rgba(110, 107, 255, 0.17), transparent 54%),
+    radial-gradient(1200px 720px at 50% 120%, rgba(57, 217, 138, 0.07), transparent 58%),
     var(--tg-theme-bg-color);
   color: var(--tg-theme-text-color);
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -58,7 +59,7 @@ body {
   margin-bottom: 18px;
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(10px) saturate(115%);
+  backdrop-filter: blur(12px) saturate(125%);
   animation: rise-in 380ms ease both;
 }
 
@@ -123,8 +124,8 @@ body {
 }
 
 .card-tone-video .card-animated-bg {
-  background: radial-gradient(circle at 20% 25%, rgba(94, 92, 230, 0.45), transparent 55%),
-    radial-gradient(circle at 75% 78%, rgba(191, 90, 242, 0.28), transparent 52%);
+  background: radial-gradient(circle at 20% 25%, rgba(110, 107, 255, 0.42), transparent 55%),
+    radial-gradient(circle at 75% 78%, rgba(125, 231, 255, 0.2), transparent 52%);
 }
 
 .card-tone-audio .card-animated-bg {
@@ -133,8 +134,8 @@ body {
 }
 
 .card-tone-text .card-animated-bg {
-  background: radial-gradient(circle at 20% 20%, rgba(255, 159, 10, 0.38), transparent 50%),
-    radial-gradient(circle at 83% 82%, rgba(255, 69, 58, 0.2), transparent 48%);
+  background: radial-gradient(circle at 20% 20%, rgba(255, 184, 77, 0.35), transparent 50%),
+    radial-gradient(circle at 83% 82%, rgba(90, 200, 250, 0.18), transparent 48%);
 }
 
 .card-tone-tools .card-animated-bg {
@@ -322,7 +323,7 @@ body {
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 20px var(--glow-accent);
+  box-shadow: 0 6px 24px var(--glow-accent);
   transition: transform 0.17s ease, box-shadow 0.17s ease, filter 0.17s ease;
   position: relative;
   overflow: hidden;

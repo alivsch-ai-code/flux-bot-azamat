@@ -396,8 +396,22 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             models = runtime.db.get_all_models()
             sub_cats: set[str] = set()
             items = []
+            path_str = str(path or "root")
+
+            def _is_under_image_tree(menu_path: str) -> bool:
+                mp = str(menu_path or "")
+                return mp == "image" or mp.startswith("image/")
+
+            def _belongs_to_view(m) -> bool:
+                mp = str(getattr(m, "menu_path", "") or "")
+                if path_str == "image/favorites":
+                    return _is_under_image_tree(mp) and bool(getattr(m, "is_favorite", False))
+                if path_str.startswith("image/") and path_str != "image/favorites":
+                    return mp == path_str
+                return mp == path_str
+
             for m in models:
-                if m.menu_path == path:
+                if _belongs_to_view(m):
                     cost = int(m.custom_price if m.custom_price is not None else m.internal_cost)
                     example_url = _resolve_example_url(getattr(m, "example_data", None))
                     items.append(
@@ -411,10 +425,18 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
                             "provider": getattr(m, "provider", "") or "",
                         }
                     )
-                elif path == "root" and "/" not in m.menu_path and m.menu_path != "root":
+                elif path_str == "root" and "/" not in m.menu_path and m.menu_path != "root":
                     sub_cats.add(m.menu_path)
-                elif path != "root" and m.menu_path.startswith(path + "/"):
-                    sub_cats.add(m.menu_path[len(path) + 1 :].split("/")[0])
+                elif path_str == "image":
+                    # Virtual folder for favorites without moving models away from their brand folders.
+                    if _is_under_image_tree(m.menu_path) and bool(getattr(m, "is_favorite", False)):
+                        sub_cats.add("favorites")
+                    if str(m.menu_path or "").startswith("image/"):
+                        rel = str(m.menu_path)[len("image/") :]
+                        if rel:
+                            sub_cats.add(rel.split("/")[0])
+                elif path_str != "root" and str(m.menu_path or "").startswith(path_str + "/"):
+                    sub_cats.add(str(m.menu_path)[len(path_str) + 1 :].split("/")[0])
             lang = request.args.get("lang", "de") or "de"
             if lang not in ("de", "en", "ru", "kk"):
                 lang = "de"

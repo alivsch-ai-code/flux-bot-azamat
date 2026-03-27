@@ -61,3 +61,25 @@ def test_parse_and_deliver_treats_video_generation_as_media(monkeypatch):
     assert bot.send_video.call_count == 1
     assert bot.send_message.call_count == 0
 
+
+def test_parse_and_deliver_infers_media_from_replicate_url_when_type_missing(monkeypatch):
+    bot = MagicMock()
+    monkeypatch.setattr(result_delivery, "get_text", _text)
+    monkeypatch.setattr(result_delivery, "set_context", lambda *_args, **_kwargs: None)
+
+    result_delivery.parse_and_deliver(
+        bot=bot,
+        user_id=1,
+        result="https://replicate.delivery/xezq/abc123/tmpn9c8g6km.jpeg",
+        model=_model([]),
+        cost=2,
+        lang="de",
+        ctx={},
+        is_chat=False,
+        prompt="p",
+        keyboards_fn=MagicMock(),
+    )
+
+    assert bot.send_photo.call_count == 1
+    assert bot.send_message.call_count == 0
+

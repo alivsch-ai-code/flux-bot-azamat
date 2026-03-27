@@ -12,6 +12,7 @@ import logging
 import os
 import time
 import uuid
+from urllib.parse import urlparse
 
 from src.infrastructure.metrics import record_timing
 from src.presentation.telegram.handlers.common import set_context
@@ -34,6 +35,25 @@ def _has_media_type(model, token: str) -> bool:
         if cur == t or t in cur:
             return True
     return False
+
+
+def _infer_media_kind_from_url(url: str) -> str | None:
+    if not isinstance(url, str):
+        return None
+    u = url.strip().lower()
+    if not (u.startswith("http://") or u.startswith("https://")):
+        return None
+    path = (urlparse(u).path or "").lower()
+    if path.endswith((".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff")):
+        return "image"
+    if path.endswith((".mp4", ".mov", ".webm", ".mkv", ".avi")):
+        return "video"
+    if path.endswith((".mp3", ".wav", ".ogg", ".m4a", ".flac")):
+        return "audio"
+    # Replicate delivery links are often media even when metadata type is missing.
+    if "replicate.delivery" in u:
+        return "image"
+    return None
 
 
 def _parse_raw_result(raw):
@@ -163,7 +183,13 @@ def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, pro
             return get_text("media_send_failed", lang)
         return f"{res[:400]}\n\n💰 {cost} Credits" if len(res) > 400 else f"{res}\n\n💰 {cost} Credits"
 
-    is_media_model = _has_media_type(model, "video") or _has_media_type(model, "audio") or _has_media_type(model, "image")
+    inferred_url_kind = _infer_media_kind_from_url(res) if is_valid_url else None
+    is_media_model = (
+        _has_media_type(model, "video")
+        or _has_media_type(model, "audio")
+        or _has_media_type(model, "image")
+        or inferred_url_kind is not None
+    )
     sent = False
 
     # Mehrfach-Bilder (z.B. Premium Pipeline mit 4 Headshots)
@@ -185,9 +211,9 @@ def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, pro
         sent = _try_send_as_file(bot, user_id, res_bytes, res, caption, model)
     if not sent and is_valid_url and is_media_model and not url_too_long:
         try:
-            if _has_media_type(model, "video"):
+            if inferred_url_kind == "video" or _has_media_type(model, "video"):
                 bot.send_video(user_id, res, caption=caption)
-            elif _has_media_type(model, "audio"):
+            elif inferred_url_kind == "audio" or _has_media_type(model, "audio"):
                 bot.send_audio(user_id, res, caption=caption)
             else:
                 bot.send_photo(user_id, res, caption=caption)
