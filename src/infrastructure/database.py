@@ -118,6 +118,7 @@ class DatabaseManager:
                         model_type TEXT, 
                         menu_path TEXT DEFAULT 'root',
                         is_active INTEGER DEFAULT 1,
+                        is_favorite INTEGER DEFAULT 0,
                         is_commercial INTEGER DEFAULT 1,
                         manual_override INTEGER DEFAULT 0,
                         
@@ -210,6 +211,7 @@ class DatabaseManager:
                     ("base_cost_usd", "FLOAT DEFAULT 0.0"),
                     ("internal_cost", "INTEGER DEFAULT 10"),
                     ("custom_price", "INTEGER"),
+                    ("is_favorite", "INTEGER DEFAULT 0"),
                     ("is_commercial", "INTEGER DEFAULT 1"),
                     ("manual_override", "INTEGER DEFAULT 0"),
                     ("input_schema", "JSONB"),
@@ -277,7 +279,7 @@ class DatabaseManager:
         return """
             key, replicate_id, name, description, 
             base_cost_usd, internal_cost, custom_price, 
-            provider, model_type, menu_path, is_active, 
+            provider, model_type, menu_path, is_active, is_favorite,
             is_commercial, manual_override, 
             input_schema, output_schema, example_data
         """
@@ -297,7 +299,11 @@ class DatabaseManager:
         with self.lock:
             conn = self._get_connection()
             c = conn.cursor()
-            query = f"SELECT {self._get_model_columns()} FROM ai_models WHERE is_active = 1 ORDER BY menu_path, name"
+            query = (
+                f"SELECT {self._get_model_columns()} FROM ai_models "
+                "WHERE is_active = 1 "
+                "ORDER BY is_favorite DESC, menu_path, name"
+            )
             c.execute(query)
             rows = c.fetchall()
             conn.close()
@@ -348,8 +354,8 @@ class DatabaseManager:
                     return {}
             return {}
 
-        # 0:key, 1:rep_id, 2:name, 3:desc, 4:base_usd, 5:int_cost, 6:cust_price, 
-        # 7:prov, 8:type, 9:path, 10:active, 11:comm, 12:override, 13:input, 14:output, 15:example
+        # 0:key, 1:rep_id, 2:name, 3:desc, 4:base_usd, 5:int_cost, 6:cust_price,
+        # 7:prov, 8:type, 9:path, 10:active, 11:favorite, 12:comm, 13:override, 14:input, 15:output, 16:example
         
         return AIModel(
             key=r[0], 
@@ -363,12 +369,13 @@ class DatabaseManager:
             type=r[8].split(',') if r[8] else [],
             menu_path=r[9], 
             is_active=bool(r[10]),
-            is_commercial=bool(r[11]),
-            manual_override=bool(r[12]),
+            is_favorite=bool(r[11]),
+            is_commercial=bool(r[12]),
+            manual_override=bool(r[13]),
             # Hier nutzen wir die sichere Konvertierung
-            input_schema=ensure_dict(r[13]),
-            output_schema=ensure_dict(r[14]),
-            example_data=ensure_dict(r[15])
+            input_schema=ensure_dict(r[14]),
+            output_schema=ensure_dict(r[15]),
+            example_data=ensure_dict(r[16])
         )
 
     # --- USER & SETTINGS METHODS ---

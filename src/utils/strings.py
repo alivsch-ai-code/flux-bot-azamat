@@ -33,6 +33,9 @@ STRINGS = {
     # Sub-Kategorien
     "menu_kling": { "en": "⚡ Kling AI", "de": "⚡ Kling AI", "ru": "⚡ Kling AI", "kk": "⚡ Kling AI" },
     "menu_flux": { "en": "✨ Flux Models", "de": "✨ Flux Modelle", "ru": "✨ Flux", "kk": "✨ Flux" },
+    "menu_google": { "en": "🧠 Google", "de": "🧠 Google", "ru": "🧠 Google", "kk": "🧠 Google" },
+    "menu_openai": { "en": "🤖 OpenAI", "de": "🤖 OpenAI", "ru": "🤖 OpenAI", "kk": "🤖 OpenAI" },
+    "menu_favorites": { "en": "⭐ Our Favorites", "de": "⭐ Unsere Favoriten", "ru": "⭐ Наши фавориты", "kk": "⭐ Таңдаулылар" },
     "menu_pro": { "en": "💎 Professional", "de": "💎 Profi-Tools", "ru": "💎 Pro", "kk": "💎 Pro" },
     "menu_wan": { "en": "🎬 Wan Video", "de": "🎬 Wan Video", "ru": "🎬 Wan", "kk": "🎬 Wan" },
     "menu_hunyuan": { "en": "🎥 Hunyuan", "de": "🎥 Hunyuan", "ru": "🎥 Hunyuan", "kk": "🎥 Hunyuan" },

@@ -405,6 +405,7 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
                             "key": m.key,
                             "name": m.name,
                             "final_cost": cost,
+                            "is_favorite": bool(getattr(m, "is_favorite", False)),
                             "example_image_url": example_url,
                             "model_type": m.type or [],
                             "provider": getattr(m, "provider", "") or "",
@@ -443,7 +444,8 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             except Exception:
                 pass
             title = titles.get(path.split("/")[-1], path.replace("/", " · ").title() if path != "root" else root_title)
-            folders = [{"path": seg if path == "root" else f"{path}/{seg}", "slug": seg} for seg in sorted(sub_cats)]
+            sorted_sub_cats = sorted(sub_cats, key=lambda s: (0, s.lower()) if s.lower() in ("favorites", "favoriten", "favourites") else (1, s.lower()))
+            folders = [{"path": seg if path == "root" else f"{path}/{seg}", "slug": seg} for seg in sorted_sub_cats]
             return jsonify(models=items, folders=folders, title=title)
         except Exception as e:
             logger.warning("api_models error: %s", e)

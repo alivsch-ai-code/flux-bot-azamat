@@ -47,6 +47,7 @@ class AIModel:
     type: List[str] = field(default_factory=list)
     menu_path: str = "root"
     is_active: bool = True 
+    is_favorite: bool = False
     is_commercial: bool = True
     manual_override: bool = False
     

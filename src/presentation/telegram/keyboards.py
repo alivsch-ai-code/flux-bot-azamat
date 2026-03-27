@@ -31,6 +31,13 @@ def _truncate_callback_data(data: str, max_bytes: int = 64) -> str:
 def btn(text: str, callback_data: str) -> types.InlineKeyboardButton:
     return types.InlineKeyboardButton(text=text, callback_data=_truncate_callback_data(callback_data))
 
+
+def _folder_sort_key(cat: str) -> tuple[int, str]:
+    c = (cat or "").strip().lower()
+    if c in ("favorites", "favoriten", "favourites"):
+        return (0, c)
+    return (1, c)
+
 # --- DYNAMISCHES MENÜ SYSTEM ---
 def get_dynamic_model_menu(
     models: list, lang: str = "de", current_path: str = "root"
@@ -73,7 +80,7 @@ def get_dynamic_model_menu(
 
     # 1. Ordner-Buttons
     folder_buttons = []
-    for cat in sorted(sub_categories):
+    for cat in sorted(sub_categories, key=_folder_sort_key):
         display_name = get_text(f"menu_{cat}", lang)
         if display_name.startswith("menu_"):
             display_name = cat.capitalize()
@@ -252,12 +259,13 @@ def get_path_reply_keyboard(
             cost_display = f"({m.final_cost} ⭐️)" if m.final_cost > 0 else "(FREE)"
             model_buttons.append((f"{m.name} {cost_display}", m.key))
 
-    for cat in sorted(sub_categories):
+    for cat in sorted(sub_categories, key=_folder_sort_key):
         display = get_text(f"menu_{cat}", lang)
         if display.startswith("menu_"):
             display = cat.capitalize()
         markup.row(types.KeyboardButton(f"📁 {display}"))
 
+    model_buttons.sort(key=lambda x: x[0].lower())
     for i in range(0, len(model_buttons), 2):
         row = [types.KeyboardButton(t) for t, _ in model_buttons[i : i + 2]]
         markup.row(*row)
@@ -293,7 +301,7 @@ def get_path_keyboard_action(
             rel = m.menu_path[len(current_path) + 1 :]
             sub_categories.add(rel.split("/")[0])
 
-    for cat in sorted(sub_categories):
+    for cat in sorted(sub_categories, key=_folder_sort_key):
         display = get_text(f"menu_{cat}", lang)
         if display.startswith("menu_"):
             display = cat.capitalize()
