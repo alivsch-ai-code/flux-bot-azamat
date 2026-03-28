@@ -638,6 +638,9 @@ class DailyService:
         Manueller Admin-Trigger für AI-News.
         Erzwingt einen Lauf unabhängig von Zufallsrate/Tageslimit und sendet an ALLE Empfänger.
         """
+        logger.info(
+            "Azamat AI News: Auslöser = manueller Admin-Trigger (umgeht RSS-Cooldown/Signatur; wait_if_busy bis Lock frei)."
+        )
         return self._dispatch_ai_news_post(force=True, broadcast_all=True, wait_if_busy=True)
 
     @staticmethod
@@ -701,6 +704,10 @@ class DailyService:
         if last_ts > 0 and (now_ts - last_ts) < RSS_WATCH_MIN_INTERVAL_SECONDS:
             return
 
+        logger.info(
+            "Azamat AI News: Auslöser = RSS-Watcher (neue Signatur / Cooldown ok, min_interval=%ss).",
+            RSS_WATCH_MIN_INTERVAL_SECONDS,
+        )
         result = self._dispatch_ai_news_post(
             force=True,
             broadcast_all=True,
