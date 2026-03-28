@@ -14,6 +14,8 @@ def _image_model():
 
 def test_dispatch_dedupes_same_chat_id_across_group_and_user(monkeypatch):
     bot = MagicMock()
+    bot.send_photo_sync = MagicMock()
+    bot.send_message_sync = MagicMock()
     db = MagicMock()
     generation_service = MagicMock()
     service = DailyService(bot, db, generation_service)
@@ -49,12 +51,12 @@ def test_dispatch_dedupes_same_chat_id_across_group_and_user(monkeypatch):
 
     assert result["ok"] is True
     # Should send exactly once to overlap group id + once to distinct user id.
-    assert bot.send_photo.call_count == 2
-    sent_chat_ids = [c.args[0] for c in bot.send_photo.call_args_list]
+    assert bot.send_photo_sync.call_count == 2
+    sent_chat_ids = [c.args[0] for c in bot.send_photo_sync.call_args_list]
     assert overlap_chat_id in sent_chat_ids
     assert 123456 in sent_chat_ids
     # No extra plain-text fallback send for successful photo path.
-    assert bot.send_message.call_count == 0
+    assert bot.send_message_sync.call_count == 0
 
 
 def test_generate_news_image_url_retries_until_valid_url(monkeypatch):

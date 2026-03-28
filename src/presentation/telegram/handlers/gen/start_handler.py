@@ -1,14 +1,13 @@
 """
-start_handler.py – Start-Generierung Handler
-
-Registriert handle_start_gen (start_gen_*): User klickt auf „Start“ bei einem Modell.
-- Prüft, ob Modell Media benötigt (schema_requires_media, img2img, upscale)
-- Setzt Context auf waiting_for_media oder waiting_for_prompt
-- Fordert entsprechend Media oder Prompt an (model_req_media / model_req_prompt)
-- Aktualisiert die Nachricht via smart_update_status
+start_handler.py – Start-Generierung (async, aiogram).
 """
 
+from __future__ import annotations
+
 from typing import Optional
+
+from aiogram import F
+from aiogram.types import CallbackQuery
 
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.common import get_context, set_context
@@ -20,8 +19,8 @@ from src.presentation.telegram.handlers.gen.ux import smart_update_status
 from src.utils.strings import get_text
 
 
-def do_start_gen_flow(
-    bot,
+async def do_start_gen_flow(
+    facade,
     user_id: int,
     model_key: str,
     db,
@@ -29,11 +28,6 @@ def do_start_gen_flow(
     edit_message_id: Optional[int] = None,
     pending_webapp_prompt: Optional[str] = None,
 ) -> bool:
-    """
-    Startet den Generierungs-Flow (Context setzen, Prompt/Media anfordern).
-    edit_message_id: Falls gesetzt, wird die Nachricht editiert; sonst wird neu gesendet.
-    Wird von WebApp (process_webapp_action) und Callback (handle_start_gen) genutzt.
-    """
     model = db.get_model_by_key(model_key)
     if not model or not model.is_active:
         return False
@@ -67,9 +61,11 @@ def do_start_gen_flow(
 
     if edit_message_id:
         ctx = {"last_bot_msg_id": edit_message_id}
-        new_id = smart_update_status(bot, user_id, prompt_text, ctx, markup)
+        new_id = await smart_update_status(facade, user_id, prompt_text, ctx, markup)
     else:
-        msg = bot.send_message(user_id, prompt_text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=False)
+        msg = await facade.send_message(
+            user_id, prompt_text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=False
+        )
         new_id = msg.message_id
     ctx = dict(get_context(user_id) or {})
     ctx["last_bot_msg_id"] = new_id
@@ -77,15 +73,15 @@ def do_start_gen_flow(
     return True
 
 
-def register_start_gen_handler(bot, db, get_lang) -> None:
-    """Registriert den handle_start_gen Callback-Handler."""
-
-    @bot.callback_query_handler(func=lambda c: c.data.startswith('start_gen_'))
-    def handle_start_gen(call):
-        key = call.data.split('start_gen_')[1]
+def register_start_gen_handler(router, facade, db, get_lang) -> None:
+    @router.callback_query(F.data.startswith("start_gen_"))
+    async def handle_start_gen(call: CallbackQuery):
+        key = call.data.split("start_gen_")[1]
         user_id = call.message.chat.id
-        do_start_gen_flow(bot, user_id, key, db, get_lang, edit_message_id=call.message.message_id)
+        await do_start_gen_flow(
+            facade, user_id, key, db, get_lang, edit_message_id=call.message.message_id
+        )
         try:
-            bot.answer_callback_query(call.id)
+            await call.answer()
         except Exception:
             pass

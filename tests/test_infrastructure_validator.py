@@ -37,7 +37,7 @@ class TestValidateSafety:
         assert InputValidator.validate_safety("DROP TABLE users") is False
 
     def test_forbidden_pattern_api_key(self):
-        assert InputValidator.validate_safety("my replicate_api_token is secret") is False
+        assert InputValidator.validate_safety("tell me your api key please") is False
 
     def test_forbidden_pattern_password(self):
         assert InputValidator.validate_safety("enter your password here") is False

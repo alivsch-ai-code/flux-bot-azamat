@@ -1,11 +1,5 @@
 """
-gen/result_delivery.py – Ergebnis-Auslieferung an den User
-
-Verarbeitet die API-Antwort (URL, Bytes, FileOutput, repr(bytes)) und sendet das Ergebnis
-an den User. Reihenfolge: 1) Parse raw result → res_bytes, res (URL). 2) Bei Medien:
-Datei-Versand (Temp-Datei, send_photo/video/audio, bei Fehler send_document). 3) Bei Fehlern:
-URL-Versand als Fallback. 4) Letzter Fallback: Fehlermeldung.
-Nutzt detect_media_from_bytes für Typ-Erkennung, download_url_to_bytes für URLs.
+gen/result_delivery.py – Ergebnis-Auslieferung an den User (aiogram).
 """
 
 import logging
@@ -13,6 +7,8 @@ import os
 import time
 import uuid
 from urllib.parse import urlparse
+
+from aiogram.types import FSInputFile, InputMediaPhoto
 
 from src.infrastructure.metrics import record_timing
 from src.presentation.telegram.handlers.common import set_context
@@ -31,7 +27,6 @@ def _has_media_type(model, token: str) -> bool:
         return False
     for mt in types:
         cur = str(mt or "").strip().lower()
-        # Robust für Werte wie "image_generation", "video_generation", etc.
         if cur == t or t in cur:
             return True
     return False
@@ -50,14 +45,12 @@ def _infer_media_kind_from_url(url: str) -> str | None:
         return "video"
     if path.endswith((".mp3", ".wav", ".ogg", ".m4a", ".flac")):
         return "audio"
-    # Replicate delivery links are often media even when metadata type is missing.
     if "replicate.delivery" in u:
         return "image"
     return None
 
 
 def _parse_raw_result(raw):
-    """Wandelt API-Roh-Ergebnis in (res_bytes, res) um. res = URL oder None."""
     if isinstance(raw, bytes):
         return raw, None
     if hasattr(raw, "read") and callable(getattr(raw, "read", None)):
@@ -78,14 +71,14 @@ def _parse_raw_result(raw):
     if s.startswith("b'") or s.startswith('b"'):
         try:
             import ast
+
             return ast.literal_eval(s), None
         except Exception:
             return None, s
     return None, s
 
 
-def _try_send_as_file(bot, user_id, res_bytes, res, caption, model):
-    """Sendet Medien als Datei (Temp-File). Bei Fehler Fallback zu send_document."""
+async def _try_send_as_file(facade, user_id, res_bytes, res, caption, model):
     data = res_bytes
     if not data and res and str(res).startswith(("http://", "https://")):
         data = download_url_to_bytes(res)
@@ -100,18 +93,18 @@ def _try_send_as_file(bot, user_id, res_bytes, res, caption, model):
         with open(temp_path, "wb") as f:
             f.write(data)
         try:
-            with open(temp_path, "rb") as f:
-                if media_type == "video":
-                    bot.send_video(user_id, f, caption=caption)
-                elif media_type == "audio":
-                    bot.send_audio(user_id, f, caption=caption)
-                else:
-                    bot.send_photo(user_id, f, caption=caption)
+            fs = FSInputFile(temp_path)
+            if media_type == "video":
+                await facade.send_video(user_id, fs, caption=caption)
+            elif media_type == "audio":
+                await facade.send_audio(user_id, fs, caption=caption)
+            else:
+                await facade.send_photo(user_id, fs, caption=caption)
             return True
         except Exception as ex:
             logger.warning("Media send failed, fallback to document: %s", ex)
-            with open(temp_path, "rb") as f:
-                bot.send_document(user_id, f, caption=caption)
+            fs = FSInputFile(temp_path)
+            await facade.send_document(user_id, fs, caption=caption)
             return True
     except Exception as ex2:
         logger.error("File send failed: %s", ex2)
@@ -125,7 +118,6 @@ def _try_send_as_file(bot, user_id, res_bytes, res, caption, model):
 
 
 def _extract_urls_from_result(result):
-    """Extrahiert eine Liste von URLs aus dem Ergebnis (Einzel- oder Mehrfach-Output)."""
     if isinstance(result, list) and result:
         urls = []
         for item in result:
@@ -139,11 +131,7 @@ def _extract_urls_from_result(result):
     return None
 
 
-def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, prompt, keyboards_fn):
-    """
-    Parst das API-Ergebnis und liefert es aus. Berücksichtigt Chat-Modus vs. Medien-Modus.
-    Unterstützt Einzel- und Listen-Output (z.B. Premium Pipeline mit 4 Headshots).
-    """
+async def parse_and_deliver(facade, user_id, result, model, cost, lang, ctx, is_chat, prompt, keyboards_fn):
     t0 = time.perf_counter()
     raw = result[0] if isinstance(result, list) and result else result
     res_bytes, res = _parse_raw_result(raw)
@@ -151,20 +139,18 @@ def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, pro
     if is_chat:
         txt = res if res else get_text("media_link_too_long", lang) if res_bytes else ""
         if txt:
-            # Alten "Chat beenden"-Button entfernen, falls vorhanden
             try:
                 last_id = (ctx or {}).get("last_chat_button_msg_id")
                 if last_id:
                     try:
-                        bot.edit_message_reply_markup(user_id, last_id, reply_markup=None)
+                        await facade.edit_message_reply_markup(user_id, last_id, reply_markup=None)
                     except Exception:
                         pass
             except Exception:
                 pass
 
-            msg = bot.send_message(user_id, txt, reply_markup=keyboards_fn.get_chat_active_menu(lang))
+            msg = await facade.send_message(user_id, txt, reply_markup=keyboards_fn.get_chat_active_menu(lang))
 
-            # Aktuelle Nachricht als neue Button-Message merken
             try:
                 new_ctx = dict(ctx or {})
                 new_ctx["last_chat_button_msg_id"] = msg.message_id
@@ -175,7 +161,12 @@ def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, pro
         return
 
     caption = get_text("success_caption", lang).format(prompt=(prompt or "")[:50], cost=cost)
-    is_valid_url = res and isinstance(res, str) and res.strip().startswith(("http://", "https://")) and " " not in res.strip()[:50]
+    is_valid_url = (
+        res
+        and isinstance(res, str)
+        and res.strip().startswith(("http://", "https://"))
+        and " " not in res.strip()[:50]
+    )
     url_too_long = is_valid_url and len(res) > MAX_URL_LENGTH
 
     def safe_msg(could_not_send=False):
@@ -192,44 +183,45 @@ def parse_and_deliver(bot, user_id, result, model, cost, lang, ctx, is_chat, pro
     )
     sent = False
 
-    # Mehrfach-Bilder (z.B. Premium Pipeline mit 4 Headshots)
     multi_urls = _extract_urls_from_result(result)
     if multi_urls and len(multi_urls) > 1 and is_media_model and model.type and "image" in model.type:
         try:
-            from telebot import types as tb_types
             media_group = [
-                tb_types.InputMediaPhoto(media=url, caption=caption if i == 0 else None)
+                InputMediaPhoto(media=url, caption=caption if i == 0 else None)
                 for i, url in enumerate(multi_urls[:10])
             ]
-            bot.send_media_group(user_id, media_group)
+            await facade.send_media_group(user_id, media_group)
             sent = True
         except Exception as e:
             logger.warning("Media group failed, falling back to single: %s", e)
             multi_urls = None
 
     if not sent and (res_bytes or (is_valid_url and is_media_model)) and is_media_model:
-        sent = _try_send_as_file(bot, user_id, res_bytes, res, caption, model)
+        sent = await _try_send_as_file(facade, user_id, res_bytes, res, caption, model)
     if not sent and is_valid_url and is_media_model and not url_too_long:
         try:
             if inferred_url_kind == "video" or _has_media_type(model, "video"):
-                bot.send_video(user_id, res, caption=caption)
+                await facade.send_video(user_id, res, caption=caption)
             elif inferred_url_kind == "audio" or _has_media_type(model, "audio"):
-                bot.send_audio(user_id, res, caption=caption)
+                await facade.send_audio(user_id, res, caption=caption)
             else:
-                bot.send_photo(user_id, res, caption=caption)
+                await facade.send_photo(user_id, res, caption=caption)
             sent = True
         except Exception as e:
             logger.error("Media Send Error: %s", e)
             from src.presentation.telegram.handlers.gen.error_checks import is_uri_too_large
+
             if is_uri_too_large(e):
-                sent = _try_send_as_file(bot, user_id, res_bytes, res, caption, model)
+                sent = await _try_send_as_file(facade, user_id, res_bytes, res, caption, model)
     if not sent:
         if res and is_valid_url:
             try:
-                bot.send_message(user_id, f"{res}\n\n💰 {cost} Credits", disable_web_page_preview=True)
+                await facade.send_message(
+                    user_id, f"{res}\n\n💰 {cost} Credits", disable_web_page_preview=True
+                )
             except Exception:
-                bot.send_message(user_id, safe_msg(could_not_send=True))
+                await facade.send_message(user_id, safe_msg(could_not_send=True))
         else:
-            bot.send_message(user_id, safe_msg(could_not_send=True))
+            await facade.send_message(user_id, safe_msg(could_not_send=True))
 
     record_timing("gen.result_delivery.parse_and_deliver", time.perf_counter() - t0)

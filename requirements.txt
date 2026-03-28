@@ -1,5 +1,5 @@
-# Telegram Bot Bibliothek
-pyTelegramBotAPI
+# Telegram Bot (async)
+aiogram>=3.15,<4
 # Webserver für Healthchecks (damit Render nicht einschläft)
 flask
 waitress

@@ -186,7 +186,7 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             bot_username = ""
             if runtime.bot:
                 try:
-                    me = runtime.bot.get_me()
+                    me = runtime.bot.get_me_sync()
                     bot_username = getattr(me, "username", "") or ""
                 except Exception:
                     pass

@@ -1,15 +1,15 @@
 """
-prompt_handlers.py – Text-Prompt und Optimierung
-
-Registriert:
-- on_prompt (message_handler): Empfängt Text. Bei Chat-Modus → run_generation. Bei waiting_for_prompt:
-  optional Optimierung via LLM, dann pending_prompts speichern oder direkt run_generation.
-- on_prompt_decision (callback): prompt_accept/prompt_reject → run_generation mit optimiertem oder Original-Prompt.
+prompt_handlers.py – Text-Prompt (aiogram 3).
 """
 
+from __future__ import annotations
+
+import asyncio
 import time
 
-from telebot import types
+from aiogram import F
+from aiogram.enums import ChatType
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from src.infrastructure.ai.replicate.prompt_engineer import optimize_prompt_bundle_via_llm
 from src.presentation.telegram.handlers.chat_debounce import schedule_batched_text_message
@@ -25,12 +25,11 @@ from src.presentation.telegram.handlers.gen.chat_sessions import (
     append_with_summary_if_needed,
     build_chat_prompt_from_messages,
 )
+from src.presentation.telegram.runtime import run_coroutine_sync
 from src.utils.strings import get_text
 
 
-def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
-    """Registriert on_prompt und on_prompt_decision."""
-
+def register_prompt_handlers(router, facade, db, get_lang, run_generation) -> None:
     def _model_supports_negative_prompt(model) -> bool:
         schema = getattr(model, "input_schema", None) or {}
         properties = schema.get("properties", {}) if isinstance(schema, dict) else {}
@@ -39,8 +38,7 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                 return True
         return False
 
-    def flush_private_chat_batch(chat_id: int, batch: list) -> None:
-        """Debounced Flush: alle Nachrichten in die History, eine LLM-Antwort."""
+    async def flush_private_chat_async(chat_id: int, batch: list) -> None:
         if not batch:
             return
         chat_state = None
@@ -58,7 +56,7 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
 
         if not is_text_model:
             combined = "\n---\n".join(f"{name}: {t}" for _u, name, t in batch)
-            run_generation(chat_id, model_key, combined, media_files=None, is_chat=True)
+            await run_generation(chat_id, model_key, combined, media_files=None, is_chat=True)
             return
 
         try:
@@ -79,7 +77,7 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                 system_prompt=sys_prompt,
                 current_user_name=last_name,
             )
-            run_generation(
+            await run_generation(
                 chat_id,
                 model_key,
                 full_prompt,
@@ -90,7 +88,7 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
             )
         except Exception:
             combined = "\n\n".join(f"{name}: {t}" for _u, name, t in batch)
-            run_generation(
+            await run_generation(
                 chat_id,
                 model_key,
                 combined,
@@ -100,30 +98,24 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                 chat_user_name=last_name,
             )
 
-    @bot.message_handler(func=lambda m: True)
-    def on_prompt(msg):
+    def flush_private_chat_batch(chat_id: int, batch: list) -> None:
+        run_coroutine_sync(flush_private_chat_async(chat_id, batch), timeout=600)
+
+    @router.message(F.text, F.chat.type == ChatType.PRIVATE)
+    async def on_prompt(msg: Message):
         user_id = msg.chat.id
-        if str(msg.chat.type) in ("group", "supergroup"):
+        text = (msg.text or "").strip()
+        if not text or text.startswith("/"):
             return
 
-        text = (getattr(msg, "text", None) or "").strip()
-        if not text:
-            return
         try:
             user_name = (msg.from_user and msg.from_user.first_name) or "User"
-            append_global_chat_event(
-                db,
-                user_id,
-                "user",
-                text,
-                user_name=user_name,
-            )
+            append_global_chat_event(db, user_id, "user", text, user_name=user_name)
         except Exception:
             pass
 
         ctx = get_context(user_id)
 
-        # 1) Chat-Modus: LLM-Chat mit persistenter History (gebündelt mit Debounce)
         chat_state = None
         try:
             chat_state = db.get_user_chat_state(user_id)
@@ -133,31 +125,20 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
         if chat_state and chat_state.get("is_chat") and chat_state.get("model_key"):
             tg_uid = msg.from_user.id if msg.from_user else user_id
             user_name = (msg.from_user and msg.from_user.first_name) or "User"
-            schedule_batched_text_message(
-                user_id,
-                (tg_uid, user_name, text),
-                flush_private_chat_batch,
-            )
+            schedule_batched_text_message(user_id, (tg_uid, user_name, text), flush_private_chat_batch)
             return
 
-        # 2) Reine Text-Nachricht im Hauptmenü: Default-Chatmodell starten
-        # Nur wenn kein aktiver Gen-Context existiert.
         if not ctx:
             try:
-                default_model_key = "google-gemini-2-5-flash"  # entspricht replicate_id google/gemini-2.5-flash
+                default_model_key = "google-gemini-2-5-flash"
                 model = db.get_model_by_key(default_model_key)
                 if model and model.type and "text" in model.type:
                     db.set_user_chat_mode(user_id, default_model_key, active=True)
                     tg_uid = msg.from_user.id if msg.from_user else user_id
                     user_name = (msg.from_user and msg.from_user.first_name) or "User"
-                    schedule_batched_text_message(
-                        user_id,
-                        (tg_uid, user_name, text),
-                        flush_private_chat_batch,
-                    )
+                    schedule_batched_text_message(user_id, (tg_uid, user_name, text), flush_private_chat_batch)
                     return
             except Exception:
-                # Fallback: Durchlaufen in den normalen Flow (z.B. Menü-Handler)
                 pass
         if ctx and ctx.get("step") == "waiting_for_prompt":
             model = db.get_model_by_key(ctx["model_key"])
@@ -165,9 +146,9 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
             settings = db.get_user_settings(user_id)
             user_name = (msg.from_user and msg.from_user.first_name) or "User"
             if settings.get("auto_opt", True):
-                msg_wait = bot.send_message(user_id, get_text("optimizing_msg", get_lang(user_id)), parse_mode="HTML")
+                msg_wait = await facade.send_message(user_id, get_text("optimizing_msg", get_lang(user_id)), parse_mode="HTML")
                 try:
-                    bundle = optimize_prompt_bundle_via_llm(msg.text)
+                    bundle = await asyncio.to_thread(optimize_prompt_bundle_via_llm, msg.text)
                     optimized = bundle.get("optimized_prompt") or msg.text
                     negative_prompt = bundle.get("negative_prompt")
                     if not settings.get("auto_negative_prompt", True):
@@ -184,17 +165,28 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                         "timestamp": time.time(),
                     }
                     cleanup_pending_prompts()
-                    markup = types.InlineKeyboardMarkup()
-                    markup.add(
-                        types.InlineKeyboardButton(get_text("btn_accept", get_lang(user_id)), callback_data="prompt_accept"),
-                        types.InlineKeyboardButton(get_text("btn_reject", get_lang(user_id)), callback_data="prompt_reject")
+                    markup = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text=get_text("btn_accept", get_lang(user_id)), callback_data="prompt_accept"
+                                ),
+                                InlineKeyboardButton(
+                                    text=get_text("btn_reject", get_lang(user_id)), callback_data="prompt_reject"
+                                ),
+                            ]
+                        ]
                     )
-                    opt_text = get_text("opt_result_msg", get_lang(user_id)).format(original=msg.text, optimized=optimized)
+                    opt_text = get_text("opt_result_msg", get_lang(user_id)).format(
+                        original=msg.text, optimized=optimized
+                    )
                     if negative_prompt:
                         opt_text += f"\n\n<b>Negative Prompt:</b>\n<code>{negative_prompt}</code>"
-                    bot.edit_message_text(opt_text, user_id, msg_wait.message_id, reply_markup=markup, parse_mode="HTML")
+                    await facade.edit_message_text(
+                        opt_text, user_id, msg_wait.message_id, reply_markup=markup, parse_mode="HTML"
+                    )
                 except Exception:
-                    run_generation(
+                    await run_generation(
                         user_id,
                         ctx["model_key"],
                         msg.text,
@@ -204,7 +196,7 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                         chat_user_name=user_name,
                     )
             else:
-                run_generation(
+                await run_generation(
                     user_id,
                     ctx["model_key"],
                     msg.text,
@@ -214,10 +206,10 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                     chat_user_name=user_name,
                 )
 
-    @bot.callback_query_handler(func=lambda c: c.data.startswith('prompt_'))
-    def on_prompt_decision(call):
+    @router.callback_query(lambda c: bool(c.data and c.data.startswith("prompt_")))
+    async def on_prompt_decision(call: CallbackQuery):
         uid = call.message.chat.id
-        action = call.data.split('_')[1]
+        action = call.data.split("_")[1]
         data = pending_prompts.pop(uid, None)
         if data:
             final_prompt = data["optimized"] if action == "accept" else data["original"]
@@ -232,8 +224,8 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                     options["negative_prompt"] = neg
                     ctx["generation_options"] = options
                     set_context(uid, ctx)
-            user_name = (call.message.from_user and call.message.from_user.first_name) or "User"
-            run_generation(
+            user_name = (call.from_user and call.from_user.first_name) or "User"
+            await run_generation(
                 uid,
                 data["model_key"],
                 final_prompt,
@@ -243,8 +235,8 @@ def register_prompt_handlers(bot, db, get_lang, run_generation) -> None:
                 chat_user_name=user_name,
             )
             try:
-                bot.delete_message(uid, call.message.message_id)
+                await facade.delete_message(uid, call.message.message_id)
             except Exception:
                 pass
         else:
-            bot.answer_callback_query(call.id, "Die Anfrage ist abgelaufen. Bitte starten Sie erneut.")
+            await call.answer("Die Anfrage ist abgelaufen. Bitte starten Sie erneut.")

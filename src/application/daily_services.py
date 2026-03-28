@@ -12,7 +12,7 @@ from datetime import datetime
 import feedparser
 import requests
 
-from telebot import types
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from src.presentation.telegram.handlers.gen.chat_sessions import append_global_chat_event
 from src.utils.strings import get_random_daily_fallback, get_text
@@ -167,7 +167,7 @@ class DailyService:
                     if img_path and img_path.strip():
                         # Prüfen ob URL (http) oder lokaler Pfad
                         if img_path.startswith("http"):
-                            self.bot.send_photo(
+                            self.bot.send_photo_sync(
                                 user_id, img_path, caption=out_text or None, parse_mode="HTML"
                             )
                             sent = True
@@ -175,19 +175,19 @@ class DailyService:
                             # Prüfen ob lokale Datei existiert
                             try:
                                 with open(img_path, "rb") as f:
-                                    self.bot.send_photo(
+                                    self.bot.send_photo_sync(
                                         user_id, f, caption=out_text or None, parse_mode="HTML"
                                     )
                                 sent = True
                             except FileNotFoundError:
                                 # Fallback: Nur Text senden, wenn Bild fehlt und Text vorhanden ist
                                 if out_text:
-                                    self.bot.send_message(user_id, out_text, parse_mode="HTML")
+                                    self.bot.send_message_sync(user_id, out_text, parse_mode="HTML")
                                     sent = True
 
                     # Fall B: Nur Text, aber nur wenn Text auch Inhalt hat
                     elif out_text:
-                        self.bot.send_message(user_id, out_text, parse_mode="HTML")
+                        self.bot.send_message_sync(user_id, out_text, parse_mode="HTML")
                         sent = True
 
                     if sent:
@@ -223,9 +223,10 @@ class DailyService:
                     lang = settings.get("lang", "en")
                     user_name = self.db.get_user_username_or_name(user_id) or ""
                     text = get_random_daily_fallback(lang, user_name)
-                    markup = types.InlineKeyboardMarkup()
-                    markup.add(types.InlineKeyboardButton(get_text("kb_main", lang), callback_data="nav_main"))
-                    self.bot.send_message(user_id, text, parse_mode="HTML", reply_markup=markup)
+                    markup = InlineKeyboardMarkup(
+                        inline_keyboard=[[InlineKeyboardButton(text=get_text("kb_main", lang), callback_data="nav_main")]]
+                    )
+                    self.bot.send_message_sync(user_id, text, parse_mode="HTML", reply_markup=markup)
                     append_global_chat_event(self.db, user_id, "assistant", text)
                     success += 1
                     time.sleep(0.05)
@@ -293,7 +294,7 @@ class DailyService:
                 )
                 if not ok or not result:
                     continue
-                self.bot.send_message(user_id, str(result), parse_mode="HTML")
+                self.bot.send_message_sync(user_id, str(result), parse_mode="HTML")
                 append_global_chat_event(self.db, user_id, "assistant", str(result))
                 self.db.mark_azamat_greeting_sent(user_id, today, slot)
                 success += 1
@@ -550,7 +551,7 @@ class DailyService:
         for attempt in range(1, retries + 1):
             try:
                 # Kein HTML-ParseMode bei Captions: vermeidet Parse-Fehler durch LLM-Text.
-                self.bot.send_photo(target_id, image_url, caption=caption)
+                self.bot.send_photo_sync(target_id, image_url, caption=caption)
                 return True
             except Exception as e:
                 if attempt >= retries:
@@ -811,9 +812,9 @@ class DailyService:
                     if sent_img:
                         pass
                     else:
-                        self.bot.send_message(target_id, final_text)
+                        self.bot.send_message_sync(target_id, final_text)
                 else:
-                    self.bot.send_message(target_id, final_text)
+                    self.bot.send_message_sync(target_id, final_text)
 
                 if target_type == "user":
                     append_global_chat_event(self.db, target_id, "assistant", final_text)

@@ -1,18 +1,17 @@
 """
-media_handlers.py – Media-Upload (Foto, Video, Dokument)
-
-Registriert:
-- process_media_upload: Lädt Datei herunter, speichert in temp/, fügt zu ctx.media_paths hinzu.
-  Bei upscale-Modellen: sofort run_generation. Sonst: Aufforderung für Prompt.
-- on_photo, on_video, on_document: Message-Handler, die process_media_upload aufrufen.
+media_handlers.py – Media-Upload (aiogram 3).
 """
+
+from __future__ import annotations
 
 import logging
 import os
 import time
 import uuid
 
-from telebot import types
+from aiogram import F
+from aiogram.enums import ChatType
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
 from src.infrastructure.metrics import record_timing
 from src.presentation.telegram import keyboards
@@ -23,47 +22,36 @@ from src.utils.strings import get_text
 logger = logging.getLogger(__name__)
 
 
-def register_media_handlers(bot, db, get_lang, run_generation) -> None:
-    """Registriert process_media_upload und die Message-Handler für photo, video, document."""
- 
-    MAX_FILE_BYTES = 20 * 1024 * 1024  # 20 MB Limit
+def register_media_handlers(router, facade, db, get_lang, run_generation) -> None:
+    MAX_FILE_BYTES = 20 * 1024 * 1024
 
-    def _save_incoming_file(user_id: int, file_id: str, default_ext: str) -> str:
+    async def _save_incoming_file(user_id: int, file_id: str, default_ext: str) -> str:
         t0 = time.perf_counter()
-        file_info = bot.get_file(file_id)
-        downloaded = bot.download_file(file_info.file_path)
-
+        downloaded = await facade.download_file_bytes(file_id)
         if len(downloaded) > MAX_FILE_BYTES:
             raise ValueError("file_too_large")
-
         os.makedirs("temp", exist_ok=True)
         ext = default_ext
-        if getattr(file_info, "file_path", None):
-            ext = os.path.splitext(file_info.file_path)[1] or default_ext
         path = os.path.join("temp", f"user_{user_id}_{uuid.uuid4().hex[:8]}{ext}")
         with open(path, "wb") as f:
             f.write(downloaded)
         record_timing("gen.media.save_incoming_file", time.perf_counter() - t0)
         return path
 
-    def _handle_unsolicited_media(msg, file_id: str, media_type: str, default_ext: str):
-        """
-        Fallback: User lädt ein Medium hoch, ohne dass ein Modell-Flow aktiv ist.
-        Wir speichern das Medium und bieten direkt die passende Modell-Kategorie zur Auswahl an.
-        """
+    async def _handle_unsolicited_media(msg: Message, file_id: str, media_type: str, default_ext: str):
         user_id = msg.chat.id
         lang = get_lang(user_id)
         try:
-            path = _save_incoming_file(user_id, file_id, default_ext)
+            path = await _save_incoming_file(user_id, file_id, default_ext)
         except ValueError as e:
             if str(e) == "file_too_large":
-                bot.send_message(user_id, "❌ Datei ist zu groß (max. 20 MB).")
+                await facade.send_message(user_id, "❌ Datei ist zu groß (max. 20 MB).")
             else:
-                bot.send_message(user_id, "❌ Upload-Fehler. Bitte versuchen Sie es erneut.")
+                await facade.send_message(user_id, "❌ Upload-Fehler. Bitte versuchen Sie es erneut.")
             return
         except Exception as e:
             logger.exception("Unsolicited media save failed: %s", e)
-            bot.send_message(user_id, "❌ Upload-Fehler. Bitte versuchen Sie es erneut.")
+            await facade.send_message(user_id, "❌ Upload-Fehler. Bitte versuchen Sie es erneut.")
             return
 
         category = "image" if media_type == "image" else "video" if media_type == "video" else "audio" if media_type == "audio" else "tools"
@@ -77,16 +65,23 @@ def register_media_handlers(bot, db, get_lang, run_generation) -> None:
         menu_mode = db.get_bot_setting("menu_mode", "commands")
         if menu_mode == "webapp":
             from src.config.settings import config
+
             if config.APP_URL and config.APP_URL.startswith("https://"):
                 from urllib.parse import quote
+
                 app_url = config.APP_URL.rstrip("/")
                 webapp_url = app_url + "/webapp?path=" + quote(category, safe="")
-                markup = types.InlineKeyboardMarkup()
-                markup.add(types.InlineKeyboardButton(
-                    get_text("menu_mode_webapp", lang),
-                    web_app=types.WebAppInfo(url=webapp_url)
-                ))
-                bot.send_message(
+                markup = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=get_text("menu_mode_webapp", lang),
+                                web_app=WebAppInfo(url=webapp_url),
+                            )
+                        ]
+                    ]
+                )
+                await facade.send_message(
                     user_id,
                     get_text("webapp_media_choose", lang),
                     reply_markup=markup,
@@ -95,14 +90,14 @@ def register_media_handlers(bot, db, get_lang, run_generation) -> None:
                 return
         all_models = db.get_all_models()
         markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path=category)
-        bot.send_message(
+        await facade.send_message(
             user_id,
             "✅ Medium erhalten.\n\nMöchtest du dafür ein KI-Modell auswählen? Wähle unten ein Modell aus:",
             reply_markup=markup,
             parse_mode="HTML",
         )
 
-    def process_media_upload(msg, file_id: str, media_type: str, default_ext: str):
+    async def process_media_upload(msg: Message, file_id: str, media_type: str, default_ext: str):
         user_id = msg.chat.id
         ctx = get_context(user_id)
         t0 = time.perf_counter()
@@ -112,10 +107,10 @@ def register_media_handlers(bot, db, get_lang, run_generation) -> None:
             and ctx.get("step") in ("waiting_for_media", "waiting_for_image", "viewing_model")
         )
         if not in_model_flow:
-            _handle_unsolicited_media(msg, file_id, media_type, default_ext)
+            await _handle_unsolicited_media(msg, file_id, media_type, default_ext)
             return
         try:
-            path = _save_incoming_file(user_id, file_id, default_ext)
+            path = await _save_incoming_file(user_id, file_id, default_ext)
             if "media_paths" not in ctx:
                 ctx["media_paths"] = []
             ctx["media_paths"].append({"path": path, "type": media_type})
@@ -123,14 +118,14 @@ def register_media_handlers(bot, db, get_lang, run_generation) -> None:
             model = db.get_model_by_key(ctx["model_key"])
             media_list = ctx_media_to_list(ctx)
             if model and model.type and "upscale" in model.type and media_list:
-                run_generation(user_id, ctx["model_key"], "", media_list)
+                await run_generation(user_id, ctx["model_key"], "", media_list)
             else:
                 pending = (ctx.get("pending_webapp_prompt") or "").strip()
                 if pending:
-                    run_generation(user_id, ctx["model_key"], pending, media_list)
+                    await run_generation(user_id, ctx["model_key"], pending, media_list)
                     return
                 count = len(ctx["media_paths"])
-                bot.send_message(
+                await facade.send_message(
                     user_id,
                     get_text("media_received", get_lang(user_id)).format(count=count)
                     + " "
@@ -141,26 +136,26 @@ def register_media_handlers(bot, db, get_lang, run_generation) -> None:
                 set_context(user_id, ctx)
         except ValueError as e:
             if str(e) == "file_too_large":
-                bot.send_message(user_id, "❌ Datei ist zu groß (max. 20 MB).")
+                await facade.send_message(user_id, "❌ Datei ist zu groß (max. 20 MB).")
             else:
-                bot.send_message(user_id, "❌ Upload-Fehler. Bitte versuchen Sie es erneut.")
+                await facade.send_message(user_id, "❌ Upload-Fehler. Bitte versuchen Sie es erneut.")
         except Exception as e:
             logger.exception("Media upload failed: %s", e)
-            bot.send_message(msg.chat.id, "❌ Upload-Fehler. Bitte versuchen Sie es erneut.")
+            await facade.send_message(msg.chat.id, "❌ Upload-Fehler. Bitte versuchen Sie es erneut.")
         finally:
             record_timing("gen.media.process_media_upload", time.perf_counter() - t0)
 
-    @bot.message_handler(content_types=["photo"])
-    def on_photo(msg):
-        process_media_upload(msg, msg.photo[-1].file_id, "image", ".jpg")
+    @router.message(F.photo, F.chat.type == ChatType.PRIVATE)
+    async def on_photo(msg: Message):
+        await process_media_upload(msg, msg.photo[-1].file_id, "image", ".jpg")
 
-    @bot.message_handler(content_types=["video"])
-    def on_video(msg):
-        process_media_upload(msg, msg.video.file_id, "video", ".mp4")
+    @router.message(F.video, F.chat.type == ChatType.PRIVATE)
+    async def on_video(msg: Message):
+        await process_media_upload(msg, msg.video.file_id, "video", ".mp4")
 
-    @bot.message_handler(content_types=["document"])
-    def on_document(msg):
+    @router.message(F.document, F.chat.type == ChatType.PRIVATE)
+    async def on_document(msg: Message):
         if not msg.document:
             return
         ext = os.path.splitext(msg.document.file_name or "")[1] or ".bin"
-        process_media_upload(msg, msg.document.file_id, "document", ext)
+        await process_media_upload(msg, msg.document.file_id, "document", ext)

@@ -21,7 +21,12 @@ def test_dynamic_menu_sorts_favorites_folder_first():
 
     markup = keyboards.get_dynamic_model_menu(models, lang="de", current_path="image")
 
-    folder_buttons = [btn for row in markup.keyboard for btn in row if getattr(btn, "callback_data", "").startswith("nav_path_image/")]
+    folder_buttons = [
+        btn
+        for row in markup.inline_keyboard
+        for btn in row
+        if getattr(btn, "callback_data", "").startswith("nav_path_image/")
+    ]
     assert folder_buttons, "Expected folder buttons under image path"
     assert folder_buttons[0].callback_data == "nav_path_image/favorites"
 

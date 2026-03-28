@@ -1,20 +1,16 @@
 """
-payment_handler.py – Telegram Stars Payment Flow.
-
-Dieser Handler kümmert sich um:
-- Shop-UI (Kredit-Pakete als Inline-Buttons)
-- Invoice-Erstellung für den Kauf (`send_invoice` / Callback)
-- Callback-Verarbeitung für `buy_*` Pakete
-
-Wichtig:
-- Die eigentliche Abrechnung/Wallet-Logik (Credits + Gruppen-Credits) passiert im `DatabaseManager`
-  und in `GenerationService`. Hier wird nur der Telegram-Teil verkabelt.
+payment_handler.py – Telegram Stars (aiogram 3).
 """
+
+from __future__ import annotations
 
 import logging
 from typing import Optional
 
-from telebot import TeleBot, types
+from aiogram import F
+from aiogram.enums import ContentType
+from aiogram.filters import Command
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, Message, PreCheckoutQuery, WebAppInfo
 
 from src.presentation.telegram.handlers.common import clear_context
 from src.config.settings import config
@@ -24,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 CREDIT_PACKAGES = config.CREDIT_PACKAGES
 
+
 def get_user_lang(msg) -> str:
-    """Holt die Sprachcode aus Message oder User (z. B. call.message oder call.from_user)."""
     try:
         user = msg.from_user if hasattr(msg, "from_user") else msg
         return (user.language_code or "de")[:2]
@@ -33,33 +29,34 @@ def get_user_lang(msg) -> str:
         return "de"
 
 
-def send_invoice_to_user(bot: TeleBot, user_id: int, credits: int, price: int, lang: str = "de", payload_suffix: str = "") -> None:
-    """Sendet eine Invoice. payload_suffix z.B. _grp_-123 für Gruppen-Kauf."""
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    pay_text = f"⭐️ {price} XTR bezahlen" if lang == "de" else f"Pay ⭐️ {price} XTR"
-    pay_btn = types.InlineKeyboardButton(text=pay_text, pay=True)
-    cancel_text = "❌ Abbrechen" if lang == "de" else "❌ Cancel"
-    cancel_btn = types.InlineKeyboardButton(text=cancel_text, callback_data="cancel_invoice")
-    markup.add(pay_btn)
-    markup.add(cancel_btn)
+async def send_invoice_to_user(facade, user_id: int, credits: int, price: int, lang: str = "de", payload_suffix: str = "") -> None:
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"⭐️ {price} XTR bezahlen" if lang == "de" else f"Pay ⭐️ {price} XTR", pay=True)],
+            [InlineKeyboardButton(text="❌ Abbrechen" if lang == "de" else "❌ Cancel", callback_data="cancel_invoice")],
+        ]
+    )
     payload = f"credits_{credits}{payload_suffix}"
-    bot.send_invoice(
-        user_id,
+    await facade.send_invoice(
+        chat_id=user_id,
         title=f"{credits} AI Credits",
         description="Aufladung für Bild- und Videogenerierung",
-        invoice_payload=payload,
+        payload=payload,
         provider_token="",
         currency="XTR",
-        prices=[types.LabeledPrice(label="Credits", amount=int(price))],
-        start_parameter="buy_credits",
+        prices=[LabeledPrice(label="Credits", amount=int(price))],
         reply_markup=markup,
     )
 
 
-def show_shop_logic(bot: TeleBot, message, db, lang: str = "de", force_inline: bool = False, group_chat_id: Optional[int] = None) -> None:
-    """Zeigt den Shop. Bei group_chat_id: Credits gehen auf Gruppen-Kontingent des Users."""
-    from src.config.settings import config
-
+async def show_shop_logic(
+    facade,
+    message,
+    db,
+    lang: str = "de",
+    force_inline: bool = False,
+    group_chat_id: Optional[int] = None,
+) -> None:
     clear_context(message.chat.id)
     user_id = message.chat.id
     menu_mode = db.get_bot_setting("menu_mode", "commands")
@@ -67,28 +64,27 @@ def show_shop_logic(bot: TeleBot, message, db, lang: str = "de", force_inline: b
     if not force_inline and menu_mode == "webapp" and config.APP_URL and config.APP_URL.startswith("https://"):
         app_url = config.APP_URL.rstrip("/")
         shop_url = app_url + "/webapp?view=shop"
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton(
-            get_text("menu_mode_webapp", lang),
-            web_app=types.WebAppInfo(url=shop_url)
-        ))
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=get_text("menu_mode_webapp", lang), web_app=WebAppInfo(url=shop_url))]
+            ]
+        )
         text = get_text("webapp_open_shop", lang)
         try:
-            bot.edit_message_text(text, user_id, message.message_id, reply_markup=markup, parse_mode="HTML")
+            await facade.edit_message_text(text, user_id, message.message_id, reply_markup=markup, parse_mode="HTML")
         except Exception:
-            bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+            await facade.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
         return
 
-    markup = types.InlineKeyboardMarkup(row_width=1)
+    rows = []
     for label, desc, price, credits in CREDIT_PACKAGES:
         cb = f"buy_{credits}_{price}"
         if group_chat_id is not None:
             cb = f"{cb}_g{group_chat_id}"
-        btn_text = f"💎 {desc} ({price} ⭐️)"
-        markup.add(types.InlineKeyboardButton(btn_text, callback_data=cb))
+        rows.append([InlineKeyboardButton(text=f"💎 {desc} ({price} ⭐️)", callback_data=cb)])
+    rows.append([InlineKeyboardButton(text=get_text("btn_back", lang), callback_data="nav_main")])
 
-    back_text = get_text("btn_back", lang)
-    markup.add(types.InlineKeyboardButton(back_text, callback_data="nav_main"))
+    markup = InlineKeyboardMarkup(inline_keyboard=rows)
 
     current_credits = (
         db.get_group_user_credits(user_id, group_chat_id) + db.get_user_credits(user_id)
@@ -106,66 +102,71 @@ def show_shop_logic(bot: TeleBot, message, db, lang: str = "de", force_inline: b
     )
 
     try:
-        bot.edit_message_text(
-            text, user_id, message.message_id,
-            reply_markup=markup, parse_mode="HTML",
+        await facade.edit_message_text(
+            text,
+            user_id,
+            message.message_id,
+            reply_markup=markup,
+            parse_mode="HTML",
         )
     except Exception:
-        bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
+        await facade.send_message(user_id, text, reply_markup=markup, parse_mode="HTML")
 
 
-def register(bot: TeleBot, db) -> None:
-
-    @bot.callback_query_handler(func=lambda call: call.data == "cmd_shop")
-    def shop_callback(call):
+def register(router, facade, db) -> None:
+    @router.callback_query(F.data == "cmd_shop")
+    async def shop_callback(call: CallbackQuery):
         try:
             chat = call.message.chat if call.message else None
             grp_id = chat.id if chat and getattr(chat, "type", "") in ("group", "supergroup") else None
-            show_shop_logic(bot, call.message, db, get_user_lang(call.from_user), group_chat_id=grp_id)
-            bot.answer_callback_query(call.id)
+            await show_shop_logic(facade, call.message, db, get_user_lang(call.from_user), group_chat_id=grp_id)
+            await call.answer()
         except Exception as e:
             logger.warning("Shop callback failed: %s", e)
 
-    @bot.message_handler(commands=['buy', 'shop'])
-    def shop_command(message):
-        show_shop_logic(bot, message, db, get_user_lang(message))
+    @router.message(Command("buy", "shop"))
+    async def shop_command(message: Message):
+        await show_shop_logic(facade, message, db, get_user_lang(message))
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('buy_'))
-    def send_invoice(call):
+    @router.callback_query(F.data.startswith("buy_"))
+    async def send_invoice_cb(call: CallbackQuery):
         try:
-            parts = call.data.split('_')
+            parts = call.data.split("_")
             credits, price = int(parts[1]), int(parts[2])
             group_chat_id = None
-            if len(parts) >= 4 and parts[3].startswith('g'):
+            if len(parts) >= 4 and parts[3].startswith("g"):
                 try:
                     group_chat_id = int(parts[3][1:])
                 except (ValueError, IndexError):
                     pass
             lang = get_user_lang(call.from_user)
             payload_suffix = f"_grp_{group_chat_id}" if group_chat_id is not None else ""
-            user_id = call.from_user.id  # Invoice immer an User, nicht an Gruppen-Chat
-            send_invoice_to_user(bot, user_id, credits, price, lang, payload_suffix=payload_suffix)
+            user_id = call.from_user.id
+            await send_invoice_to_user(facade, user_id, credits, price, lang, payload_suffix=payload_suffix)
             try:
-                bot.answer_callback_query(call.id)
+                await call.answer()
             except Exception:
                 pass
         except Exception as e:
             logger.error("Error sending invoice: %s", e)
 
-    @bot.callback_query_handler(func=lambda call: call.data == "cancel_invoice")
-    def handle_cancel_invoice(call):
+    @router.callback_query(F.data == "cancel_invoice")
+    async def handle_cancel_invoice(call: CallbackQuery):
         try:
-            bot.delete_message(call.message.chat.id, call.message.message_id)
+            await facade.delete_message(call.message.chat.id, call.message.message_id)
         except Exception:
             pass
 
-    @bot.pre_checkout_query_handler(func=lambda query: True)
-    def checkout(pre_checkout_query):
-        bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+    @router.pre_checkout_query()
+    async def checkout(q: PreCheckoutQuery):
+        await q.answer(ok=True)
 
-    @bot.message_handler(content_types=["successful_payment"])
-    def got_payment(message):
-        payload = message.successful_payment.invoice_payload
+    @router.message(F.content_type == ContentType.SUCCESSFUL_PAYMENT)
+    async def got_payment(message: Message):
+        sp = message.successful_payment
+        if not sp:
+            return
+        payload = sp.invoice_payload
         try:
             parts = payload.split("_")
             credits_amount = int(parts[1])
@@ -197,4 +198,4 @@ def register(bot: TeleBot, db) -> None:
                 f"+{credits_amount} Credits gutgeschrieben.\n"
                 f"Neuer Stand: <b>{new_balance} Credits</b>"
             )
-        bot.send_message(user_id, msg, parse_mode="HTML")
+        await facade.send_message(user_id, msg, parse_mode="HTML")

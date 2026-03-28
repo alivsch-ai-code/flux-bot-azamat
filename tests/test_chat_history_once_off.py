@@ -1,16 +1,17 @@
-from unittest.mock import MagicMock
+import asyncio
+from unittest.mock import AsyncMock, MagicMock
 
 
 def test_once_off_writes_user_and_assistant_to_chat_history(monkeypatch):
     from src.presentation.telegram.handlers.gen import runner as runner_module
 
-    bot = MagicMock()
-    bot.send_chat_action = MagicMock()
-    bot.delete_message = MagicMock()
+    facade = MagicMock()
+    facade.send_chat_action = AsyncMock()
+    facade.delete_message = AsyncMock()
 
     # UI/Side-Effects vermeiden
-    monkeypatch.setattr(runner_module, "parse_and_deliver", lambda *args, **kwargs: None)
-    monkeypatch.setattr(runner_module, "smart_update_status", lambda *args, **kwargs: 1)
+    monkeypatch.setattr(runner_module, "parse_and_deliver", AsyncMock())
+    monkeypatch.setattr(runner_module, "smart_update_status", AsyncMock(return_value=1))
     monkeypatch.setattr(runner_module, "get_context", lambda _uid: {})
     monkeypatch.setattr(runner_module, "get_random_tip", lambda _lang: "tip")
 
@@ -51,9 +52,10 @@ def test_once_off_writes_user_and_assistant_to_chat_history(monkeypatch):
     generation_service = MagicMock()
     generation_service.process_request.return_value = (True, "assistant answer")
 
-    run_generation = runner_module.create_run_generation(bot, db, generation_service, lambda _uid: "de")
+    run_generation = runner_module.create_run_generation(facade, db, generation_service, lambda _uid: "de")
 
-    run_generation(
+    asyncio.run(
+        run_generation(
         user_id=123,
         model_key="m1",
         prompt="Hello",
@@ -61,6 +63,7 @@ def test_once_off_writes_user_and_assistant_to_chat_history(monkeypatch):
         is_chat=True,
         chat_history_mode="once_off",
         chat_user_name="Alice",
+        )
     )
 
     assert generation_service.process_request.call_count == 1
@@ -87,12 +90,12 @@ def test_once_off_writes_user_and_assistant_to_chat_history(monkeypatch):
 def test_persistent_only_appends_assistant(monkeypatch):
     from src.presentation.telegram.handlers.gen import runner as runner_module
 
-    bot = MagicMock()
-    bot.send_chat_action = MagicMock()
-    bot.delete_message = MagicMock()
+    facade = MagicMock()
+    facade.send_chat_action = AsyncMock()
+    facade.delete_message = AsyncMock()
 
-    monkeypatch.setattr(runner_module, "parse_and_deliver", lambda *args, **kwargs: None)
-    monkeypatch.setattr(runner_module, "smart_update_status", lambda *args, **kwargs: 1)
+    monkeypatch.setattr(runner_module, "parse_and_deliver", AsyncMock())
+    monkeypatch.setattr(runner_module, "smart_update_status", AsyncMock(return_value=1))
     monkeypatch.setattr(runner_module, "get_context", lambda _uid: {})
     monkeypatch.setattr(runner_module, "get_random_tip", lambda _lang: "tip")
 
@@ -134,10 +137,11 @@ def test_persistent_only_appends_assistant(monkeypatch):
     generation_service = MagicMock()
     generation_service.process_request.return_value = (True, "assistant answer")
 
-    run_generation = runner_module.create_run_generation(bot, db, generation_service, lambda _uid: "de")
+    run_generation = runner_module.create_run_generation(facade, db, generation_service, lambda _uid: "de")
 
     prebuilt_prompt = "PREBUILT HISTORY PROMPT"
-    run_generation(
+    asyncio.run(
+        run_generation(
         user_id=123,
         model_key="m1",
         prompt=prebuilt_prompt,
@@ -145,6 +149,7 @@ def test_persistent_only_appends_assistant(monkeypatch):
         is_chat=True,
         chat_history_mode="persistent",
         chat_user_name="Alice",
+        )
     )
 
     # Persistent: nur Assistant wird hinzugefügt (kein weiteres User-Duplizieren).

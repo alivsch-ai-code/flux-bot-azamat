@@ -117,6 +117,11 @@ class InputValidator:
 
         return ValidationResult(is_safe=True)
 
+    @staticmethod
+    def validate_safety(text: str) -> bool:
+        """Kurzform für Tests und einfache Checks: True wenn Eingabe erlaubt."""
+        return InputValidator.validateSafetyPromptInput(text).is_safe
+
     @classmethod
     def process(cls, raw_text: str) -> tuple[str, ValidationResult]:
         """
@@ -133,5 +138,5 @@ class InputValidator:
                 return  # Anfrage ablehnen
         """
         clean = cls.sanitize(raw_text)
-        result = cls.validate(clean)
+        result = cls.validateSafetyPromptInput(clean)
         return clean, result

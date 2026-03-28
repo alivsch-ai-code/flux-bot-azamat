@@ -1,62 +1,75 @@
 import logging
-from telebot import TeleBot, types
+
+from aiogram import Bot, Dispatcher, Router
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.types import BotCommand
 
 from src.application.daily_services import DailyService
 from src.config.settings import config
+from src.presentation.telegram.bot_facade import TelegramBotFacade
 from src.presentation.telegram.handlers import gen_handler, group_handler, menu_handler, payment_handler
+from src.presentation.telegram.runtime import set_telegram_loop
 
 logger = logging.getLogger(__name__)
 
 
-"""
-Telegram Bot Wiring (Update Orchestrierung).
-
-Dieses Modul ist bewusst klein:
-- `setup_bot(...)` setzt Telegram-Commands und den Chat-Menü-Button (Commands vs WebApp)
-- dann registriert es die Handler-Module:
-  - `group_handler` (Gruppenmodus: Gemini-Chat, Credits, Sprache)
-  - `menu_handler` (Navigation, WebApp-Aktionen, Shop/Settings)
-  - `payment_handler` (Telegram Stars / Invoice callbacks)
-  - `gen_handler` (Generierungs-Flow: nav/start/prompt/media)
-
-AI/Provider-Logik steckt NICHT hier, sondern in:
-- `src.application.services.GenerationService`
-- `src.infrastructure.ai.unified_client.UnifiedAIClient`
-"""
-
-
-def setup_bot(bot: TeleBot, generation_service, db) -> None:
-    """Registriert Handler und startet den DailyService."""
+async def setup_bot(
+    bot: Bot, facade: TelegramBotFacade, generation_service, db
+) -> tuple[DailyService, Dispatcher]:
     try:
-        bot.set_my_commands([
-            types.BotCommand("start", "🚀 Start / Menu"),
-            types.BotCommand("credits", "💎 Current Credits"),
-            types.BotCommand("shop", "💎 Buy Credits"),
-            types.BotCommand("help", "🆘 Help"),
-        ])
+        await bot.set_my_commands(
+            [
+                BotCommand(command="start", description="🚀 Start / Menu"),
+                BotCommand(command="credits", description="💎 Current Credits"),
+                BotCommand(command="shop", description="💎 Buy Credits"),
+                BotCommand(command="help", description="🆘 Help"),
+            ]
+        )
     except Exception as e:
         logger.warning("Bot-Commands konnten nicht gesetzt werden: %s", e)
 
     if db.get_bot_setting("menu_mode", "commands") == "webapp" and config.APP_URL:
         try:
             webapp_url = config.APP_URL.rstrip("/") + "/webapp"
-            menu_btn = types.MenuButtonWebApp("web_app", "🌐 Menü", types.WebAppInfo(webapp_url))
-            bot.set_chat_menu_button(menu_button=menu_btn)
+            menu_btn = TelegramBotFacade.build_menu_button_webapp("🌐 Menü", webapp_url)
+            await bot.set_chat_menu_button(menu_button=menu_btn)
             logger.info("Menü-Button auf Web App gesetzt: %s", webapp_url)
         except Exception as e:
             logger.warning("Menü-Button (Web App) konnte nicht gesetzt werden: %s", e)
     else:
         try:
-            bot.set_chat_menu_button(menu_button=types.MenuButtonCommands("commands"))
+            await bot.set_chat_menu_button(menu_button=TelegramBotFacade.build_menu_button_commands())
         except Exception as e:
             logger.debug("Menü-Button Reset: %s", e)
 
-    daily = DailyService(bot, db, generation_service)
+    daily = DailyService(facade, db, generation_service)
 
-    group_handler.register(bot, generation_service, db)
-    menu_handler.register(bot, generation_service, db, daily_service=daily)
-    payment_handler.register(bot, db)
-    gen_handler.register(bot, generation_service, db)
+    dp = Dispatcher()
+    group_router = Router()
+    payment_router = Router()
+    menu_router = Router()
+    gen_router = Router()
+
+    group_handler.register(group_router, facade, generation_service, db)
+    payment_handler.register(payment_router, facade, db)
+    menu_handler.register(menu_router, facade, generation_service, db, daily_service=daily)
+    gen_handler.register(gen_router, facade, generation_service, db)
+
+    dp.include_router(group_router)
+    dp.include_router(payment_router)
+    dp.include_router(menu_router)
+    dp.include_router(gen_router)
 
     daily.start()
-    
+    return daily, dp
+
+
+def create_bot_and_facade(loop) -> tuple[Bot, TelegramBotFacade]:
+    bot = Bot(
+        token=config.TELEGRAM_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    facade = TelegramBotFacade(bot, loop)
+    set_telegram_loop(loop)
+    return bot, facade
