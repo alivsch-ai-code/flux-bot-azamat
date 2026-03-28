@@ -614,6 +614,7 @@ class DailyService:
                 media_files=None,
                 no_charge=True,
                 lang="en",
+                prefer_sync_replicate=True,
             )
             if ok_img:
                 candidate_url = self._extract_first_media_url(img_result)

@@ -49,6 +49,7 @@ class GenerationService:
         lang: str = "en",
         is_chat: bool = False,
         chat_history_mode: Optional[str] = None,
+        prefer_sync_replicate: bool = False,
     ):
         """
         Verarbeitet eine Generierungsanfrage.
@@ -128,8 +129,11 @@ class GenerationService:
 
             # --- Standard-Modelle (Unified Client) ---
             else:
+                # Interne Jobs (z. B. Daily-News-Bild) brauchen sofort ein Ergebnis (URL/Text),
+                # kein Webhook + parse_and_deliver — sonst nur "__replicate_webhook__" und falsche Auslieferung.
                 use_webhook = (
-                    replicate_should_use_webhook(model)
+                    not prefer_sync_replicate
+                    and replicate_should_use_webhook(model)
                     and replicate_webhook_delivery_configured(self.ai_unified_client.config)
                 )
                 if use_webhook:

@@ -121,6 +121,46 @@ def test_process_request_webhook_inserts_job_no_immediate_charge():
     assert pos[2] == "veo-test"
 
 
+def test_process_request_prefer_sync_skips_webhook():
+    """Interne Aufrufer (z. B. Daily-News-Bild) brauchen synchrone replicate.run-Ergebnisse."""
+    db_manager = MagicMock()
+    db_manager.get_user_credits.return_value = 500
+
+    class WebhookCfg:
+        REPLICATE_API_TOKEN = "tok"
+        OPENAI_API_KEY = ""
+        GROK_API_KEY = ""
+        APP_URL = "https://bot.example"
+        REPLICATE_WEBHOOK_SIGNING_SECRET = "whsec_testsecret"
+
+    ai = MagicMock()
+    ai.config = WebhookCfg()
+    ai.generate.return_value = GenerationResult(success=True, data="https://cdn.example/img.png")
+
+    model = AIModel(
+        key="nano-banana",
+        replicate_id="google/nano-banana",
+        name="Nano",
+        description="",
+        internal_cost=1,
+        custom_price=None,
+        provider="replicate",
+        type=["image_generation"],
+    )
+
+    svc = GenerationService(db_manager=db_manager, ai_unified_client=ai)
+    with patch("src.application.services.replicate_run_slot", _noop_slot):
+        success, result = svc.process_request(
+            99, model, "a banana", media_files=None, lang="de", no_charge=True, prefer_sync_replicate=True
+        )
+
+    assert success is True
+    assert result == "https://cdn.example/img.png"
+    ai.generate.assert_called_once()
+    ai.create_replicate_prediction_with_webhook.assert_not_called()
+    db_manager.insert_replicate_webhook_job.assert_not_called()
+
+
 def test_process_request_video_fallback_sync_without_webhook_config():
     """Ohne HTTPS-APP_URL / Secret: Fallback auf synchrones generate()."""
     db_manager = MagicMock()
