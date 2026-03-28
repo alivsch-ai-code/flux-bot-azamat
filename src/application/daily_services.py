@@ -14,32 +14,63 @@ import requests
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from src.application.ai_news_rss_defaults import AI_NEWS_RSS_DEFAULT_URLS
 from src.presentation.telegram.handlers.gen.chat_sessions import append_global_chat_event
 from src.utils.strings import get_random_daily_fallback, get_text
 
 logger = logging.getLogger(__name__)
 
-# Multi-RSS für AI-Themen (inkl. OpenAI Blog)
-DEFAULT_AI_NEWS_RSS_URLS = [
-    "https://news.google.com/rss/search?q=Artificial+Intelligence&hl=en-US&gl=US&ceid=US:en",
-    "https://openai.com/blog/rss.xml",
-]
+# Rückwärtskompatibel (Importe / Skripte): gleiche Liste wie in ai_news_rss_defaults.py
+DEFAULT_AI_NEWS_RSS_URLS = list(AI_NEWS_RSS_DEFAULT_URLS)
 
 
-def _parse_rss_urls() -> list[str]:
+def _rss_urls_for_fetch(urls: list[str]) -> list[str]:
+    """
+    Pro Lauf nur eine Teilmenge abfragen (Shuffle), damit viele Feeds nicht jedes Mal
+    sequentiell blockieren. 0 oder negativ = alle URLs.
+    Env: AI_NEWS_RSS_MAX_FEEDS_PER_FETCH (Standard: 18).
+    """
+    if not urls:
+        return []
+    try:
+        cap = int(os.getenv("AI_NEWS_RSS_MAX_FEEDS_PER_FETCH", "18"))
+    except (ValueError, TypeError):
+        cap = 18
+    if cap <= 0 or len(urls) <= cap:
+        return list(urls)
+    shuffled = list(urls)
+    random.shuffle(shuffled)
+    return shuffled[:cap]
+
+
+def _rss_urls_from_env_only() -> list[str] | None:
+    """Nur Env-Override; None = kein Env gesetzt."""
     raw = (os.getenv("AI_NEWS_RSS_URLS") or "").strip()
     if raw:
         urls = [u.strip() for u in raw.split(",") if u.strip()]
         if urls:
             return urls
-    # Backward compatibility: altes Einzel-Env behalten
     single = (os.getenv("AI_NEWS_RSS_URL") or "").strip()
     if single:
         return [single]
-    return DEFAULT_AI_NEWS_RSS_URLS
+    return None
 
 
-AI_NEWS_RSS_URLS = _parse_rss_urls()
+def resolve_ai_news_rss_urls(db=None) -> list[str]:
+    """
+    Reihenfolge: AI_NEWS_RSS_URLS / AI_NEWS_RSS_URL (Env) → Neon-Tabelle ai_news_rss_feeds → Code-Default.
+    """
+    env_urls = _rss_urls_from_env_only()
+    if env_urls is not None:
+        return env_urls
+    if db is not None and hasattr(db, "get_ai_news_rss_feed_urls"):
+        try:
+            from_db = db.get_ai_news_rss_feed_urls()
+        except Exception:
+            from_db = []
+        if isinstance(from_db, list) and len(from_db) > 0:
+            return list(from_db)
+    return list(AI_NEWS_RSS_DEFAULT_URLS)
 
 # Fallback nur 1× pro Tag senden, wenn keine DB-Nachricht.
 # Wichtig: Datum in bot_settings persistieren — reiner RAM (früher _last_fallback_date)
@@ -311,7 +342,7 @@ class DailyService:
         """
         try:
             combined = []
-            for url in AI_NEWS_RSS_URLS:
+            for url in _rss_urls_for_fetch(resolve_ai_news_rss_urls(getattr(self, "db", None))):
                 feed = feedparser.parse(url)
                 feed_title = getattr(feed.feed, "title", "") or url
                 entries = getattr(feed, "entries", [])[: max(2, max_items * 3)]

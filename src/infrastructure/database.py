@@ -298,6 +298,31 @@ class DatabaseManager:
                     )
                 """)
 
+                # AI-Daily-News: RSS-URLs in Neon (editierbar); leer beim ersten Start → Seed aus Code-Default.
+                c.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS ai_news_rss_feeds (
+                        id SERIAL PRIMARY KEY,
+                        feed_url TEXT NOT NULL,
+                        label TEXT,
+                        is_active INTEGER NOT NULL DEFAULT 1,
+                        sort_order INTEGER NOT NULL DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT ai_news_rss_feeds_feed_url_key UNIQUE (feed_url)
+                    )
+                    """
+                )
+                c.execute("SELECT COUNT(*) FROM ai_news_rss_feeds")
+                _rss_cnt = c.fetchone()
+                if _rss_cnt and int(_rss_cnt[0]) == 0:
+                    from src.application.ai_news_rss_defaults import AI_NEWS_RSS_DEFAULT_URLS
+
+                    for _i, _url in enumerate(AI_NEWS_RSS_DEFAULT_URLS):
+                        c.execute(
+                            "INSERT INTO ai_news_rss_feeds (feed_url, sort_order) VALUES (%s, %s)",
+                            (_url, _i),
+                        )
+
                 conn.commit()
             except Exception as e:
                 logger.warning("Migration Warning: %s", e)
@@ -740,7 +765,26 @@ class DatabaseManager:
                 conn.rollback()
                 conn.close()
             return {"is_chat": False, "model_key": None}
-            
+
+    def get_ai_news_rss_feed_urls(self) -> list[str]:
+        """Aktive RSS-URLs für Daily AI News (Neon). Leer, wenn keine DB oder Tabelle fehlt."""
+        if not self.db_url:
+            return []
+        with self.lock:
+            conn = self._get_connection()
+            c = conn.cursor()
+            try:
+                c.execute(
+                    "SELECT feed_url FROM ai_news_rss_feeds WHERE is_active = 1 ORDER BY sort_order ASC, id ASC"
+                )
+                rows = c.fetchall()
+                return [str(r[0]).strip() for r in rows if r and r[0] and str(r[0]).strip()]
+            except Exception as e:
+                logger.debug("get_ai_news_rss_feed_urls: %s", e)
+                return []
+            finally:
+                conn.close()
+
     def user_exists(self, user_id):
         with self.lock:
             conn = self._get_connection()
