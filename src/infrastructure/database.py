@@ -710,9 +710,17 @@ class DatabaseManager:
         with self.lock:
             conn = self._get_connection()
             c = conn.cursor()
+            # Ohne users-Zeile schlägt UPDATE still fehl → Chat-Modus wirkt „kaputt“ (z. B. erste DM ohne /start).
+            c.execute(
+                "INSERT INTO users (user_id, username) VALUES (%s, 'Unknown') ON CONFLICT (user_id) DO NOTHING",
+                (user_id,),
+            )
             is_active = 1 if active else 0
             if model_key:
-                c.execute("UPDATE users SET is_chat_mode = %s, last_model_key = %s WHERE user_id = %s", (is_active, model_key, user_id))
+                c.execute(
+                    "UPDATE users SET is_chat_mode = %s, last_model_key = %s WHERE user_id = %s",
+                    (is_active, model_key, user_id),
+                )
             else:
                 c.execute("UPDATE users SET is_chat_mode = %s WHERE user_id = %s", (is_active, user_id))
             conn.commit()

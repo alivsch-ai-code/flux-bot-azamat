@@ -14,7 +14,6 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from src.config.settings import config
 from src.infrastructure.ai.replicate.prompt_engineer import optimize_prompt_bundle_via_llm
 from src.presentation.telegram import keyboards
-from src.presentation.telegram.handlers.chat_debounce import schedule_batched_text_message
 from src.presentation.telegram.handlers.common import clear_context, get_context, set_context
 from src.presentation.telegram.handlers.gen import (
     cleanup_pending_prompts,
@@ -127,7 +126,8 @@ def register_prompt_handlers(router, facade, db, get_lang, run_generation) -> No
         if chat_state and chat_state.get("is_chat") and chat_state.get("model_key"):
             tg_uid = msg.from_user.id if msg.from_user else user_id
             user_name = (msg.from_user and msg.from_user.first_name) or "User"
-            schedule_batched_text_message(user_id, (tg_uid, user_name, text), flush_private_chat_batch)
+            # Privatchat: ohne Debounce — sofort antworten (Gruppen nutzen weiter Batching in group_handler).
+            flush_private_chat_batch(user_id, [(tg_uid, user_name, text)])
             return
 
         if ctx.get("step") == "awaiting_telegram_chat_choice":
@@ -256,7 +256,7 @@ def register_prompt_handlers(router, facade, db, get_lang, run_generation) -> No
             if prompt:
                 tg_uid = call.from_user.id if call.from_user else uid
                 user_name_cb = (call.from_user and call.from_user.first_name) or "User"
-                schedule_batched_text_message(uid, (tg_uid, user_name_cb, prompt), flush_private_chat_batch)
+                flush_private_chat_batch(uid, [(tg_uid, user_name_cb, prompt)])
         else:
             user_name_cb = (call.from_user and call.from_user.first_name) or "User"
             if prompt:
