@@ -22,12 +22,15 @@ logger = logging.getLogger(__name__)
 class AppRuntime:
     """Von `main` gesetzte Referenzen für HTTP-Handler (kein globaler Zustand über Modulgrenzen)."""
 
-    __slots__ = ("db", "bot", "generation_service")
+    __slots__ = ("db", "bot", "generation_service", "bot_username")
 
     def __init__(self) -> None:
         self.db: Any = None
         self.bot: Any = None
         self.generation_service: Any = None
+        # Einmal beim Bot-Start gesetzt — vermeidet get_me_sync() pro WebApp-Request (Waitress-Thread
+        # würde sonst auf den Telegram-Event-Loop warten; bei langen AI-News-Sendungen: Stau/Timeouts → UI zeigt 0 Credits).
+        self.bot_username: str = ""
 
 
 def _webapp_react_dist_dir(project_root: str) -> str:
@@ -184,13 +187,7 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             user = runtime.db.get_user(user_id)
             settings = runtime.db.get_user_settings(user_id)
             credits = runtime.db.get_user_credits(user_id)
-            bot_username = ""
-            if runtime.bot:
-                try:
-                    me = runtime.bot.get_me_sync()
-                    bot_username = getattr(me, "username", "") or ""
-                except Exception:
-                    pass
+            bot_username = (getattr(runtime, "bot_username", None) or "").strip()
             return jsonify(
                 ok=True,
                 user_id=user_id,

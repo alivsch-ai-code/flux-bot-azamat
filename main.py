@@ -117,6 +117,15 @@ async def _run_bot_async(db, generation_service) -> None:
     app_runtime.bot = facade
     app_runtime.generation_service = generation_service
 
+    try:
+        me = await bot.get_me()
+        app_runtime.bot_username = (getattr(me, "username", None) or "").strip()
+        if app_runtime.bot_username:
+            logger.info("WebApp: @%s für /api/user_info gecacht (ohne get_me pro Request).", app_runtime.bot_username)
+    except Exception as e:
+        logger.warning("get_me für WebApp bot_username fehlgeschlagen: %s", e)
+        app_runtime.bot_username = ""
+
     threading.Thread(target=run_web_server, daemon=True).start()
     start_log_status_loop()
 
