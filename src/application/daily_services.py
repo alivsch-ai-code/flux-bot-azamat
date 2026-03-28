@@ -728,6 +728,7 @@ class DailyService:
     ) -> dict:
         """
         Gemeinsame Dispatch-Logik für Scheduler und manuellen Trigger.
+        ``wait_if_busy=True`` (Admin): blockierend ohne Timeout auf den Lock — kein Abbruch mit ``concurrent_dispatch``.
         Rückgabe:
         {
           ok: bool,
@@ -743,9 +744,12 @@ class DailyService:
 
         lock = self._ai_news_dispatch_lock
         if wait_if_busy:
-            busy_timeout = float(os.getenv("AZAMAT_AI_NEWS_LOCK_TIMEOUT_SEC", "900"))
-            busy_timeout = max(30.0, min(busy_timeout, 3600.0))
-            acquired = lock.acquire(timeout=busy_timeout)
+            # Manueller Admin-Trigger: immer warten bis der Lock frei ist (kein Timeout).
+            # Sonst bricht der Versand nach z. B. 900s mit concurrent_dispatch ab — Admin soll zuverlässig rausschicken.
+            if lock.locked():
+                logger.info("Azamat AI News: Admin-Trigger wartet auf freien Dispatch-Lock (ohne Zeitlimit) …")
+            lock.acquire(blocking=True)
+            acquired = True
         else:
             acquired = lock.acquire(blocking=False)
         if not acquired:

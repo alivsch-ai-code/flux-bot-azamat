@@ -4,6 +4,7 @@ Private-Chat-Menü und Admin — aiogram-Router (aus menu_handler ausgelagert).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -197,7 +198,8 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
             await message.answer("❌ DailyService ist nicht verfügbar.")
             return
         try:
-            result = daily_service.trigger_ai_news_post()
+            # Dispatch kann Minuten dauern (Replicate + viele Chats); nicht den aiogram-Loop blockieren.
+            result = await asyncio.to_thread(daily_service.trigger_ai_news_post)
             if result.get("ok"):
                 sent_count = int(result.get("sent_count") or 0)
                 total = int(result.get("total_recipients") or 0)
