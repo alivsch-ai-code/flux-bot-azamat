@@ -117,6 +117,8 @@ class DailyService:
         # Laufzeit-Guard gegen Doppelversand bei kurz aufeinanderfolgenden Loop-Läufen.
         self._last_rss_signature_runtime = ""
         self._last_rss_sent_ts_runtime = 0
+        # Ein Dispatch (Bild + Gemini + Broadcast) darf nicht parallel laufen (Daily-Thread + Admin-Trigger).
+        self._ai_news_dispatch_lock = threading.Lock()
 
     def start(self):
         """Startet den Hintergrund-Service in einem separaten Thread."""
@@ -636,7 +638,7 @@ class DailyService:
         Manueller Admin-Trigger für AI-News.
         Erzwingt einen Lauf unabhängig von Zufallsrate/Tageslimit und sendet an ALLE Empfänger.
         """
-        return self._dispatch_ai_news_post(force=True, broadcast_all=True)
+        return self._dispatch_ai_news_post(force=True, broadcast_all=True, wait_if_busy=True)
 
     @staticmethod
     def _build_news_signature(news_items: list[dict]) -> str:
@@ -715,6 +717,7 @@ class DailyService:
         force: bool = False,
         broadcast_all: bool = False,
         preloaded_news_items: list[dict] | None = None,
+        wait_if_busy: bool = False,
     ) -> dict:
         """
         Gemeinsame Dispatch-Logik für Scheduler und manuellen Trigger.
@@ -730,6 +733,40 @@ class DailyService:
         """
         if not self.generation_service:
             return {"ok": False, "reason": "generation_service_missing", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
+
+        lock = self._ai_news_dispatch_lock
+        if wait_if_busy:
+            busy_timeout = float(os.getenv("AZAMAT_AI_NEWS_LOCK_TIMEOUT_SEC", "900"))
+            busy_timeout = max(30.0, min(busy_timeout, 3600.0))
+            acquired = lock.acquire(timeout=busy_timeout)
+        else:
+            acquired = lock.acquire(blocking=False)
+        if not acquired:
+            logger.info("Azamat AI News: überspringe — anderer Dispatch läuft bereits (wait_if_busy=%s).", wait_if_busy)
+            return {
+                "ok": False,
+                "reason": "concurrent_dispatch",
+                "sent_to": None,
+                "target_type": None,
+                "sent_count": 0,
+                "total_recipients": 0,
+            }
+
+        try:
+            return self._dispatch_ai_news_post_locked(
+                force=force,
+                broadcast_all=broadcast_all,
+                preloaded_news_items=preloaded_news_items,
+            )
+        finally:
+            lock.release()
+
+    def _dispatch_ai_news_post_locked(
+        self,
+        force: bool = False,
+        broadcast_all: bool = False,
+        preloaded_news_items: list[dict] | None = None,
+    ) -> dict:
         max_per_day = int(os.getenv("AZAMAT_RANDOM_POSTS_PER_DAY", "5"))
         if max_per_day <= 0 and not force:
             return {"ok": False, "reason": "disabled_by_limit", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}

@@ -1,3 +1,4 @@
+import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -86,4 +87,56 @@ def test_generate_news_image_url_retries_until_valid_url(monkeypatch):
 
     assert url == "https://img.example.com/final.png"
     assert generation_service.process_request.call_count == 2
+
+
+def test_dispatch_concurrent_second_call_skipped(monkeypatch):
+    """Zweiter paralleler Aufruf ohne wait_if_busy soll concurrent_dispatch liefern."""
+    bot = MagicMock()
+    db = MagicMock()
+    generation_service = MagicMock()
+    service = DailyService(bot, db, generation_service)
+
+    started = threading.Event()
+    proceed = threading.Event()
+
+    def slow_fetch(*_a, **_kw):
+        started.set()
+        proceed.wait(timeout=5.0)
+        return [
+            {"title": "A", "snippet": "S1", "link": "https://example.com/a", "source": "SrcA"},
+            {"title": "B", "snippet": "S2", "link": "https://example.com/b", "source": "SrcB"},
+        ]
+
+    monkeypatch.setattr(service, "_fetch_ai_news_from_rss", slow_fetch)
+    db.get_all_tracked_groups.return_value = []
+    db.get_subscribed_users.return_value = [1]
+    db.get_user_settings.return_value = {"lang": "en"}
+    db.get_model_by_key.side_effect = lambda key: (
+        _text_model() if key == "google-gemini-2-5-flash" else _image_model()
+    )
+    db.get_azamat_random_count_today.return_value = 0
+
+    def _pr(*args, **kwargs):
+        model = args[1]
+        mt = ",".join(getattr(model, "type", []) or [])
+        if "image" in mt:
+            return True, "https://img.example.com/x.png"
+        return True, "Summary text"
+
+    generation_service.process_request.side_effect = _pr
+
+    out = {}
+
+    def run_a():
+        out["a"] = service._dispatch_ai_news_post(force=True, broadcast_all=True)
+
+    t1 = threading.Thread(target=run_a)
+    t1.start()
+    assert started.wait(timeout=3.0)
+    out["b"] = service._dispatch_ai_news_post(force=True, broadcast_all=True, wait_if_busy=False)
+    assert out["b"]["ok"] is False
+    assert out["b"]["reason"] == "concurrent_dispatch"
+    proceed.set()
+    t1.join(timeout=10.0)
+    assert out["a"]["ok"] is True
 
