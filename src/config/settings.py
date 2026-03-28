@@ -54,8 +54,13 @@ class Settings:
             ("L", "1500 Credits", 500, 1500),
         ]
 
-        # Max. parallele Replicate-Predictions (replicate.run). 1 = streng nacheinander.
+        # Max. parallele Replicate-Predictions (replicate.run) pro Prozess — Semaphor in
+        # replicate_concurrency.py. Entlastet Bursts; offizielle API-Limits siehe:
+        # https://replicate.com/docs/topics/predictions/rate-limits
         self.REPLICATE_MAX_CONCURRENT = max(1, int(os.getenv("REPLICATE_MAX_CONCURRENT", "1")))
+        # Webhook-Signatur (Replicate Dashboard / whsec_…); für async Predictions (Video & Co.)
+        # https://replicate.com/docs/topics/webhooks/receive-webhook
+        self.REPLICATE_WEBHOOK_SIGNING_SECRET = (os.getenv("REPLICATE_WEBHOOK_SIGNING_SECRET") or "").strip()
         # URL für Mini App – nur HTTPS!
         # Railway: APP_URL manuell oder RAILWAY_PUBLIC_DOMAIN; Render: RENDER_EXTERNAL_URL
         raw = os.getenv("APP_URL") or os.getenv("RENDER_EXTERNAL_URL") or ""

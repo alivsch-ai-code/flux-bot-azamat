@@ -10,6 +10,11 @@ from src.utils.strings import get_text
 
 logger = logging.getLogger(__name__)
 from src.infrastructure.ai.replicate_concurrency import replicate_run_slot
+from src.infrastructure.ai.unified_client import (
+    make_replicate_webhook_pending_result,
+    replicate_should_use_webhook,
+    replicate_webhook_delivery_configured,
+)
 from src.infrastructure.metrics import record_timing
 from src.infrastructure.security.validator import InputValidator
 
@@ -42,6 +47,8 @@ class GenerationService:
         generation_params: Optional[dict] = None,
         charge_cost: Optional[int] = None,
         lang: str = "en",
+        is_chat: bool = False,
+        chat_history_mode: Optional[str] = None,
     ):
         """
         Verarbeitet eine Generierungsanfrage.
@@ -121,6 +128,44 @@ class GenerationService:
 
             # --- Standard-Modelle (Unified Client) ---
             else:
+                use_webhook = (
+                    replicate_should_use_webhook(model)
+                    and replicate_webhook_delivery_configured(self.ai_unified_client.config)
+                )
+                if use_webhook:
+                    try:
+                        webhook_url = self.ai_unified_client.config.APP_URL.rstrip("/") + "/api/replicate_webhook"
+                        with replicate_run_slot():
+                            input_data = self.ai_unified_client.build_replicate_input_dict(
+                                model,
+                                prompt,
+                                media_files,
+                                generation_params or {},
+                            )
+                            pred_id = self.ai_unified_client.create_replicate_prediction_with_webhook(
+                                model, input_data, webhook_url
+                            )
+                        self.db_manager.insert_replicate_webhook_job(
+                            pred_id,
+                            user_id,
+                            model.key,
+                            lang,
+                            effective_cost,
+                            no_charge=no_charge,
+                            group_chat_id=group_chat_id,
+                            is_chat=is_chat,
+                            chat_history_mode=chat_history_mode,
+                            user_prompt=prompt,
+                        )
+                        return True, make_replicate_webhook_pending_result(pred_id)
+                    except Exception as e:
+                        logger.exception(
+                            "Replicate Webhook-Prediction fehlgeschlagen, nutze HTTP/Sync: user_id=%s model=%s err=%s",
+                            user_id,
+                            model.key,
+                            e,
+                        )
+
                 result = self.ai_unified_client.generate(
                     model,
                     prompt,

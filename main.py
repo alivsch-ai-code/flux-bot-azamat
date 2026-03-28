@@ -115,6 +115,7 @@ async def _run_bot_async(db, generation_service) -> None:
     bot, facade = create_bot_and_facade(loop)
     app_runtime.db = db
     app_runtime.bot = facade
+    app_runtime.generation_service = generation_service
 
     threading.Thread(target=run_web_server, daemon=True).start()
     start_log_status_loop()

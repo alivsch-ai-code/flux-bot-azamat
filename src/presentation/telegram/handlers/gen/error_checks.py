@@ -3,7 +3,9 @@ gen/error_checks.py – Fehlertyp-Erkennung
 
 Ermittelt die Art von Fehlern, um im Orchestrator die richtige Reaktion auszulösen:
 - is_uri_too_large: Erkennt HTTP 414 (Request-URI Too Large) – dann Datei statt URL senden.
-- is_rate_limit: Erkennt 429 / Throttling – dann Retry mit Wartezeit.
+- is_rate_limit: Erkennt 429 / Throttling – dann Retry mit Wartezeit. Passt zu Replicate
+  bei Limit-Überschreitung (429, „throttled“, …), siehe:
+  https://replicate.com/docs/topics/predictions/rate-limits
 - is_technical_error: Prüft ob Fallback auf alternatives Modell sinnvoll ist. Kein Fallback
   bei Credits, Guthaben, NSFW, Safety, Bildqualität etc. (User-/Policy-Fehler).
 """
@@ -16,7 +18,7 @@ def is_uri_too_large(err) -> bool:
 
 
 def is_rate_limit(error_msg: str) -> bool:
-    """Prüft ob ein 429 Rate-Limit-Fehler vorliegt."""
+    """Prüft ob ein 429 / Throttling-Fehler vorliegt (vgl. Replicate rate-limits)."""
     if not error_msg:
         return False
     s = str(error_msg).lower()

@@ -4,6 +4,41 @@ Zentraler Einstieg für Modell-Inferenz: **ein** Client pro App (`UnifiedAIClien
 Alle aktiven Provider (Replicate, OpenAI, Grok, Platzhalter Kling/DeepSeek) werden hier
 verdrahtet. Ältere, eigenständige `AIProvider`-Klassen (z. B. `ReplicateClient`, Kling,
 Sonauto) liegen unter `archive/python_unused_providers/` und sind nicht eingebunden.
+
+**Replicate (Predictions)** — siehe offizielle Doku:
+https://replicate.com/docs/topics/predictions/create-a-prediction
+
+- Drei Wege, Predictions anzulegen: Community (`POST /v1/predictions` + `version`),
+  Official Models (`POST /v1/models/{owner}/{name}/predictions`), Deployments
+  (`deployments.predictions.create`).
+- **Sync-Modus:** HTTP-Header `Prefer: wait` (optional `wait=<Sekunden>`); Verbindung
+  bleibt offen, Response enthält bei Abschluss `output`. Default-Wartezeit i. d. R. 60 s;
+  wenn die Zeit nicht reicht: Prediction-Objekt mit Status wie `starting`/`processing`,
+  Ergebnis per Poll (`GET` auf `urls.get`) oder Webhook nachziehen.
+- **Async (API-Default ohne `Prefer: wait`):** sofortige Antwort mit Prediction-ID;
+  Fertigstellung per Webhook oder Polling (wie in der Doku beschrieben).
+  **Wir nutzen diesen reinen HTTP-Async-Modus hier nicht:** kein `wait=False` und keine
+  Webhook-gestützte Prediction — stattdessen Sync wie unten.
+- **Deadline:** optionaler Header `Cancel-After` (z. B. `5m`) — wir setzen ihn hier
+  nicht; Lifecycle/Timeouts: https://replicate.com/docs/topics/predictions/lifecycle
+
+Unser Aufruf `replicate.run(...)` nutzt das Python-SDK mit Default `wait=True` → **Sync**
+(`Prefer: wait`); bei nicht-terminaler Antwort pollt das SDK intern weiter. Das ist nicht
+derselbe Modus wie der API-Default „async create + später holen“.
+
+**Rate limits (Server-seitig bei Replicate):**
+https://replicate.com/docs/topics/predictions/rate-limits
+
+- u. a. **600 Creates/Minute** für Predictions; **3000/Minute** für andere Endpunkte;
+  kurze Bursts darüber sind möglich, danach Throttling.
+- Bei wenig Guthaben verschärfte Limits; Antwort typisch **HTTP 429** mit Text wie
+  „throttled“ / „rate limit“.
+- Spezialfall: gewährter Credit ohne Zahlungsmittel → sehr niedrige Limits (Doku).
+
+**Unser Code:** kein zentraler 429-Retry im `UnifiedAIClient` — Fehler gehen als Text nach
+oben. Parallelität begrenzen wir mit `REPLICATE_MAX_CONCURRENT` (Semaphore), siehe
+`replicate_concurrency.py`. Im Telegram-`runner` gibt es **Retries bei erkanntem
+Rate-Limit** (`is_rate_limit`, Pause ~20 s, bis zu 4 Versuche).
 """
 import logging
 import os
@@ -52,6 +87,8 @@ def _local_paths_to_urls(paths: List[str], client) -> List[str]:
     - HTTP(S)-URLs bleiben unverändert.
     - Upload via Replicate Files API (damit Replicate-Input-Felder wie `format: uri`
       zuverlässig eine echte URL bekommen und nicht an `data:`-URIs scheitern).
+
+    Input-Dateien / URLs: https://replicate.com/docs/topics/predictions/input-files
     """
     urls = []
     for p in paths or []:
@@ -95,6 +132,36 @@ def _first_image_path(media_files: Optional[List[MediaFile]]) -> Optional[str]:
         if mf.media_type.value == "image" and mf.path and os.path.exists(mf.path):
             return mf.path
     return None
+
+
+# Nur Typen, die ausschließlich Text/Bild (inkl. Bildanalyse) sind → HTTP/Sync (replicate.run).
+# Video, Audio, gemischte oder unbekannte Typen → async Prediction + Webhook.
+_HTTP_REPLICATE_TYPES = frozenset({"text", "image", "image_analysis"})
+
+
+def replicate_model_types_allow_http(model: AIModel) -> bool:
+    types = set(model.type or [])
+    if not types:
+        return True
+    return types.issubset(_HTTP_REPLICATE_TYPES)
+
+
+def replicate_should_use_webhook(model: AIModel) -> bool:
+    return model.provider == "replicate" and not replicate_model_types_allow_http(model)
+
+
+def replicate_webhook_delivery_configured(config) -> bool:
+    url = (getattr(config, "APP_URL", None) or "").strip()
+    secret = (getattr(config, "REPLICATE_WEBHOOK_SIGNING_SECRET", None) or "").strip()
+    return url.startswith("https://") and bool(secret)
+
+
+def is_replicate_webhook_pending_result(result) -> bool:
+    return isinstance(result, dict) and result.get("__replicate_webhook__") is True
+
+
+def make_replicate_webhook_pending_result(prediction_id: str) -> dict:
+    return {"__replicate_webhook__": True, "prediction_id": prediction_id}
 
 
 class UnifiedAIClient:
@@ -177,48 +244,101 @@ class UnifiedAIClient:
 
     # --- PROVIDER IMPLEMENTIERUNGEN ---
 
+    def build_replicate_input_dict(
+        self,
+        model: AIModel,
+        prompt: str,
+        media_files: Optional[List[MediaFile]] = None,
+        generation_params: Optional[dict] = None,
+    ) -> dict:
+        """Baut das Replicate-``input``-Objekt (ohne Prediction anzulegen)."""
+        gp = generation_params or {}
+        file_paths = [mf.path for mf in (media_files or []) if mf.path] if media_files else []
+        file_urls = file_paths
+        if file_paths and any(not _is_http_url(p) for p in file_paths):
+            client = replicate.Client(api_token=self.config.REPLICATE_API_TOKEN)
+            file_urls = _local_paths_to_urls(file_paths, client)
+        if model.input_schema and isinstance(model.input_schema, dict):
+            input_data = self.schema_adapter.build_input_payload(
+                model_schema=model.input_schema,
+                user_prompt=prompt,
+                file_urls=file_urls if file_urls else None,
+            )
+        else:
+            input_data = {"prompt": prompt}
+            if file_urls:
+                input_data["image"] = file_urls[0]
+        if "flux" in model.key and "aspect_ratio" not in input_data:
+            input_data["aspect_ratio"] = "16:9"
+            input_data["safety_tolerance"] = 5
+        if "minimax" in (model.key or ""):
+            input_data["prompt_optimizer"] = True
+        if isinstance(gp, dict):
+            for k, v in gp.items():
+                if v is None:
+                    continue
+                if k == "prompt":
+                    continue
+                if isinstance(v, list) and not v:
+                    continue
+                if isinstance(v, str) and v.strip() == "":
+                    continue
+                input_data[k] = v
+        _cap_max_tokens_for_anthropic(model, input_data)
+        return input_data
+
+    def create_replicate_prediction_with_webhook(self, model: AIModel, input_data: dict, webhook_url: str) -> str:
+        """
+        Async-Modus: Prediction ohne ``Prefer: wait``, Abschluss per Webhook.
+        https://replicate.com/docs/topics/predictions/create-a-prediction
+        https://replicate.com/docs/topics/webhooks
+        """
+        from replicate import identifier as rid
+
+        client = replicate.Client(api_token=self.config.REPLICATE_API_TOKEN)
+        ref = model.replicate_id
+        try:
+            _, owner, name, version_id = rid._resolve(ref)
+        except Exception:
+            owner, name, version_id = None, None, None
+        kw = dict(
+            input=input_data,
+            webhook=webhook_url,
+            webhook_events_filter=["completed"],
+            wait=False,
+        )
+        if owner and name:
+            pred = client.models.predictions.create(model=f"{owner}/{name}", **kw)
+        elif version_id:
+            pred = client.predictions.create(version=version_id, **kw)
+        else:
+            pred = client.predictions.create(version=ref, **kw)
+        return pred.id
+
     def _run_replicate(self, model, prompt, media_files, generation_params=None):
+        """
+        Führt ein Replicate-Modell aus.
+
+        `model.replicate_id` im Format ``owner/name`` (Official Model) führt im SDK zu
+        ``models.predictions.create`` — ``POST .../v1/models/{owner}/{name}/predictions``.
+        Eine Version-Hash-Referenz nutzt stattdessen ``POST /v1/predictions`` mit
+        ``version`` (Community-Modelle), siehe:
+        https://replicate.com/docs/topics/predictions/create-a-prediction
+
+        ``replicate.run(ref, input=...)`` wartet standardmäßig auf das Ergebnis
+        (SDK-Default ``wait=True`` ≈ Sync mit ``Prefer: wait``; bei Bedarf internes
+        Polling). Alternative in der API: rein asynchron + Webhook oder manuelles
+        Pollen auf ``urls.get``.
+        """
+        gp = generation_params or {}
         with replicate_run_slot():
-            file_paths = [mf.path for mf in (media_files or []) if mf.path] if media_files else []
-            file_urls = file_paths
-            if file_paths and any(not _is_http_url(p) for p in file_paths):
-                client = replicate.Client(api_token=self.config.REPLICATE_API_TOKEN)
-                file_urls = _local_paths_to_urls(file_paths, client)
-            if model.input_schema and isinstance(model.input_schema, dict):
-                input_data = self.schema_adapter.build_input_payload(
-                    model_schema=model.input_schema,
-                    user_prompt=prompt,
-                    file_urls=file_urls if file_urls else None,
-                )
-            else:
-                input_data = {"prompt": prompt}
-                if file_urls:
-                    input_data["image"] = file_urls[0]
-            if "flux" in model.key and "aspect_ratio" not in input_data:
-                input_data["aspect_ratio"] = "16:9"
-                input_data["safety_tolerance"] = 5
-            if "minimax" in (model.key or ""):
-                input_data["prompt_optimizer"] = True
-            # Optional model runtime params coming from WebApp.
-            if isinstance(generation_params, dict):
-                for k, v in generation_params.items():
-                    if v is None:
-                        continue
-                    # prompt wird ausschließlich aus Chat/Prompt-Flow gesetzt
-                    if k == "prompt":
-                        continue
-                    # Leere Listen/Strings nicht überschreiben
-                    if isinstance(v, list) and not v:
-                        continue
-                    if isinstance(v, str) and v.strip() == "":
-                        continue
-                    input_data[k] = v
-            _cap_max_tokens_for_anthropic(model, input_data)
+            input_data = self.build_replicate_input_dict(model, prompt, media_files, gp)
+            # replicate.run: SDK default wait=True → Prefer: wait (s. Doku oben im Modul).
             output = replicate.run(model.replicate_id, input=input_data)
 
-            return self._normalize_replicate_output(output)
+            return self.normalize_replicate_output(output)
 
-    def _normalize_replicate_output(self, output):
+    def normalize_replicate_output(self, output):
         # FileOutput/Objekte mit .url erhalten – URL und read() für result_delivery verfügbar.
         # Text-Modelle liefern dagegen oft Listen/Iteratoren von Strings → komplett zusammenfügen.
         if hasattr(output, "url"):
@@ -251,6 +371,9 @@ class UnifiedAIClient:
 
         # Fallback: alles in String gießen
         return GenerationResult(success=True, data=str(output))
+
+    def _normalize_replicate_output(self, output):
+        return self.normalize_replicate_output(output)
 
     def _run_openai(self, model, prompt, image_url):
         if not self.openai_client:

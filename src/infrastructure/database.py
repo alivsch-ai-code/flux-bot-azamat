@@ -194,6 +194,22 @@ class DatabaseManager:
                         PRIMARY KEY (user_id, chat_id)
                     )
                 ''')
+                # Replicate async Predictions (Webhook): Zuordnung prediction_id → Telegram + Abrechnung
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS replicate_webhook_jobs (
+                        prediction_id TEXT PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        model_key TEXT NOT NULL,
+                        lang TEXT NOT NULL DEFAULT 'en',
+                        effective_cost INTEGER NOT NULL,
+                        no_charge INTEGER NOT NULL DEFAULT 0,
+                        group_chat_id BIGINT,
+                        is_chat INTEGER NOT NULL DEFAULT 0,
+                        chat_history_mode TEXT,
+                        user_prompt TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
                 
                 conn.commit()
                 conn.close()
@@ -264,6 +280,21 @@ class DatabaseManager:
                 c.execute("""
                     CREATE TABLE IF NOT EXISTS azamat_random_count (
                         sent_date TEXT PRIMARY KEY, count INTEGER DEFAULT 0
+                    )
+                """)
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS replicate_webhook_jobs (
+                        prediction_id TEXT PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        model_key TEXT NOT NULL,
+                        lang TEXT NOT NULL DEFAULT 'en',
+                        effective_cost INTEGER NOT NULL,
+                        no_charge INTEGER NOT NULL DEFAULT 0,
+                        group_chat_id BIGINT,
+                        is_chat INTEGER NOT NULL DEFAULT 0,
+                        chat_history_mode TEXT,
+                        user_prompt TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
 
@@ -823,6 +854,89 @@ class DatabaseManager:
                     logger.info("generation_errors cleanup: %s Einträge älter als 7 Tage gelöscht.", deleted)
             except Exception as e:
                 logger.warning("generation_errors Cleanup failed: %s", e)
+
+    def insert_replicate_webhook_job(
+        self,
+        prediction_id: str,
+        user_id: int,
+        model_key: str,
+        lang: str,
+        effective_cost: int,
+        *,
+        no_charge: bool = False,
+        group_chat_id: int | None = None,
+        is_chat: bool = False,
+        chat_history_mode: str | None = None,
+        user_prompt: str | None = None,
+    ) -> None:
+        with self.lock:
+            conn = self._get_connection()
+            try:
+                c = conn.cursor()
+                c.execute(
+                    """
+                    INSERT INTO replicate_webhook_jobs (
+                        prediction_id, user_id, model_key, lang, effective_cost,
+                        no_charge, group_chat_id, is_chat, chat_history_mode, user_prompt
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        prediction_id,
+                        user_id,
+                        model_key,
+                        lang,
+                        effective_cost,
+                        1 if no_charge else 0,
+                        group_chat_id,
+                        1 if is_chat else 0,
+                        chat_history_mode,
+                        (user_prompt or "")[:4000] if user_prompt else None,
+                    ),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def fetch_replicate_webhook_job(self, prediction_id: str) -> dict | None:
+        with self.lock:
+            conn = self._get_connection()
+            try:
+                c = conn.cursor()
+                c.execute(
+                    """
+                    SELECT prediction_id, user_id, model_key, lang, effective_cost,
+                           no_charge, group_chat_id, is_chat, chat_history_mode, user_prompt
+                    FROM replicate_webhook_jobs WHERE prediction_id = %s
+                    """,
+                    (prediction_id,),
+                )
+                row = c.fetchone()
+                if not row:
+                    return None
+                return {
+                    "prediction_id": row[0],
+                    "user_id": int(row[1]),
+                    "model_key": row[2],
+                    "lang": row[3] or "en",
+                    "effective_cost": int(row[4]),
+                    "no_charge": bool(row[5]),
+                    "group_chat_id": int(row[6]) if row[6] is not None else None,
+                    "is_chat": bool(row[7]),
+                    "chat_history_mode": row[8],
+                    "user_prompt": row[9] or "",
+                }
+            finally:
+                conn.close()
+
+    def delete_replicate_webhook_job(self, prediction_id: str) -> None:
+        with self.lock:
+            conn = self._get_connection()
+            try:
+                c = conn.cursor()
+                c.execute("DELETE FROM replicate_webhook_jobs WHERE prediction_id = %s", (prediction_id,))
+                conn.commit()
+            finally:
+                conn.close()
 
     # --- CHAT SESSIONS (eine Zeile pro User+Modell) ---
 

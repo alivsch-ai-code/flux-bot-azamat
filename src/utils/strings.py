@@ -210,6 +210,18 @@ STRINGS = {
         "ru": "Системная ошибка: ",
         "kk": "Жүйелік қате: ",
     },
+    "gen_webhook_pending": {
+        "en": "⏳ Your generation is running on the server. You will receive the result here in chat shortly.",
+        "de": "⏳ Deine Generierung läuft auf dem Server. Das Ergebnis schicken wir dir gleich hier in den Chat.",
+        "ru": "⏳ Генерация выполняется на сервере. Результат пришлём сюда в чат.",
+        "kk": "⏳ Генерация серверде орындалуда. Нәтижені жақын арада осы чатқа жібереміз.",
+    },
+    "gen_webhook_failed": {
+        "en": "❌ Generation failed (async). Please try again or contact support.",
+        "de": "❌ Generierung fehlgeschlagen (async). Bitte erneut versuchen oder Support kontaktieren.",
+        "ru": "❌ Генерация не удалась. Попробуйте снова.",
+        "kk": "❌ Генерация сәтсіз аяқталды. Қайта көріңіз.",
+    },
     "gen_service_selfie_missing": {
         "en": "Selfie for face-swap is missing!",
         "de": "Selfie für Face-Swap fehlt!",

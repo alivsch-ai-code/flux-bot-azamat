@@ -24,11 +24,149 @@ from src.presentation.telegram.handlers.gen.chat_sessions import (
     append_with_summary_if_needed,
     build_chat_prompt_from_messages,
 )
+from src.infrastructure.ai.unified_client import is_replicate_webhook_pending_result
 from src.utils.gimmicks import get_random_tip
 from src.utils.strings import get_text
 
 logger = logging.getLogger(__name__)
 REUSABLE_MEDIA_TTL_SECONDS = 240
+
+
+async def post_generation_followup_after_success(
+    facade,
+    db,
+    user_id: int,
+    model,
+    result,
+    cost: int,
+    lang: str,
+    ctx,
+    is_chat: bool,
+    prompt: str,
+    model_key: str,
+    chat_history_mode: str | None,
+):
+    """Nach erfolgreicher Auslieferung: Chat-Historie, Bild-Loop-Kontext, nächstes Menü."""
+    if model.type and "text" in model.type and chat_history_mode in ("once_off", "persistent"):
+        try:
+            raw = result[0] if isinstance(result, list) and result else result
+            assistant_text = raw if isinstance(raw, str) else str(raw)
+            if assistant_text.strip():
+                append_global_chat_event(db, user_id, "assistant", assistant_text)
+                append_with_summary_if_needed(
+                    db,
+                    user_id,
+                    model_key,
+                    {"role": "assistant", "content": assistant_text},
+                )
+        except Exception:
+            pass
+
+    if not is_chat:
+        if model.type and "image" in model.type:
+            menu_path = (ctx or {}).get("menu_path", model.menu_path or "image")
+            prev_media = list((ctx or {}).get("media_paths") or [])
+            reusable_media = []
+            for item in prev_media:
+                if isinstance(item, dict):
+                    p = str(item.get("path") or "")
+                    t = str(item.get("type") or "image")
+                    if p.startswith("http://") or p.startswith("https://"):
+                        reusable_media.append({"path": p, "type": t})
+                elif isinstance(item, str) and (item.startswith("http://") or item.startswith("https://")):
+                    reusable_media.append({"path": item, "type": "image"})
+            expires_at = int(time.time()) + REUSABLE_MEDIA_TTL_SECONDS if reusable_media else 0
+            new_ctx = {
+                "model_key": model.key,
+                "step": "waiting_for_prompt",
+                "media_paths": [],
+                "recent_media_paths": reusable_media,
+                "recent_media_expires_at": expires_at,
+                "last_prompt": (prompt or "").strip(),
+                "generation_options": {},
+                "menu_path": menu_path,
+            }
+            set_context(user_id, new_ctx)
+            prompt_msg = get_text("model_req_prompt_with_model", lang).format(model=model.name)
+            if reusable_media:
+                ttl_minutes = max(1, int(REUSABLE_MEDIA_TTL_SECONDS / 60))
+                prompt_msg += "\n\n" + get_text("reuse_media_offer", lang).format(
+                    count=len(reusable_media), minutes=ttl_minutes
+                )
+            menu_mode = db.get_bot_setting("menu_mode", "commands")
+            back_markup = None
+            if menu_mode != "keyboard":
+                from src.config.settings import config
+
+                webapp_url = (config.APP_URL or "").rstrip("/")
+                back_markup = keyboards.get_image_loop_buttons(
+                    lang, menu_mode, webapp_url, model.key, menu_path or "image"
+                )
+                if reusable_media:
+                    rows = list(back_markup.inline_keyboard)
+                    rows.append(
+                        [
+                            InlineKeyboardButton(
+                                text=get_text("btn_reuse_media_yes", lang),
+                                callback_data="reuse_media_yes",
+                            ),
+                            InlineKeyboardButton(
+                                text=get_text("btn_reuse_media_no", lang),
+                                callback_data="reuse_media_no",
+                            ),
+                        ]
+                    )
+                    rows.append(
+                        [
+                            InlineKeyboardButton(
+                                text=get_text("btn_reuse_media_text", lang),
+                                callback_data="reuse_media_text",
+                            )
+                        ]
+                    )
+                    back_markup = InlineKeyboardMarkup(inline_keyboard=rows)
+            if menu_mode == "keyboard":
+                await facade.send_message(user_id, prompt_msg, parse_mode="HTML")
+            else:
+                await facade.send_message(
+                    user_id, prompt_msg, reply_markup=back_markup, parse_mode="HTML"
+                )
+        else:
+            await asyncio.sleep(1)
+            menu_mode = db.get_bot_setting("menu_mode", "commands")
+            menu_path = ctx.get("menu_path", "root") if ctx else "root"
+            all_models = db.get_all_models()
+            if menu_mode == "keyboard":
+                next_markup = keyboards.get_path_reply_keyboard(all_models, lang, menu_path)
+            elif menu_mode == "webapp":
+                from src.config.settings import config
+                from urllib.parse import quote
+
+                if config.APP_URL:
+                    base = config.APP_URL.rstrip("/") + "/webapp"
+                    webapp_url = base + (
+                        "?path=" + quote(menu_path, safe="") if menu_path and menu_path != "root" else ""
+                    )
+                    next_markup = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text=get_text("menu_mode_webapp", lang),
+                                    web_app=WebAppInfo(url=webapp_url),
+                                )
+                            ]
+                        ]
+                    )
+                else:
+                    next_markup = keyboards.get_dynamic_model_menu(all_models, lang, menu_path)
+            else:
+                next_markup = keyboards.get_dynamic_model_menu(all_models, lang, menu_path)
+            await facade.send_message(
+                user_id,
+                get_text("msg_next_step", lang),
+                reply_markup=next_markup,
+                parse_mode="HTML",
+            )
 
 
 def create_run_generation(facade, db, generation_service, get_lang):
@@ -49,6 +187,7 @@ def create_run_generation(facade, db, generation_service, get_lang):
         if not model:
             return
         keep_context_for_image_loop = False
+        webhook_pending = False
         try:
             base_cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
             generation_options = (ctx or {}).get("generation_options") or {}
@@ -109,9 +248,13 @@ def create_run_generation(facade, db, generation_service, get_lang):
                     generation_params=generation_options,
                     charge_cost=cost,
                     lang=lang,
+                    is_chat=is_chat,
+                    chat_history_mode=chat_history_mode,
                 )
 
             success, result = await asyncio.to_thread(_call_gen)
+            # Replicate: bei Limit-Überschreitung oft HTTP 429 / „throttled“
+            # (https://replicate.com/docs/topics/predictions/rate-limits) — kurz warten und wiederholen.
             for _ in range(4):
                 if success or not is_rate_limit(result):
                     break
@@ -139,6 +282,8 @@ def create_run_generation(facade, db, generation_service, get_lang):
                             generation_params=generation_options,
                             charge_cost=cost,
                             lang=lang,
+                            is_chat=is_chat,
+                            chat_history_mode=chat_history_mode,
                         )
 
                     success, result = await asyncio.to_thread(_call_fb)
@@ -150,132 +295,33 @@ def create_run_generation(facade, db, generation_service, get_lang):
             except Exception:
                 pass
 
-            if success:
+            if success and is_replicate_webhook_pending_result(result):
+                webhook_pending = True
+                await facade.send_message(
+                    user_id,
+                    get_text("gen_webhook_pending", lang),
+                    parse_mode="HTML",
+                )
+            elif success:
                 await parse_and_deliver(
                     facade, user_id, result, model, cost, lang, ctx, is_chat, prompt, keyboards
                 )
-
-                if model.type and "text" in model.type and chat_history_mode in ("once_off", "persistent"):
-                    try:
-                        raw = result[0] if isinstance(result, list) and result else result
-                        assistant_text = raw if isinstance(raw, str) else str(raw)
-                        if assistant_text.strip():
-                            append_global_chat_event(db, user_id, "assistant", assistant_text)
-                            append_with_summary_if_needed(
-                                db,
-                                user_id,
-                                model_key,
-                                {"role": "assistant", "content": assistant_text},
-                            )
-                    except Exception:
-                        pass
-
-                if not is_chat:
-                    if model.type and "image" in model.type:
-                        keep_context_for_image_loop = True
-                        menu_path = (ctx or {}).get("menu_path", model.menu_path or "image")
-                        prev_media = list((ctx or {}).get("media_paths") or [])
-                        reusable_media = []
-                        for item in prev_media:
-                            if isinstance(item, dict):
-                                p = str(item.get("path") or "")
-                                t = str(item.get("type") or "image")
-                                if p.startswith("http://") or p.startswith("https://"):
-                                    reusable_media.append({"path": p, "type": t})
-                            elif isinstance(item, str) and (item.startswith("http://") or item.startswith("https://")):
-                                reusable_media.append({"path": item, "type": "image"})
-                        expires_at = int(time.time()) + REUSABLE_MEDIA_TTL_SECONDS if reusable_media else 0
-                        new_ctx = {
-                            "model_key": model.key,
-                            "step": "waiting_for_prompt",
-                            "media_paths": [],
-                            "recent_media_paths": reusable_media,
-                            "recent_media_expires_at": expires_at,
-                            "last_prompt": (prompt or "").strip(),
-                            "generation_options": {},
-                            "menu_path": menu_path,
-                        }
-                        set_context(user_id, new_ctx)
-                        prompt_msg = get_text("model_req_prompt_with_model", lang).format(model=model.name)
-                        if reusable_media:
-                            ttl_minutes = max(1, int(REUSABLE_MEDIA_TTL_SECONDS / 60))
-                            prompt_msg += "\n\n" + get_text("reuse_media_offer", lang).format(
-                                count=len(reusable_media), minutes=ttl_minutes
-                            )
-                        menu_mode = db.get_bot_setting("menu_mode", "commands")
-                        back_markup = None
-                        if menu_mode != "keyboard":
-                            from src.config.settings import config
-
-                            webapp_url = (config.APP_URL or "").rstrip("/")
-                            back_markup = keyboards.get_image_loop_buttons(
-                                lang, menu_mode, webapp_url, model.key, menu_path or "image"
-                            )
-                            if reusable_media:
-                                rows = list(back_markup.inline_keyboard)
-                                rows.append(
-                                    [
-                                        InlineKeyboardButton(
-                                            text=get_text("btn_reuse_media_yes", lang),
-                                            callback_data="reuse_media_yes",
-                                        ),
-                                        InlineKeyboardButton(
-                                            text=get_text("btn_reuse_media_no", lang),
-                                            callback_data="reuse_media_no",
-                                        ),
-                                    ]
-                                )
-                                rows.append(
-                                    [
-                                        InlineKeyboardButton(
-                                            text=get_text("btn_reuse_media_text", lang),
-                                            callback_data="reuse_media_text",
-                                        )
-                                    ]
-                                )
-                                back_markup = InlineKeyboardMarkup(inline_keyboard=rows)
-                        if menu_mode == "keyboard":
-                            await facade.send_message(user_id, prompt_msg, parse_mode="HTML")
-                        else:
-                            await facade.send_message(
-                                user_id, prompt_msg, reply_markup=back_markup, parse_mode="HTML"
-                            )
-                    else:
-                        await asyncio.sleep(1)
-                        menu_mode = db.get_bot_setting("menu_mode", "commands")
-                        menu_path = ctx.get("menu_path", "root") if ctx else "root"
-                        all_models = db.get_all_models()
-                        if menu_mode == "keyboard":
-                            next_markup = keyboards.get_path_reply_keyboard(all_models, lang, menu_path)
-                        elif menu_mode == "webapp":
-                            from src.config.settings import config
-                            from urllib.parse import quote
-
-                            if config.APP_URL:
-                                base = config.APP_URL.rstrip("/") + "/webapp"
-                                webapp_url = base + (
-                                    "?path=" + quote(menu_path, safe="") if menu_path and menu_path != "root" else ""
-                                )
-                                next_markup = InlineKeyboardMarkup(
-                                    inline_keyboard=[
-                                        [
-                                            InlineKeyboardButton(
-                                                text=get_text("menu_mode_webapp", lang),
-                                                web_app=WebAppInfo(url=webapp_url),
-                                            )
-                                        ]
-                                    ]
-                                )
-                            else:
-                                next_markup = keyboards.get_dynamic_model_menu(all_models, lang, menu_path)
-                        else:
-                            next_markup = keyboards.get_dynamic_model_menu(all_models, lang, menu_path)
-                        await facade.send_message(
-                            user_id,
-                            get_text("msg_next_step", lang),
-                            reply_markup=next_markup,
-                            parse_mode="HTML",
-                        )
+                if not is_chat and model.type and "image" in model.type:
+                    keep_context_for_image_loop = True
+                await post_generation_followup_after_success(
+                    facade,
+                    db,
+                    user_id,
+                    model,
+                    result,
+                    cost,
+                    lang,
+                    ctx,
+                    is_chat,
+                    prompt,
+                    model_key,
+                    chat_history_mode,
+                )
             else:
                 logger.error("Generation failed: %s", result)
                 try:
@@ -305,7 +351,7 @@ def create_run_generation(facade, db, generation_service, get_lang):
                             os.remove(mf.path)
                         except Exception:
                             pass
-            if not is_chat and not keep_context_for_image_loop:
+            if not is_chat and not keep_context_for_image_loop and not webhook_pending:
                 clear_context(user_id)
 
     return run_generation

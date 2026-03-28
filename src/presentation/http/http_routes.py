@@ -22,11 +22,12 @@ logger = logging.getLogger(__name__)
 class AppRuntime:
     """Von `main` gesetzte Referenzen für HTTP-Handler (kein globaler Zustand über Modulgrenzen)."""
 
-    __slots__ = ("db", "bot")
+    __slots__ = ("db", "bot", "generation_service")
 
     def __init__(self) -> None:
         self.db: Any = None
         self.bot: Any = None
+        self.generation_service: Any = None
 
 
 def _webapp_react_dist_dir(project_root: str) -> str:
@@ -351,6 +352,8 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
                     return "image/webp"
                 return ""
 
+            # Replicate Files API → URLs für Model-Input (s. Input files in der Doku):
+            # https://replicate.com/docs/topics/predictions/input-files
             client = replicate.Client(api_token=config.REPLICATE_API_TOKEN)
             urls: list[str] = []
 
@@ -488,3 +491,9 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
         except Exception as e:
             logger.warning("api_models error: %s", e)
             return jsonify(models=[], favorites_models=[], folders=[], title=""), 200
+
+    @app.route("/api/replicate_webhook", methods=["POST"])
+    def replicate_webhook():
+        from src.presentation.http.replicate_webhook_handler import handle_replicate_webhook_request
+
+        return handle_replicate_webhook_request(runtime, request)
