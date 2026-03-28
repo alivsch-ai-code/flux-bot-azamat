@@ -58,9 +58,13 @@ class Settings:
         # replicate_concurrency.py. Entlastet Bursts; offizielle API-Limits siehe:
         # https://replicate.com/docs/topics/predictions/rate-limits
         self.REPLICATE_MAX_CONCURRENT = max(1, int(os.getenv("REPLICATE_MAX_CONCURRENT", "1")))
-        # Webhook-Signatur (Replicate Dashboard / whsec_…); für async Predictions (Video & Co.)
+        # Webhook-Signatur (Umgebung: REPLICATE_WEBHOOK_SIGNING_SECRET, Wert z. B. whsec_… aus dem Replicate-Dashboard)
         # https://replicate.com/docs/topics/webhooks/receive-webhook
         self.REPLICATE_WEBHOOK_SIGNING_SECRET = (os.getenv("REPLICATE_WEBHOOK_SIGNING_SECRET") or "").strip()
+        if not self.REPLICATE_WEBHOOK_SIGNING_SECRET:
+            logger.debug(
+                "REPLICATE_WEBHOOK_SIGNING_SECRET fehlt (optional) — Video/async nutzt Fallback auf HTTP/Sync"
+            )
         # URL für Mini App – nur HTTPS!
         # Railway: APP_URL manuell oder RAILWAY_PUBLIC_DOMAIN; Render: RENDER_EXTERNAL_URL
         raw = os.getenv("APP_URL") or os.getenv("RENDER_EXTERNAL_URL") or ""

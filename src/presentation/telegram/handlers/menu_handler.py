@@ -47,6 +47,43 @@ from src.utils.strings import get_text, get_welcome
 logger = logging.getLogger(__name__)
 
 
+def _reset_webapp_state_unless_pending_telegram_media(user_id: int, db) -> None:
+    """Wie früher am Anfang jeder WebApp-Aktion: Kontext leeren, Chat-Modus aus, Batches abbrechen.
+    Ausnahme: User hat gerade ein Medium in Telegram hochgeladen und soll in der WebApp ein Modell wählen —
+    dann Context mit lokalen `media_paths` behalten."""
+    ctx = get_context(user_id)
+    if ctx.get("step") == "waiting_for_model_for_media" and ctx.get("media_paths"):
+        return
+    clear_context(user_id)
+    db.set_user_chat_mode(user_id, None, active=False)
+    cancel_pending_batch(user_id)
+
+
+def _merge_stored_telegram_media_paths(media_paths: list, user_id: int) -> None:
+    """Ergänzt `media_paths` aus dem Telegram-Kontext (lokale Temp-Dateien), wenn die WebApp keine Bild-URLs liefert."""
+    pre = get_context(user_id) or {}
+    extra = pre.get("media_paths") or []
+    if not extra:
+        return
+    seen: set[str] = set()
+    for m in media_paths:
+        if isinstance(m, dict) and m.get("path"):
+            seen.add(str(m["path"]))
+    for item in extra:
+        if not isinstance(item, dict):
+            continue
+        p = item.get("path")
+        if not p or str(p) in seen:
+            continue
+        ps = str(p)
+        if ps.startswith("http://") or ps.startswith("https://"):
+            media_paths.append({"path": ps, "type": item.get("type") or "image"})
+            seen.add(ps)
+        elif os.path.isfile(ps):
+            media_paths.append({"path": ps, "type": item.get("type") or "image"})
+            seen.add(ps)
+
+
 def _parse_admin_id() -> int:
     raw = os.getenv("ADMIN_ID", "0") or "0"
     try:
@@ -133,9 +170,7 @@ def process_webapp_action(
         return db.get_user_settings(uid)["lang"]
     lang = get_lang(user_id)
     all_models = db.get_all_models()
-    clear_context(user_id)
-    db.set_user_chat_mode(user_id, None, active=False)
-    cancel_pending_batch(user_id)
+    _reset_webapp_state_unless_pending_telegram_media(user_id, db)
     webapp_only_markup = None
     app_url = (config.APP_URL or "").strip().rstrip("/")
     if app_url.startswith("https://"):
@@ -267,6 +302,8 @@ def process_webapp_action(
         if media_keys_used:
             options = {k: v for k, v in options.items() if k not in media_keys_used}
 
+        _merge_stored_telegram_media_paths(media_paths, user_id)
+
         # Media-Decision:
         # - `schema_requires_media(...)` schaut in das Modell-Input-Schema (aus DB),
         #   ob der Provider wirklich ein Bild/Video erwartet.
@@ -339,10 +376,12 @@ def process_webapp_action(
         prompt_trim = _trim_webapp_prompt(pl.get("prompt"))
         _remove_reply_keyboard_silently(facade, user_id)
         if prompt_trim and _webapp_run_generation and model and model.is_active:
+            merged_media: list = []
+            _merge_stored_telegram_media_paths(merged_media, user_id)
             ctx_pre = {
                 "model_key": model_key,
                 "generation_options": {},
-                "media_paths": [],
+                "media_paths": merged_media,
                 "menu_path": model.menu_path or "root",
             }
             set_context(user_id, ctx_pre)
@@ -353,7 +392,7 @@ def process_webapp_action(
                 user_id,
                 model_key,
                 prompt_trim,
-                None,
+                ctx_media_to_list(ctx_pre),
                 is_chat=False,
                 chat_history_mode="once_off",
                 chat_user_name=user_name,

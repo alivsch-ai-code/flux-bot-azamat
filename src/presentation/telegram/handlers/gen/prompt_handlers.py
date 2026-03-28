@@ -11,9 +11,11 @@ from aiogram import F
 from aiogram.enums import ChatType
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from src.config.settings import config
 from src.infrastructure.ai.replicate.prompt_engineer import optimize_prompt_bundle_via_llm
+from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.chat_debounce import schedule_batched_text_message
-from src.presentation.telegram.handlers.common import get_context, set_context
+from src.presentation.telegram.handlers.common import clear_context, get_context, set_context
 from src.presentation.telegram.handlers.gen import (
     cleanup_pending_prompts,
     ctx_media_to_list,
@@ -128,19 +130,37 @@ def register_prompt_handlers(router, facade, db, get_lang, run_generation) -> No
             schedule_batched_text_message(user_id, (tg_uid, user_name, text), flush_private_chat_batch)
             return
 
+        if ctx.get("step") == "awaiting_telegram_chat_choice":
+            set_context(user_id, {**ctx, "pending_chat_prompt_text": text})
+            return
+
         if not ctx:
-            try:
-                default_model_key = "google-gemini-2-5-flash"
-                model = db.get_model_by_key(default_model_key)
-                if model and model.type and "text" in model.type:
-                    db.set_user_chat_mode(user_id, default_model_key, active=True)
-                    tg_uid = msg.from_user.id if msg.from_user else user_id
-                    user_name = (msg.from_user and msg.from_user.first_name) or "User"
-                    schedule_batched_text_message(user_id, (tg_uid, user_name, text), flush_private_chat_batch)
-                    return
-            except Exception:
-                pass
-        if ctx and ctx.get("step") == "waiting_for_prompt":
+            lang = get_lang(user_id)
+            default_model_key = config.GEMINI_GROUP_MODEL
+            model = db.get_model_by_key(default_model_key)
+            if model and model.type and "text" in model.type:
+                cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
+                ask = get_text("ask_chat_mode", lang).format(cost=cost)
+                set_context(
+                    user_id,
+                    {
+                        "step": "awaiting_telegram_chat_choice",
+                        "pending_chat_model_key": default_model_key,
+                        "pending_chat_prompt_text": text,
+                    },
+                )
+                markup = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            keyboards.btn(get_text("btn_yes_chat", lang), "tgchat_yes"),
+                            keyboards.btn(get_text("btn_no_chat", lang), "tgchat_no"),
+                        ]
+                    ]
+                )
+                await facade.send_message(user_id, ask, reply_markup=markup, parse_mode="HTML")
+            return
+
+        if ctx.get("step") == "waiting_for_prompt":
             model = db.get_model_by_key(ctx["model_key"])
             is_text_model = bool(model and model.type and "text" in model.type)
             settings = db.get_user_settings(user_id)
@@ -205,6 +225,54 @@ def register_prompt_handlers(router, facade, db, get_lang, run_generation) -> No
                     chat_history_mode="once_off" if is_text_model else None,
                     chat_user_name=user_name,
                 )
+
+    @router.callback_query(F.data.in_(("tgchat_yes", "tgchat_no")))
+    async def on_telegram_chat_choice(call: CallbackQuery):
+        uid = call.message.chat.id
+        lang = get_lang(uid)
+        ctx = get_context(uid)
+        if ctx.get("step") != "awaiting_telegram_chat_choice":
+            await call.answer()
+            return
+        model_key = ctx.get("pending_chat_model_key")
+        prompt = (ctx.get("pending_chat_prompt_text") or "").strip()
+        model = db.get_model_by_key(model_key) if model_key else None
+        if not model_key or not model or not model.is_active:
+            await call.answer(
+                get_text("err_model_not_found", lang).format(model_key=model_key or ""),
+                show_alert=True,
+            )
+            clear_context(uid)
+            return
+        await call.answer()
+        clear_context(uid)
+        if call.data == "tgchat_yes":
+            db.set_user_chat_mode(uid, model_key, active=True)
+            cost = int(model.custom_price if model.custom_price is not None else model.internal_cost)
+            text_active = get_text("chat_active_msg", lang).format(model=model.name, cost=cost)
+            await facade.send_message(
+                uid, text_active, reply_markup=keyboards.get_chat_active_menu(lang), parse_mode="HTML"
+            )
+            if prompt:
+                tg_uid = call.from_user.id if call.from_user else uid
+                user_name_cb = (call.from_user and call.from_user.first_name) or "User"
+                schedule_batched_text_message(uid, (tg_uid, user_name_cb, prompt), flush_private_chat_batch)
+        else:
+            user_name_cb = (call.from_user and call.from_user.first_name) or "User"
+            if prompt:
+                await run_generation(
+                    uid,
+                    model_key,
+                    prompt,
+                    None,
+                    is_chat=False,
+                    chat_history_mode="once_off",
+                    chat_user_name=user_name_cb,
+                )
+        try:
+            await facade.delete_message(uid, call.message.message_id)
+        except Exception:
+            pass
 
     @router.callback_query(lambda c: bool(c.data and c.data.startswith("prompt_")))
     async def on_prompt_decision(call: CallbackQuery):
