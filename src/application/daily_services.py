@@ -570,6 +570,37 @@ class DailyService:
         except Exception:
             return False
 
+    @staticmethod
+    def _compose_daily_news_photo_caption(summary: str, sources_footer: str, max_len: int = 1024) -> str:
+        """
+        Telegram erlaubt für Foto-Captions ca. 1024 Zeichen. Zusammenfassung + Quellen:
+        Quellen stehen am Ende — bei naivem Abschneiden würden sie fehlen; deshalb zuerst
+        die Zusammenfassung kürzen und den Quellenblock möglichst vollständig behalten.
+        """
+        sep = "\n\n"
+        s = (summary or "").strip()
+        f = (sources_footer or "").strip()
+        cap = max(64, min(int(max_len), 1024))
+        if not f:
+            if len(s) <= cap:
+                return s
+            return s[: cap - 1].rstrip() + "…"
+        if len(f) > cap:
+            return f[: cap - 1].rstrip() + "…"
+        need_footer = len(sep) + len(f)
+        room = cap - need_footer
+        if room < 1:
+            return f
+        if len(s) <= room:
+            return s + sep + f
+        cut = room - 1
+        if cut < 16:
+            return f
+        trimmed = s[:cut].rstrip()
+        while trimmed and trimmed[-1] in ",.;:—–- ":
+            trimmed = trimmed[:-1].rstrip()
+        return trimmed + "…" + sep + f
+
     def _send_news_image_with_retry(
         self,
         target_id: int,
@@ -603,10 +634,14 @@ class DailyService:
             return None
         gen_user_id = next((uid for r_type, uid, _lang in recipients if r_type == "user"), recipients[0][1])
         image_prompt = (
-            "Create a visually striking editorial AI-news image, futuristic and clean, "
-            "no text, no logos, no watermarks. Themes:\n\n"
+            "Create a rich editorial illustration for AI/tech news: a layered scene with a clear focal subject "
+            "and supporting background context (e.g. research lab atmosphere, abstract neural motifs, data flows, "
+            "silhouettes of hardware or holographic panels) that reflects the two stories below—more concrete "
+            "visual storytelling than a generic abstract blob, but still clean and not cluttered. "
+            "Absolutely no readable text, no logos, no watermarks, no lettering on screens. "
+            "Stories and cues:\n\n"
             f"{news_block}\n\n"
-            "Style: modern digital illustration, cinematic lighting, high detail."
+            "Style: modern digital illustration, cinematic lighting, depth, high detail, cohesive color grade."
         )
         for attempt in range(1, retries + 1):
             ok_img, img_result = self.generation_service.process_request(
@@ -819,13 +854,6 @@ class DailyService:
                     lines.append(f"- {title}")
             return "\n".join(lines)
 
-        # Telegram caption limit (photo captions max ~1024 chars).
-        def _cap_caption(text: str, max_len: int = 1000) -> str:
-            t = (text or "").strip()
-            if len(t) <= max_len:
-                return t
-            return (t[: max_len - 3]).rstrip() + "..."
-
         recipients = []
         for chat_id in self.db.get_all_tracked_groups():
             try:
@@ -922,13 +950,15 @@ class DailyService:
             text = summary_by_lang.get(lang_key, "").strip()
             if not text:
                 continue
-            final_text = f"{text}\n\n{_build_sources_footer(lang_key)}"
+            footer = _build_sources_footer(lang_key)
+            final_text = f"{text}\n\n{footer}"
             try:
+                photo_caption = self._compose_daily_news_photo_caption(text, footer)
                 logger.info(
                     "Azamat AI News: sende an %s chat_id=%s (caption_len=%s, mit_bild=%s)",
                     target_type,
                     target_id,
-                    len(final_text),
+                    len(photo_caption) if batch_image_url else len(final_text),
                     bool(batch_image_url),
                 )
                 # Anforderung: Bild + Text in EINER Nachricht.
@@ -936,7 +966,7 @@ class DailyService:
                     sent_img = self._send_news_image_with_retry(
                         target_id,
                         batch_image_url,
-                        caption=_cap_caption(final_text),
+                        caption=photo_caption,
                         retries=3,
                         delay_s=2.0,
                     )

@@ -104,6 +104,17 @@ def test_dispatch_dedupes_same_chat_id_across_group_and_user(monkeypatch):
     assert bot.send_message_sync.call_count == 0
 
 
+def test_compose_daily_news_photo_caption_keeps_sources_when_summary_long():
+    """Caption-Limit: Zusammenfassung kürzen, Quellenblock am Ende erhalten."""
+    long_summary = "Wort " * 400
+    footer = "Quellen:\n- Example News: https://example.com/article"
+    out = DailyService._compose_daily_news_photo_caption(long_summary, footer, max_len=1024)
+    assert len(out) <= 1024
+    assert "Quellen:" in out
+    assert "https://example.com/article" in out
+    assert out.endswith(footer)
+
+
 def test_generate_news_image_url_retries_until_valid_url(monkeypatch):
     bot = MagicMock()
     db = MagicMock()
