@@ -178,6 +178,62 @@ STRINGS = {
     "err_model_maintenance": { "en": "⚠️ This model is currently inactive.", "de": "⚠️ Dieses Modell ist derzeit in Wartung.", "ru": "⚠️ Модель на обслуживании.", "kk": "⚠️ Модель қызмет көрсетуде." },
     "err_no_credits": { "en": "🚫 Not enough Credits!", "de": "🚫 Nicht genug Credits!", "ru": "🚫 Недостаточно кредитов!", "kk": "🚫 Кредит жеткіліксіз!" },
     "err_gen_failed": { "en": "❌ Error: {result}", "de": "❌ Fehler: {result}", "ru": "❌ Ошибка: {result}", "kk": "❌ Қате: {result}" },
+
+    # --- GENERATION SERVICE (process_request / Pipelines, user-facing) ---
+    "gen_service_input_rejected_safety": {
+        "en": "⚠️ Your input was rejected for safety reasons.",
+        "de": "⚠️ Deine Eingabe wurde aus Sicherheitsgründen abgelehnt.",
+        "ru": "⚠️ Ваш запрос отклонён по соображениям безопасности.",
+        "kk": "⚠️ Сіздің енгізуіңіз қауіпсіздік себептерімен қабылданбады.",
+    },
+    "gen_service_insufficient_balance": {
+        "en": "Not enough balance! Please top up.",
+        "de": "Zu wenig Guthaben! Bitte aufladen.",
+        "ru": "Недостаточно средств! Пополните баланс.",
+        "kk": "Баланс жеткіліксіз! Толықтырыңыз.",
+    },
+    "gen_service_image_resolution_low": {
+        "en": "⚠️ Image quality too low. Please upload an image at least 500px in height.",
+        "de": "⚠️ Bildqualität zu niedrig. Bitte lade ein Bild mit mindestens 500px hoch.",
+        "ru": "⚠️ Слишком низкое качество изображения. Загрузите картинку высотой не менее 500px.",
+        "kk": "⚠️ Сурет сапасы тым төмен. Кемінде 500px биіктіктегі сурет жүктеңіз.",
+    },
+    "gen_service_error_prefix": {
+        "en": "Error: ",
+        "de": "Fehler: ",
+        "ru": "Ошибка: ",
+        "kk": "Қате: ",
+    },
+    "gen_service_system_prefix": {
+        "en": "System error: ",
+        "de": "Systemfehler: ",
+        "ru": "Системная ошибка: ",
+        "kk": "Жүйелік қате: ",
+    },
+    "gen_service_selfie_missing": {
+        "en": "Selfie for face-swap is missing!",
+        "de": "Selfie für Face-Swap fehlt!",
+        "ru": "Нет селфи для замены лица!",
+        "kk": "Бет ауыстыру үшін селфи жоқ!",
+    },
+    "gen_service_internal_config_missing": {
+        "en": "Internal configuration error (helper models missing in database).",
+        "de": "Interne Konfiguration fehlt (Hilfsmodelle nicht in DB).",
+        "ru": "Внутренняя ошибка конфигурации (вспомогательные модели отсутствуют в БД).",
+        "kk": "Ішкі баптау қатесі (көмекші модельдер дерекқорда жоқ).",
+    },
+    "gen_service_pipeline_failed": {
+        "en": "Generation failed.",
+        "de": "Generierung fehlgeschlagen.",
+        "ru": "Генерация не удалась.",
+        "kk": "Генерация сәтсіз аяқталды.",
+    },
+    "gen_service_models_not_found": {
+        "en": "Models not found.",
+        "de": "Modelle nicht gefunden.",
+        "ru": "Модели не найдены.",
+        "kk": "Модельдер табылмады.",
+    },
     "media_link_too_long": {
         "en": "✅ Result ready. The link is too long to display – the file was sent separately.",
         "de": "✅ Ergebnis bereit. Der Link ist zu lang – die Datei wurde separat gesendet.",

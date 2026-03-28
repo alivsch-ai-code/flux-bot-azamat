@@ -115,6 +115,7 @@ def create_run_generation(bot, db, generation_service, get_lang):
                 media_files,
                 generation_params=generation_options,
                 charge_cost=cost,
+                lang=lang,
             )
             for _ in range(4):
                 if success or not is_rate_limit(result):
@@ -128,6 +129,7 @@ def create_run_generation(bot, db, generation_service, get_lang):
                     media_files,
                     generation_params=generation_options,
                     charge_cost=cost,
+                    lang=lang,
                 )
 
             if not success and is_technical_error(result):
@@ -142,6 +144,7 @@ def create_run_generation(bot, db, generation_service, get_lang):
                         media_files,
                         generation_params=generation_options,
                         charge_cost=cost,
+                        lang=lang,
                     )
                     if success:
                         model = fallback_model

@@ -18,6 +18,29 @@ from src.infrastructure.ai.replicate_concurrency import replicate_run_slot
 
 logger = logging.getLogger(__name__)
 
+# Replicate-hosted Anthropic: zu hohe max_tokens-Werte führen zu API-Fehlern; harte Obergrenze.
+ANTHROPIC_REPLICATE_MAX_TOKENS = 4000
+
+
+def _is_anthropic_replicate_model(model) -> bool:
+    rid = (getattr(model, "replicate_id", None) or "").lower()
+    key = (getattr(model, "key", None) or "").lower()
+    return "anthropic" in rid or "anthropic" in key
+
+
+def _cap_max_tokens_for_anthropic(model, input_data: dict) -> None:
+    if not _is_anthropic_replicate_model(model) or not isinstance(input_data, dict):
+        return
+    if "max_tokens" not in input_data:
+        return
+    raw = input_data["max_tokens"]
+    try:
+        mt = int(raw)
+    except (TypeError, ValueError):
+        return
+    if mt > ANTHROPIC_REPLICATE_MAX_TOKENS:
+        input_data["max_tokens"] = ANTHROPIC_REPLICATE_MAX_TOKENS
+
 
 def _is_http_url(s: str) -> bool:
     return isinstance(s, str) and (s.startswith("http://") or s.startswith("https://"))
@@ -190,6 +213,7 @@ class UnifiedAIClient:
                     if isinstance(v, str) and v.strip() == "":
                         continue
                     input_data[k] = v
+            _cap_max_tokens_for_anthropic(model, input_data)
             output = replicate.run(model.replicate_id, input=input_data)
 
             return self._normalize_replicate_output(output)

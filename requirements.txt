@@ -13,7 +13,7 @@ jwt
 openai
 ruff
 psutil
-feedparser
+feedparser>=6.0.11
 
 # Testing
 pytest>=7.4.0

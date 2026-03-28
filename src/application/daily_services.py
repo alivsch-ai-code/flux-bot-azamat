@@ -289,7 +289,7 @@ class DailyService:
                 prompt = f"{prompt_tpl}\n\nPerson's name: {user_name or 'User'}\n\nOutput ONLY the greeting text, nothing else."
 
                 ok, result = self.generation_service.process_request(
-                    user_id, model, prompt, media_files=None, no_charge=True
+                    user_id, model, prompt, media_files=None, no_charge=True, lang=lang
                 )
                 if not ok or not result:
                     continue
@@ -581,6 +581,7 @@ class DailyService:
                 image_prompt,
                 media_files=None,
                 no_charge=True,
+                lang="en",
             )
             if ok_img:
                 candidate_url = self._extract_first_media_url(img_result)
@@ -786,7 +787,7 @@ class DailyService:
                 prompt = f"{prompt_tpl}\n\n---\n{news_block}\n---\n\nOutput ONLY the summarized news text."
                 user_id_for_gen = target_id if target_type == "user" else (self.db.get_subscribed_users() or [target_id])[0]
                 ok, result = self.generation_service.process_request(
-                    user_id_for_gen, model, prompt, media_files=None, no_charge=True
+                    user_id_for_gen, model, prompt, media_files=None, no_charge=True, lang=lang_key
                 )
                 if not ok or not result or not str(result).strip():
                     continue

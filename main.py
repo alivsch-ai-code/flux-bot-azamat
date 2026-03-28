@@ -131,7 +131,7 @@ def main():
     # 3) Unified Inference Entry: ein Client, der alle Provider/Modelle verdrahtet.
     ai_provider = UnifiedAIClient(config)
     # 4) Business Layer: Credits/Validation/Routering + Pipeline-Sonderfälle.
-    generation_service = GenerationService(repo=db, ai=ai_provider)
+    generation_service = GenerationService(db_manager=db, ai_unified_client=ai_provider)
     logger.info("Service Layer initialisiert.")
 
     try:

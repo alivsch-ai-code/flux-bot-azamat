@@ -6,6 +6,7 @@ from PIL import Image
 from typing import List, Optional
 
 from src.domain.entities import AIModel, MediaFile
+from src.utils.strings import get_text
 
 logger = logging.getLogger(__name__)
 from src.infrastructure.ai.replicate_concurrency import replicate_run_slot
@@ -14,7 +15,7 @@ from src.infrastructure.security.validator import InputValidator
 
 class GenerationService:
     """
-    Business-Layer zwischen Telegram/WebApp und dem AI-Inferenz-Client.
+    Business-Layer zwischen Telegram/WebApp und dem AI-Inferenz-Clients.
 
     Verantwortlichkeiten:
     - Prompt-Sicherheit (InputValidator)
@@ -26,9 +27,9 @@ class GenerationService:
     WebApp/HTTP nur noch "Requests" anfragen, ohne Provider-spezifische Details
     kennen zu müssen (Unified-Prinzip).
     """
-    def __init__(self, repo, ai):
-        self.repo = repo  # Das ist der DatabaseManager
-        self.ai = ai      # Das ist der UnifiedAIClient
+    def __init__(self, db_manager, ai_unified_client):
+        self.db_manager = db_manager
+        self.ai_unified_client = ai_unified_client
 
     def process_request(
         self,
@@ -40,6 +41,7 @@ class GenerationService:
         group_chat_id: Optional[int] = None,
         generation_params: Optional[dict] = None,
         charge_cost: Optional[int] = None,
+        lang: str = "en",
     ):
         """
         Verarbeitet eine Generierungsanfrage.
@@ -51,8 +53,12 @@ class GenerationService:
         start = time.perf_counter()
         try:
             # 0) Prompt-Sicherheit & Bereinigung
-            if not InputValidator.validate_safety(prompt or ""):
-                return False, "⚠️ Deine Eingabe wurde aus Sicherheitsgründen abgelehnt."
+            validation_result = InputValidator.validateSafetyPromptInput(prompt or "")
+            if not validation_result.is_safe:
+               #logger.warning("Safety Corruption detected: error=%s", validation_result.reason)
+                return False, get_text("gen_service_input_rejected_safety", lang)
+
+            # 0.1) Prompt-Bereinigung
             prompt = InputValidator.sanitize_prompt(prompt or "")
 
             # 1) Credits-Check (überspringen bei no_charge, z.B. Willkommens-Gruß)
@@ -60,11 +66,11 @@ class GenerationService:
 
             if not no_charge:
                 if group_chat_id is not None:
-                    user_credits = self.repo.get_effective_credits_for_group(user_id, group_chat_id)
+                    user_credits = self.db_manager.get_effective_credits_for_group(user_id, group_chat_id)
                 else:
-                    user_credits = self.repo.get_user_credits(user_id)
+                    user_credits = self.db_manager.get_user_credits(user_id)
                 if user_credits < effective_cost:
-                    return False, "Zu wenig Guthaben! Bitte aufladen."
+                    return False, get_text("gen_service_insufficient_balance", lang)
 
             # Erste Bild-Datei für Pipelines (Backward-Kompatibilität)
             first_image_path = None
@@ -80,42 +86,42 @@ class GenerationService:
                     with Image.open(first_image_path) as img:
                         width, height = img.size
                         if width < 500 or height < 500:
-                            return False, "⚠️ Bildqualität zu niedrig. Bitte lade ein Bild mit mindestens 500px hoch."
+                            return False, get_text("gen_service_image_resolution_low", lang)
                 except Exception:
                     pass
 
             # 3. Routing nach Modelltyp
             def _charge(reason_suffix: str) -> bool:
                 if group_chat_id is not None:
-                    return self.repo.deduct_credits_for_group(user_id, group_chat_id, effective_cost, reason=reason_suffix)
-                self.repo.update_credits(user_id, -effective_cost, reason=reason_suffix)
+                    return self.db_manager.deduct_credits_for_group(user_id, group_chat_id, effective_cost, reason=reason_suffix)
+                self.db_manager.update_credits(user_id, -effective_cost, reason=reason_suffix)
                 return True  # User-Credits wurden oben bereits geprüft
 
             if model.key == "premium-headshot-pipeline":
-                success, result_list = self._run_premium_pipeline(prompt, first_image_path)
+                success, result_list = self._run_premium_pipeline(prompt, first_image_path, lang)
                 if not success:
                     return False, result_list
                 if not no_charge:
                     if group_chat_id is not None:
-                        self.repo.deduct_credits_for_group(user_id, group_chat_id, model.cost, reason="premium_pipeline")
+                        self.db_manager.deduct_credits_for_group(user_id, group_chat_id, model.cost, reason="premium_pipeline")
                     else:
-                        self.repo.update_credits(user_id, -model.cost, reason="premium_pipeline")
+                        self.db_manager.update_credits(user_id, -model.cost, reason="premium_pipeline")
                 return True, result_list
 
             elif model.key == "ultimate-headshot-pipeline":
-                success, result_url = self._run_single_pipeline(prompt, first_image_path)
+                success, result_url = self._run_single_pipeline(prompt, first_image_path, lang)
                 if not success:
                     return False, result_url
                 if not no_charge:
                     if group_chat_id is not None:
-                        self.repo.deduct_credits_for_group(user_id, group_chat_id, model.cost, reason="ultimate_pipeline")
+                        self.db_manager.deduct_credits_for_group(user_id, group_chat_id, model.cost, reason="ultimate_pipeline")
                     else:
-                        self.repo.update_credits(user_id, -model.cost, reason="ultimate_pipeline")
+                        self.db_manager.update_credits(user_id, -model.cost, reason="ultimate_pipeline")
                 return True, result_url
 
             # --- Standard-Modelle (Unified Client) ---
             else:
-                result = self.ai.generate(
+                result = self.ai_unified_client.generate(
                     model,
                     prompt,
                     media_files=media_files,
@@ -123,33 +129,33 @@ class GenerationService:
                 )
                 if not result.success:
                     logger.warning("Generation FAILED (no charge): user_id=%s model=%s error=%s", user_id, model.key, result.error)
-                    return False, f"Fehler: {result.error}"
+                    return False, get_text("gen_service_error_prefix", lang) + str(result.error or "")
                 if not no_charge and not _charge(f"gen_{model.key}"):
-                    return False, "Zu wenig Guthaben! Bitte aufladen."
+                    return False, get_text("gen_service_insufficient_balance", lang)
                 return True, result.data
 
         except Exception as e:
             logger.exception("CRITICAL ERROR in GenerationService: %s", e)
-            return False, f"Systemfehler: {str(e)}"
+            return False, get_text("gen_service_system_prefix", lang) + str(e)
         finally:
             record_timing("generation_service.process_request", time.perf_counter() - start)
 
     # --- PRIVATE FUNKTIONEN ---
 
-    def _run_premium_pipeline(self, user_prompt: str, user_image_path: str):
+    def _run_premium_pipeline(self, user_prompt: str, user_image_path: str, lang: str = "en"):
         """Erstellt 4 Variationen mittels Flux Pro und FaceSwap."""
         logger.info("Starte Premium Pipeline")
 
         if not user_image_path or not os.path.exists(user_image_path):
-            return False, "Selfie für Face-Swap fehlt!"
+            return False, get_text("gen_service_selfie_missing", lang)
 
         # WICHTIG: Modelle jetzt aus der DB holen statt aus statischem Dict
-        flux_model = self.repo.get_model_by_key("flux-1.1-pro")
-        swap_model = self.repo.get_model_by_key("face-swap")
-        # enhance_model = self.repo.get_model_by_key("face-enhance") # Optional
+        flux_model = self.db_manager.get_model_by_key("flux-1.1-pro")
+        swap_model = self.db_manager.get_model_by_key("face-swap")
+        # enhance_model = self.db_manager.get_model_by_key("face-enhance") # Optional
 
         if not flux_model or not swap_model:
-            return False, "Interne Konfiguration fehlt (Hilfsmodelle nicht in DB)."
+            return False, get_text("gen_service_internal_config_missing", lang)
 
         # Prompts generieren (Hardcoded Variationen, um Import-Loop zu vermeiden)
         prompts = [
@@ -167,7 +173,7 @@ class GenerationService:
             
             try:
                 # SCHRITT 1: Basis-Bild mit Flux
-                res_base = self.ai.generate(flux_model, specific_prompt, media_files=None)
+                res_base = self.ai_unified_client.generate(flux_model, specific_prompt, media_files=None)
                 if not res_base.success:
                     logger.warning("Skipping Variante %s: %s", i + 1, res_base.error)
                     continue
@@ -205,23 +211,23 @@ class GenerationService:
                 continue
         
         if len(final_urls) == 0:
-            return False, "Generierung fehlgeschlagen."
+            return False, get_text("gen_service_pipeline_failed", lang)
             
         return True, final_urls
 
-    def _run_single_pipeline(self, user_prompt: str, user_image_path: str):
+    def _run_single_pipeline(self, user_prompt: str, user_image_path: str, lang: str = "en"):
         """Backup Pipeline für Einzelbilder."""
         # Modelle aus DB laden
-        flux_model = self.repo.get_model_by_key("flux-1.1-pro")
-        swap_model = self.repo.get_model_by_key("face-swap")
+        flux_model = self.db_manager.get_model_by_key("flux-1.1-pro")
+        swap_model = self.db_manager.get_model_by_key("face-swap")
 
         if not flux_model or not swap_model:
-            return False, "Modelle nicht gefunden."
+            return False, get_text("gen_service_models_not_found", lang)
         
         # 1. Bild generieren
-        res_step1 = self.ai.generate(flux_model, user_prompt, media_files=None)
+        res_step1 = self.ai_unified_client.generate(flux_model, user_prompt, media_files=None)
         if not res_step1.success:
-            return False, res_step1.error
+            return False, get_text("gen_service_error_prefix", lang) + str(res_step1.error or "")
         base_url = str(res_step1.data)
         
         time.sleep(5) 
@@ -237,4 +243,4 @@ class GenerationService:
             final_url = output[0] if isinstance(output, list) else str(output)
             return True, final_url
         except Exception as e:
-            return False, str(e)
+            return False, get_text("gen_service_system_prefix", lang) + str(e)

@@ -79,3 +79,58 @@ def test_run_replicate_includes_generic_schema_params():
     assert sent_input["prompt"] == "x"
     assert sent_input["cfg_scale"] == 0.8
     assert "empty" not in sent_input
+
+
+def test_run_replicate_caps_anthropic_max_tokens():
+    model = AIModel(
+        key="claude-test",
+        replicate_id="anthropic/claude-4.5-sonnet",
+        name="Claude",
+        description="",
+        internal_cost=10,
+        custom_price=None,
+        provider="replicate",
+        input_schema={
+            "properties": {
+                "prompt": {"type": "string"},
+                "max_tokens": {"type": "integer", "default": 8192},
+            }
+        },
+    )
+    client = UnifiedAIClient(DummyConfig())
+
+    with patch("src.infrastructure.ai.unified_client.replicate.run", return_value="ok") as run_mock:
+        client.generate(
+            model,
+            prompt="hi",
+            media_files=None,
+            generation_params={"max_tokens": 16000},
+        )
+
+    _, kwargs = run_mock.call_args
+    assert kwargs["input"]["max_tokens"] == 4000
+
+
+def test_run_replicate_caps_anthropic_max_tokens_from_schema_default():
+    model = AIModel(
+        key="claude-haiku",
+        replicate_id="anthropic/claude-4.5-haiku",
+        name="Haiku",
+        description="",
+        internal_cost=5,
+        custom_price=None,
+        provider="replicate",
+        input_schema={
+            "properties": {
+                "prompt": {"type": "string"},
+                "max_tokens": {"type": "integer", "default": 8192},
+            }
+        },
+    )
+    client = UnifiedAIClient(DummyConfig())
+
+    with patch("src.infrastructure.ai.unified_client.replicate.run", return_value="ok") as run_mock:
+        client.generate(model, prompt="x", media_files=None, generation_params={})
+
+    _, kwargs = run_mock.call_args
+    assert kwargs["input"]["max_tokens"] == 4000

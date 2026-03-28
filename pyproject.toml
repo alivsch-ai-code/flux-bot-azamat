@@ -1,0 +1,14 @@
+[tool.pyright]
+include = ["src", "tests", "main.py"]
+exclude = ["**/node_modules", "webapp-react/**"]
+pythonVersion = "3.10"
+reportMissingModuleSource = false
+useLibraryCodeForTypes = true
+
+[tool.basedpyright]
+include = ["src", "tests", "main.py"]
+exclude = ["**/node_modules", "webapp-react/**"]
+pythonVersion = "3.10"
+reportMissingModuleSource = false
+useLibraryCodeForTypes = true
+reportMissingTypeStubs = false

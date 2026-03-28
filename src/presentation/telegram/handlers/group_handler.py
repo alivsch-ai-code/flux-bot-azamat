@@ -56,7 +56,9 @@ def _try_send_one_time_greeting(bot: TeleBot, db, generation_service, user_id: i
         return
     prompt_template = get_text("grp_greeting_prompt", lang)
     prompt = f"{prompt_template}\n\nName: {user_name or 'User'}\n\nOutput ONLY the greeting text, nothing else."
-    success, result = generation_service.process_request(user_id, model, prompt, media_files=None, no_charge=True)
+    success, result = generation_service.process_request(
+        user_id, model, prompt, media_files=None, no_charge=True, lang=lang
+    )
     if not success or not result:
         return
     try:
@@ -118,7 +120,7 @@ def register(bot: TeleBot, generation_service, db) -> None:
             full_prompt = f"[SYSTEM]\n{system_prompt}\n\n[HISTORY]\n{block}\nAssistant:"
 
         success, result = generation_service.process_request(
-            last_uid, model, full_prompt, media_files=None, group_chat_id=chat_id
+            last_uid, model, full_prompt, media_files=None, group_chat_id=chat_id, lang=lang
         )
         if not success:
             try:

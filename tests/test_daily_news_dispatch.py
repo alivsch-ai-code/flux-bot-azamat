@@ -38,7 +38,7 @@ def test_dispatch_dedupes_same_chat_id_across_group_and_user(monkeypatch):
         ],
     )
 
-    def fake_process_request(_uid, model, _prompt, media_files=None, no_charge=True):
+    def fake_process_request(_uid, model, _prompt, media_files=None, no_charge=True, **kwargs):
         if "image" in ",".join(model.type):
             return True, "https://img.example.com/news.png"
         return True, "Localized summary text"
