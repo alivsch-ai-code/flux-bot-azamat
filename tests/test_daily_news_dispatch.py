@@ -13,6 +13,50 @@ def _image_model():
     return SimpleNamespace(type=["image_generation"], is_active=True, key="nano-banana")
 
 
+def test_dispatch_skips_non_negative_group_settings_and_keeps_user_dm(monkeypatch):
+    """Positive chat_id in group_settings darf keine User-DM mit gleicher ID verdrängen."""
+    bot = MagicMock()
+    bot.send_photo_sync = MagicMock()
+    bot.send_message_sync = MagicMock()
+    db = MagicMock()
+    generation_service = MagicMock()
+    service = DailyService(bot, db, generation_service)
+
+    dup_user_id = 123456789
+    db.get_all_tracked_groups.return_value = [dup_user_id]  # fehlerhaft wie „Gruppe“ gespeichert
+    db.get_subscribed_users.return_value = [dup_user_id]
+    db.get_group_language.return_value = "ru"
+    db.get_user_settings.return_value = {"lang": "de", "daily_msg": True}
+    db.get_model_by_key.side_effect = lambda key: _text_model() if key == "google-gemini-2-5-flash" else _image_model()
+    db.get_azamat_random_count_today.return_value = 0
+
+    monkeypatch.setattr(
+        service,
+        "_fetch_ai_news_from_rss",
+        lambda max_items=2: [
+            {"title": "A", "snippet": "S1", "link": "https://example.com/a", "source": "SrcA"},
+            {"title": "B", "snippet": "S2", "link": "https://example.com/b", "source": "SrcB"},
+        ],
+    )
+
+    def fake_process_request(_uid, model, _prompt, media_files=None, no_charge=True, **kwargs):
+        if "image" in ",".join(model.type):
+            return True, "https://img.example.com/news.png"
+        return True, "German summary"
+
+    generation_service.process_request.side_effect = fake_process_request
+
+    result = service._dispatch_ai_news_post(force=True, broadcast_all=True)
+
+    assert result["ok"] is True
+    assert bot.send_photo_sync.call_count == 1
+    assert bot.send_photo_sync.call_args[0][0] == dup_user_id
+    # Summary-Prompt nutzt User-Sprache (de), nicht die fälschlich gruppenzugeordnete ru.
+    calls = [c for c in generation_service.process_request.call_args_list if "image" not in ",".join(c.args[1].type)]
+    assert len(calls) == 1
+    assert calls[0].kwargs.get("lang") == "de"
+
+
 def test_dispatch_dedupes_same_chat_id_across_group_and_user(monkeypatch):
     bot = MagicMock()
     bot.send_photo_sync = MagicMock()

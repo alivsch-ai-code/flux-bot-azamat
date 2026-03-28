@@ -817,8 +817,21 @@ class DailyService:
 
         recipients = []
         for chat_id in self.db.get_all_tracked_groups():
+            try:
+                cid = int(chat_id)
+            except Exception:
+                continue
+            # Privatchats/User: positive Telegram-ID. Gruppen/Supergruppen/Kanäle: negativ.
+            # Positive IDs in group_settings würden sonst beim Dedup vor dem User-Eintrag stehen und
+            # die persönliche Daily-News-DM (mit User-Sprache) verdrängen — wirkt wie „nur Gruppe/RU“.
+            if cid >= 0:
+                logger.warning(
+                    "AI News: group_settings chat_id=%s übersprungen (keine Gruppen-ID); vermeidet Konflikt mit User-DMs.",
+                    cid,
+                )
+                continue
             lang = self.db.get_group_language(chat_id)
-            recipients.append(("group", chat_id, lang))
+            recipients.append(("group", cid, lang))
         for user_id in self.db.get_subscribed_users():
             settings = self.db.get_user_settings(user_id)
             lang = settings.get("lang", "en")
@@ -826,8 +839,8 @@ class DailyService:
         if not recipients:
             return {"ok": False, "reason": "no_recipients", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
 
-        # Dedupe über chat_id (unabhängig vom Typ), damit Gruppe nicht zusätzlich als "User" bedient wird.
-        # Wenn dieselbe chat_id in beiden Listen ist, gewinnt die Gruppen-Variante.
+        # Dedupe über chat_id (unabhängig vom Typ), damit dieselbe ID nicht doppelt bedient wird.
+        # Reihenfolge der Liste: zuerst Gruppen, dann User — bei echter Kollision gewinnt die Gruppe.
         dedup = []
         seen_chat_ids = set()
         for t_type, t_id, t_lang in recipients:
@@ -840,7 +853,15 @@ class DailyService:
             seen_chat_ids.add(cid)
             dedup.append((t_type, cid, t_lang))
 
+        # User zuerst: Daily-News per DM in der jeweiligen UI-Sprache vor Gruppenposts (Gruppe = eine Sprache für alle).
+        dedup.sort(key=lambda row: (0 if row[0] == "user" else 1, row[1]))
+
         targets = dedup if broadcast_all else [random.choice(dedup)]
+        if broadcast_all and targets:
+            n_u = sum(1 for t, _, _ in targets if t == "user")
+            n_g = sum(1 for t, _, _ in targets if t == "group")
+            langs = sorted({((lg or "en").strip() or "en") for _, _, lg in targets})
+            logger.info("Azamat AI News: Zielverteilung — %s User-DM(s), %s Gruppe(n); Sprachen in dieser Runde: %s.", n_u, n_g, langs)
         sent_count = 0
         first_sent_to = None
         first_type = None
