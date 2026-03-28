@@ -20,7 +20,7 @@ def get_telegram_loop() -> asyncio.AbstractEventLoop:
 
 
 def run_coroutine_sync(coro, *, timeout: float = 600):
-    """Führt eine Coroutine auf dem Telegram-Loop aus (z. B. Flask-Thread, DailyService-Thread)."""
+    """Führt eine Coroutine auf dem Telegram-Loop aus (z. B. Flask- oder Worker-Thread — nicht vom Event-Loop-Thread)."""
     loop = get_telegram_loop()
     fut = asyncio.run_coroutine_threadsafe(coro, loop)
     return fut.result(timeout=timeout)

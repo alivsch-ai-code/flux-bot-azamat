@@ -68,6 +68,10 @@ class TelegramBotFacade:
         return self._bot
 
     def _sync(self, coro, *, timeout: float = 180):
+        """
+        Nur aus Nicht-Event-Loop-Threads aufrufen (Waitress, DailyService, asyncio.to_thread).
+        Nie aus einem aiogram-``async def``-Handler direkt — sonst Deadlock (Loop blockiert auf result()).
+        """
         fut = asyncio.run_coroutine_threadsafe(coro, self._loop)
         return fut.result(timeout=timeout)
 

@@ -231,7 +231,15 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
             await facade.delete_message(user_id, message.message_id)
         except Exception:
             pass
-        process_webapp_action(facade, user_id, action, db, is_group=is_group, payload=data)
+        await asyncio.to_thread(
+            process_webapp_action,
+            facade,
+            user_id,
+            action,
+            db,
+            is_group=is_group,
+            payload=data,
+        )
 
     @router.message(Command("start"), F.chat.type == ChatType.PRIVATE)
     async def send_welcome(message: Message):
@@ -289,20 +297,20 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
                         ]
                     )
                     await send_welcome_with_video(facade, user_id, welcome_text, markup)
-                    _remove_reply_keyboard_silently(facade, user_id)
+                    await asyncio.to_thread(_remove_reply_keyboard_silently, facade, user_id)
                 except Exception as e:
                     logger.warning("WebApp-Button fehlgeschlagen, Fallback zu Inline-Menü: %s", e)
                     markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                     await send_welcome_with_video(facade, user_id, welcome_text, markup)
-                    _remove_reply_keyboard_silently(facade, user_id)
+                    await asyncio.to_thread(_remove_reply_keyboard_silently, facade, user_id)
             else:
                 markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                 await send_welcome_with_video(facade, user_id, welcome_text, markup)
-                _remove_reply_keyboard_silently(facade, user_id)
+                await asyncio.to_thread(_remove_reply_keyboard_silently, facade, user_id)
         else:
             markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
             await send_welcome_with_video(facade, user_id, welcome_text, markup)
-            _remove_reply_keyboard_silently(facade, user_id)
+            await asyncio.to_thread(_remove_reply_keyboard_silently, facade, user_id)
 
     @router.callback_query(
         lambda c: bool(c.data and c.data.startswith("nav_") and not c.data.startswith("nav_path_"))
@@ -368,7 +376,7 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
                         except Exception:
                             pass
                         await send_welcome_with_video(facade, user_id, new_text, new_markup)
-                        _remove_reply_keyboard_silently(facade, user_id)
+                        await asyncio.to_thread(_remove_reply_keyboard_silently, facade, user_id)
                     except Exception as e:
                         logger.warning("WebApp-Button (nav_main) fehlgeschlagen, Fallback: %s", e)
                         new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
@@ -377,7 +385,7 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
                         except Exception:
                             pass
                         await send_welcome_with_video(facade, user_id, new_text, new_markup)
-                        _remove_reply_keyboard_silently(facade, user_id)
+                        await asyncio.to_thread(_remove_reply_keyboard_silently, facade, user_id)
                 else:
                     new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                     try:
@@ -385,7 +393,7 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
                     except Exception:
                         pass
                     await send_welcome_with_video(facade, user_id, new_text, new_markup)
-                    _remove_reply_keyboard_silently(facade, user_id)
+                    await asyncio.to_thread(_remove_reply_keyboard_silently, facade, user_id)
             else:
                 new_markup = keyboards.get_dynamic_model_menu(all_models, lang, current_path="root")
                 try:
@@ -393,7 +401,7 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
                 except Exception:
                     pass
                 await send_welcome_with_video(facade, user_id, new_text, new_markup)
-                _remove_reply_keyboard_silently(facade, user_id)
+                await asyncio.to_thread(_remove_reply_keyboard_silently, facade, user_id)
             try:
                 await call.answer()
             except Exception:

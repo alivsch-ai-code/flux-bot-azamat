@@ -20,7 +20,7 @@ from src.presentation.telegram.handlers.gen.chat_sessions import (
     build_chat_prompt_from_messages,
 )
 from src.presentation.telegram.handlers.payment_handler import show_shop_logic
-from src.presentation.telegram.runtime import run_coroutine_sync
+from src.presentation.telegram.runtime import get_telegram_loop
 from src.utils.strings import get_text
 
 logger = logging.getLogger(__name__)
@@ -139,7 +139,17 @@ def register(router, facade, generation_service, db) -> None:
             logger.warning("Group batch reply send failed: %s", e)
 
     def flush_group_batch(chat_id: int, batch: list) -> None:
-        run_coroutine_sync(flush_group_batch_async(chat_id, batch), timeout=600)
+        # Kein fut.result() — sonst Deadlock, wenn der Debounce-Flush vom Event-Loop-Thread
+        # (sofort bei ≥5 Nachrichten) aufgerufen wird: Loop kann die Coroutine nicht ausführen.
+        loop = get_telegram_loop()
+
+        async def _run() -> None:
+            try:
+                await flush_group_batch_async(chat_id, batch)
+            except Exception:
+                logger.exception("Group batch flush failed chat_id=%s", chat_id)
+
+        asyncio.run_coroutine_threadsafe(_run(), loop)
 
     @router.message(Command("start"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
     async def group_start(msg: Message):

@@ -26,7 +26,6 @@ from src.presentation.telegram.handlers.gen.chat_sessions import (
     append_with_summary_if_needed,
     build_chat_prompt_from_messages,
 )
-from src.presentation.telegram.runtime import run_coroutine_sync
 from src.utils.strings import get_text
 
 
@@ -99,9 +98,6 @@ def register_prompt_handlers(router, facade, db, get_lang, run_generation) -> No
                 chat_user_name=last_name,
             )
 
-    def flush_private_chat_batch(chat_id: int, batch: list) -> None:
-        run_coroutine_sync(flush_private_chat_async(chat_id, batch), timeout=600)
-
     @router.message(F.text, F.chat.type == ChatType.PRIVATE)
     async def on_prompt(msg: Message):
         user_id = msg.chat.id
@@ -127,7 +123,7 @@ def register_prompt_handlers(router, facade, db, get_lang, run_generation) -> No
             tg_uid = msg.from_user.id if msg.from_user else user_id
             user_name = (msg.from_user and msg.from_user.first_name) or "User"
             # Privatchat: ohne Debounce — sofort antworten (Gruppen nutzen weiter Batching in group_handler).
-            flush_private_chat_batch(user_id, [(tg_uid, user_name, text)])
+            await flush_private_chat_async(user_id, [(tg_uid, user_name, text)])
             return
 
         if ctx.get("step") == "awaiting_telegram_chat_choice":
@@ -256,7 +252,7 @@ def register_prompt_handlers(router, facade, db, get_lang, run_generation) -> No
             if prompt:
                 tg_uid = call.from_user.id if call.from_user else uid
                 user_name_cb = (call.from_user and call.from_user.first_name) or "User"
-                flush_private_chat_batch(uid, [(tg_uid, user_name_cb, prompt)])
+                await flush_private_chat_async(uid, [(tg_uid, user_name_cb, prompt)])
         else:
             user_name_cb = (call.from_user and call.from_user.first_name) or "User"
             if prompt:
