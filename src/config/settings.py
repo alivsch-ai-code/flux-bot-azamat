@@ -58,6 +58,7 @@ class Settings:
         # replicate_concurrency.py. Entlastet Bursts; offizielle API-Limits siehe:
         # https://replicate.com/docs/topics/predictions/rate-limits
         self.REPLICATE_MAX_CONCURRENT = max(1, int(os.getenv("REPLICATE_MAX_CONCURRENT", "1")))
+        # Replicate sync: Prefer-wait Sekunden (1–60, clamp in unified_client). Iterator-Sammeln: REPLICATE_OUTPUT_COLLECT_MAX_SEC / REPLICATE_STREAM_MAX_CHARS.
         # Webhook-Signatur (Umgebung: REPLICATE_WEBHOOK_SIGNING_SECRET, Wert z. B. whsec_… aus dem Replicate-Dashboard)
         # https://replicate.com/docs/topics/webhooks/receive-webhook
         self.REPLICATE_WEBHOOK_SIGNING_SECRET = (os.getenv("REPLICATE_WEBHOOK_SIGNING_SECRET") or "").strip()

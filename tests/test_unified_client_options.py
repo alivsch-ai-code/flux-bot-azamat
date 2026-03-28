@@ -1,5 +1,6 @@
 """Tests für UnifiedAIClient: generation_params werden in Replicate-Input übernommen."""
 
+import time
 from unittest.mock import patch
 
 from src.domain.entities import AIModel
@@ -51,6 +52,8 @@ def test_run_replicate_includes_generation_params():
     assert sent_input["aspect_ratio"] == "16:9"
     assert sent_input["generate_audio"] is True
     assert sent_input["reference_images"] == ["https://example.com/ref1.png"]
+    assert run_mock.call_args.kwargs.get("wait") == 60
+    assert run_mock.call_args.kwargs.get("use_file_output") is True
 
 
 def test_run_replicate_includes_generic_schema_params():
@@ -79,6 +82,8 @@ def test_run_replicate_includes_generic_schema_params():
     assert sent_input["prompt"] == "x"
     assert sent_input["cfg_scale"] == 0.8
     assert "empty" not in sent_input
+    assert run_mock.call_args.kwargs.get("wait") == 60
+    assert run_mock.call_args.kwargs.get("use_file_output") is True
 
 
 def test_run_replicate_caps_anthropic_max_tokens():
@@ -109,6 +114,8 @@ def test_run_replicate_caps_anthropic_max_tokens():
 
     _, kwargs = run_mock.call_args
     assert kwargs["input"]["max_tokens"] == 4000
+    assert kwargs.get("wait") == 60
+    assert kwargs.get("use_file_output") is True
 
 
 def test_run_replicate_caps_anthropic_max_tokens_from_schema_default():
@@ -134,3 +141,43 @@ def test_run_replicate_caps_anthropic_max_tokens_from_schema_default():
 
     _, kwargs = run_mock.call_args
     assert kwargs["input"]["max_tokens"] == 4000
+    assert kwargs.get("wait") == 60
+    assert kwargs.get("use_file_output") is True
+
+
+def test_run_replicate_passes_wait_and_use_file_output_for_text_model(monkeypatch):
+    monkeypatch.setenv("REPLICATE_PREFER_WAIT_SECONDS", "45")
+    model = AIModel(
+        key="gemini-flash",
+        replicate_id="google/gemini-2.5-flash",
+        name="Gemini",
+        description="",
+        internal_cost=1,
+        custom_price=None,
+        provider="replicate",
+        type=["text"],
+        input_schema={"properties": {"prompt": {"type": "string"}}},
+    )
+    client = UnifiedAIClient(DummyConfig())
+    with patch("src.infrastructure.ai.unified_client.replicate.run", return_value="hello") as run_mock:
+        res = client.generate(model, prompt="x", media_files=None, generation_params=None)
+    assert res.success is True
+    assert res.data == "hello"
+    _, kwargs = run_mock.call_args
+    assert kwargs["wait"] == 45
+    assert kwargs["use_file_output"] is False
+
+
+def test_normalize_replicate_iterator_collect_timeout(monkeypatch):
+    monkeypatch.setenv("REPLICATE_OUTPUT_COLLECT_MAX_SEC", "1")
+    client = UnifiedAIClient(DummyConfig())
+
+    def slow_stream():
+        while True:
+            time.sleep(0.15)
+            yield "a"
+
+    res = client.normalize_replicate_output(slow_stream())
+    assert res.success is False
+    err = (res.error or "").lower()
+    assert "timeout" in err or "collect_timeout" in err

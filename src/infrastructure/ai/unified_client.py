@@ -42,7 +42,8 @@ Rate-Limit** (`is_rate_limit`, Pause ~20 s, bis zu 4 Versuche).
 """
 import logging
 import os
-from typing import List, Optional
+import time
+from typing import Any, List, Optional
 
 import replicate
 from openai import OpenAI
@@ -79,6 +80,59 @@ def _cap_max_tokens_for_anthropic(model, input_data: dict) -> None:
 
 def _is_http_url(s: str) -> bool:
     return isinstance(s, str) and (s.startswith("http://") or s.startswith("https://"))
+
+
+def _replicate_prefer_wait_seconds() -> int:
+    """SDK erlaubt ``wait`` als int nur 1–60 s (Prefer-Header); größere Werte clampen."""
+    try:
+        w = int(os.getenv("REPLICATE_PREFER_WAIT_SECONDS", "60"))
+    except (TypeError, ValueError):
+        w = 60
+    return max(1, min(60, w))
+
+
+def _collect_replicate_iterator_chunks(output: Any, log: logging.Logger) -> list:
+    """
+    SDK liefert bei manchen Modellen einen Iterator (Polling/Streaming). ``list(output)``
+    kann ohne Grenze hängen, wenn der Status nie terminal wird — daher Deadline + Char-Cap.
+    """
+    try:
+        max_sec = float(os.getenv("REPLICATE_OUTPUT_COLLECT_MAX_SEC", "600"))
+    except (TypeError, ValueError):
+        max_sec = 600.0
+    max_sec = max(1.0, min(max_sec, 3600.0))
+    try:
+        max_chars = int(os.getenv("REPLICATE_STREAM_MAX_CHARS", "500000"))
+    except (TypeError, ValueError):
+        max_chars = 500_000
+    max_chars = max(10_000, min(max_chars, 2_000_000))
+
+    deadline = time.monotonic() + max_sec
+    chunks: list = []
+    total_chars = 0
+    it = iter(output)
+    while True:
+        if time.monotonic() > deadline:
+            log.warning(
+                "Replicate-Iterator: Sammel-Timeout nach %.0fs (%s Teile, %s Zeichen)",
+                max_sec,
+                len(chunks),
+                total_chars,
+            )
+            raise TimeoutError("replicate_output_collect_timeout")
+        try:
+            chunk = next(it)
+        except StopIteration:
+            break
+        chunks.append(chunk)
+        total_chars += len(str(chunk))
+        if total_chars >= max_chars:
+            log.warning(
+                "Replicate-Iterator: REPLICATE_STREAM_MAX_CHARS (%s) erreicht, breche ab",
+                max_chars,
+            )
+            break
+    return chunks
 
 
 def _local_paths_to_urls(paths: List[str], client) -> List[str]:
@@ -331,10 +385,19 @@ class UnifiedAIClient:
         Pollen auf ``urls.get``.
         """
         gp = generation_params or {}
+        types_set = set(model.type or [])
+        # Nur reine Text-Modelle: rohes ``prediction.output`` statt FileOutput-Wrapper (s. replicate.run).
+        use_file_output = not (types_set and types_set.issubset({"text"}))
+        wait_s = _replicate_prefer_wait_seconds()
         with replicate_run_slot():
             input_data = self.build_replicate_input_dict(model, prompt, media_files, gp)
-            # replicate.run: SDK default wait=True → Prefer: wait (s. Doku oben im Modul).
-            output = replicate.run(model.replicate_id, input=input_data)
+            # ``wait=60``: maximale erste Prefer-wait-Phase (SDK-Doku); danach pollt das SDK weiter.
+            output = replicate.run(
+                model.replicate_id,
+                input=input_data,
+                wait=wait_s,
+                use_file_output=use_file_output,
+            )
 
             return self.normalize_replicate_output(output)
 
@@ -362,10 +425,15 @@ class UnifiedAIClient:
         # Generator / Iterator (z.B. Streaming-Text)
         if hasattr(output, "__iter__") and not isinstance(output, (str, bytes)):
             try:
-                collected = list(output)
+                collected = _collect_replicate_iterator_chunks(output, logger)
                 if collected and hasattr(collected[0], "url"):
                     return GenerationResult(success=True, data=collected[0])
                 return GenerationResult(success=True, data="".join(str(x) for x in collected))
+            except TimeoutError:
+                return GenerationResult(
+                    success=False,
+                    error="Replicate-Ausgabe-Iterator: Timeout beim Sammeln (replicate_output_collect_timeout).",
+                )
             except (TypeError, StopIteration):
                 pass
 

@@ -812,6 +812,12 @@ class DailyService:
         summary_by_lang: dict[str, str] = {}
         # Bild wird einmal pro Batch generiert; Trigger wartet bis URL vorhanden oder Retry-Limit erreicht.
         batch_image_url = self._generate_news_image_url_with_retry(dedup, news_block, image_model, retries=3, delay_s=2.0)
+        logger.info(
+            "Azamat AI News: Bild-URL %s (%s Empfänger, %s Ziel(e) im Lauf).",
+            "ok" if batch_image_url else "fehlt",
+            len(dedup),
+            len(targets),
+        )
 
         for target_type, target_id, lang in targets:
             lang_key = (lang or "en").strip() or "en"
@@ -819,11 +825,28 @@ class DailyService:
                 prompt_tpl = get_text("azamat_news_summary_prompt", lang_key)
                 prompt = f"{prompt_tpl}\n\n---\n{news_block}\n---\n\nOutput ONLY the summarized news text."
                 user_id_for_gen = target_id if target_type == "user" else (self.db.get_subscribed_users() or [target_id])[0]
+                t0 = time.perf_counter()
+                logger.info("Azamat AI News: starte Zusammenfassung für Sprache %s …", lang_key)
                 ok, result = self.generation_service.process_request(
-                    user_id_for_gen, model, prompt, media_files=None, no_charge=True, lang=lang_key
+                    user_id_for_gen,
+                    model,
+                    prompt,
+                    media_files=None,
+                    no_charge=True,
+                    lang=lang_key,
+                    prefer_sync_replicate=True,
                 )
+                dt = time.perf_counter() - t0
                 if not ok or not result or not str(result).strip():
+                    logger.warning(
+                        "Azamat AI News: Zusammenfassung %s fehlgeschlagen nach %.1fs (ok=%s, result=%r)",
+                        lang_key,
+                        dt,
+                        ok,
+                        (str(result)[:200] + "…") if result and len(str(result)) > 200 else result,
+                    )
                     continue
+                logger.info("Azamat AI News: Zusammenfassung %s fertig in %.1fs.", lang_key, dt)
                 summary_text = str(result).strip()
                 summary_by_lang[lang_key] = summary_text
 
@@ -832,6 +855,13 @@ class DailyService:
                 continue
             final_text = f"{text}\n\n{_build_sources_footer(lang_key)}"
             try:
+                logger.info(
+                    "Azamat AI News: sende an %s chat_id=%s (caption_len=%s, mit_bild=%s)",
+                    target_type,
+                    target_id,
+                    len(final_text),
+                    bool(batch_image_url),
+                )
                 # Anforderung: Bild + Text in EINER Nachricht.
                 if batch_image_url:
                     sent_img = self._send_news_image_with_retry(
