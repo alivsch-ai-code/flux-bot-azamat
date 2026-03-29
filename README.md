@@ -67,7 +67,7 @@ python main.py
 |----------|----------|-------------|
 | `TELEGRAM_TOKEN` | ✓ | From [@BotFather](https://t.me/BotFather) |
 | `REPLICATE_API_TOKEN` | ✓ | From [replicate.com](https://replicate.com) |
-| `DATABASE_URL` | ✓ | PostgreSQL connection string (e.g. [Neon](https://neon.tech)) |
+| `DATABASE_URL` | ✓ | PostgreSQL connection string (e.g. [Neon](https://neon.tech)); also stores optional **channel** metadata table `telegram_channels` (Daily News opt-in) |
 | `APP_URL` | (WebApp) | HTTPS base URL for Mini App, e.g. `https://xxx.onrender.com` |
 | `OPENAI_API_KEY` | (Optional) | For DALL·E / GPT models |
 | `ADMIN_ID` | (Optional) | Telegram user ID for admin commands |
@@ -105,7 +105,7 @@ flux-bot-azamat/
 │   │       └── gen/               # Generation, navigation, media
 │   ├── config/
 │   └── utils/               # i18n strings, validation
-└── doc/                     # Deployment guides, architecture
+└── doc/                     # Deployment guides, architecture, telegram_channels.md (Broadcast / Daily News)
 ```
 
 ---
@@ -133,6 +133,21 @@ When added to a **group**:
 - **Language:** Set DE, EN, RU, KK per group
 - **Welcome:** One-time personalized greeting DM (AI-generated) for each new user
 - **Burst replies:** Multiple quick messages are merged: wait 20s after the first, then shorter windows after each new line (10s / 5s / 10s); the **5th message in a row** forces an immediate reply that addresses the whole batch (same behavior in private text chat mode)
+
+---
+
+## 📢 Broadcast channels (Daily News)
+
+Register a **Telegram broadcast channel** for **Azamat AI News** using the same Neon DB as everything else (`telegram_channels` table).
+
+| Step | Command (posted **in the channel**) | Purpose |
+|------|-------------------------------------|---------|
+| 1 | `/azamat_take_channel_as_group` or `/azamat_take_channel_as_group de` | Store channel metadata + language (`de` / `en` / `ru` / `kk`). |
+| 2 | `/azamat_post_daily` | Enable `receive_daily_news` for that channel and run one news round. |
+
+**Requirements:** `DATABASE_URL`, `ADMIN_ID` matching your Telegram user id, bot added as **admin** to the channel. Channel posts use Telegram’s `channel_post` updates; post commands **with your user profile visible** as author (not “channel-only” signature), or the bot cannot verify `ADMIN_ID`.
+
+**Full guide (German):** [doc/telegram_channels.md](doc/telegram_channels.md)
 
 ---
 

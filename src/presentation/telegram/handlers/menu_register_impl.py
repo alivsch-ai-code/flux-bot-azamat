@@ -301,20 +301,36 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
                 lines.append("📣 telegram_channels: (noch keine Einträge)")
         await message.answer("\n".join(lines), parse_mode="HTML")
 
-    def _channel_admin_ok(message: Message) -> bool:
+    async def _ensure_channel_admin(message: Message) -> bool:
+        """
+        Broadcast-Kanäle: Posts erscheinen oft als channel_post (nicht message).
+        Ohne from_user (rein als Kanal signiert) kann kein Admin abgeglichen werden.
+        """
         if not message.from_user:
+            await message.answer(
+                "❌ Telegram liefert für diesen Post keinen Nutzer-Absender. "
+                "Poste den Befehl so, dass <b>dein Profil</b> als Autor sichtbar ist "
+                "(Kanal bearbeiten → ggf. Signatur/Autor statt nur Kanalname), "
+                "oder nutze die verknüpfte Kommentargruppe.",
+                parse_mode="HTML",
+            )
             return False
         if not ADMIN_ID:
+            await message.answer("❌ ADMIN_ID ist nicht gesetzt.", parse_mode="HTML")
             return False
-        return int(message.from_user.id) == int(ADMIN_ID)
+        if int(message.from_user.id) != int(ADMIN_ID):
+            await message.answer("⛔ Nur der konfigurierte Bot-Admin darf das.", parse_mode="HTML")
+            return False
+        return True
 
     @router.message(Command("azamat_take_channel_as_group"), F.chat.type == ChatType.CHANNEL)
+    @router.channel_post(Command("azamat_take_channel_as_group"), F.chat.type == ChatType.CHANNEL)
     async def cmd_azamat_take_channel_as_group(message: Message):
         """
         Im Channel: Admin registriert den Channel in telegram_channels + group_settings (Sprache).
         Daily-News-Auto: erst nach /azamat_post_daily (receive_daily_news).
         """
-        if not _channel_admin_ok(message):
+        if not await _ensure_channel_admin(message):
             return
         if not getattr(db, "db_url", None):
             await message.answer(
@@ -345,9 +361,10 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
         )
 
     @router.message(Command("azamat_post_daily"), F.chat.type == ChatType.CHANNEL)
+    @router.channel_post(Command("azamat_post_daily"), F.chat.type == ChatType.CHANNEL)
     async def cmd_azamat_post_daily(message: Message):
         """Aktiviert Daily-News für diesen Channel und sendet einen Lauf (Admin)."""
-        if not _channel_admin_ok(message):
+        if not await _ensure_channel_admin(message):
             return
         if not getattr(db, "db_url", None):
             await message.answer(

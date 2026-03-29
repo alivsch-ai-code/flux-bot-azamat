@@ -16,6 +16,7 @@ Dieses Dokument beschreibt typische **Use Cases**, die **äußeren und inneren S
 | **Gruppe: AZAMAT-Chat** | Text in Gruppe → gebündelte Gemini-Antwort; Credits pro schreibendem Nutzer (Gruppen-Logik in DB). | `group_handler` + `chat_debounce` |
 | **Gruppe: Shop & Sprache** | `/shop`, Inline „Credits“ / „Sprache“; Shop per DM; Sprache pro `chat_id`. | `group_handler` |
 | **Admin** | Menümodus, Modell-Reload, ggf. `cheat_mode` / WebApp-Aktionen. | `menu_handler`, `main.py` |
+| **Broadcast-Kanal: Daily News** | Admin postet `/azamat_take_channel_as_group` und `/azamat_post_daily` **im Kanal**; Metadaten in `telegram_channels` (gleiche DB). | `menu_register_impl` (`channel_post` + `message`), `DailyService` |
 
 ---
 
@@ -134,6 +135,7 @@ In [`src/domain/interfaces.py`](../src/domain/interfaces.py):
 
 ## 7. Weiterführende Dokumentation
 
+- [telegram_channels.md](telegram_channels.md) — Broadcast-Kanäle, Befehle, Daily News
 - [architecture.md](architecture.md) — Schichtenmodell (Mermaid)
 - [menu_modes.md](menu_modes.md) — Commands / Keyboard / WebApp
 - [render_deploy.md](render_deploy.md), [railway_deploy.md](railway_deploy.md) — Betrieb
