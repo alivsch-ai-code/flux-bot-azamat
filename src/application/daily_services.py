@@ -109,10 +109,11 @@ def _resolve_daily_message_text(raw: str | None, lang: str) -> str:
 
 
 class DailyService:
-    def __init__(self, bot, db, generation_service=None):
+    def __init__(self, bot, db, generation_service=None, channels_registry=None):
         self.bot = bot
         self.db = db
         self.generation_service = generation_service
+        self.channels_registry = channels_registry
         self.running = False
         # Laufzeit-Guard gegen Doppelversand bei kurz aufeinanderfolgenden Loop-Läufen.
         self._last_rss_signature_runtime = ""
@@ -601,6 +602,22 @@ class DailyService:
             trimmed = trimmed[:-1].rstrip()
         return trimmed + "…" + sep + f
 
+    def _billing_user_id_for_news(self, target_type: str, target_id: int) -> int:
+        """Für no_charge-News: User-ID für interne Gen-Calls (Credits werden nicht belastet)."""
+        if target_type == "user":
+            return int(target_id)
+        subs = self.db.get_subscribed_users()
+        if subs:
+            return int(subs[0])
+        raw = (os.getenv("ADMIN_ID") or "0").strip()
+        try:
+            aid = int(raw)
+        except (ValueError, TypeError):
+            aid = 0
+        if aid:
+            return aid
+        return int(target_id)
+
     def _send_news_image_with_retry(
         self,
         target_id: int,
@@ -632,7 +649,12 @@ class DailyService:
             return None
         if not recipients:
             return None
-        gen_user_id = next((uid for r_type, uid, _lang in recipients if r_type == "user"), recipients[0][1])
+        u_row = next((row for row in recipients if row[0] == "user"), None)
+        if u_row:
+            gen_user_id = int(u_row[1])
+        else:
+            first = recipients[0]
+            gen_user_id = self._billing_user_id_for_news(str(first[0]), int(first[1]))
         image_prompt = (
             "Create a rich editorial illustration for AI/tech news: a layered scene with a clear focal subject "
             "and supporting background context (e.g. research lab atmosphere, abstract neural motifs, data flows, "
@@ -747,6 +769,7 @@ class DailyService:
             force=True,
             broadcast_all=True,
             preloaded_news_items=news_items,
+            only_chat_ids=None,
         )
         if result.get("ok"):
             self.db.set_bot_setting("rss_last_sent_signature", signature)
@@ -754,12 +777,23 @@ class DailyService:
             self._last_rss_signature_runtime = signature
             self._last_rss_sent_ts_runtime = now_ts
 
+    def post_daily_news_to_channel(self, chat_id: int) -> dict:
+        """Sendet einen Daily-News-Lauf nur an einen Channel (force, kein Random-Skip)."""
+        return self._dispatch_ai_news_post(
+            force=True,
+            broadcast_all=True,
+            preloaded_news_items=None,
+            wait_if_busy=True,
+            only_chat_ids=[int(chat_id)],
+        )
+
     def _dispatch_ai_news_post(
         self,
         force: bool = False,
         broadcast_all: bool = False,
         preloaded_news_items: list[dict] | None = None,
         wait_if_busy: bool = False,
+        only_chat_ids: list[int] | None = None,
     ) -> dict:
         """
         Gemeinsame Dispatch-Logik für Scheduler und manuellen Trigger.
@@ -803,6 +837,7 @@ class DailyService:
                 force=force,
                 broadcast_all=broadcast_all,
                 preloaded_news_items=preloaded_news_items,
+                only_chat_ids=only_chat_ids,
             )
         finally:
             lock.release()
@@ -812,6 +847,7 @@ class DailyService:
         force: bool = False,
         broadcast_all: bool = False,
         preloaded_news_items: list[dict] | None = None,
+        only_chat_ids: list[int] | None = None,
     ) -> dict:
         max_per_day = int(os.getenv("AZAMAT_RANDOM_POSTS_PER_DAY", "5"))
         if max_per_day <= 0 and not force:
@@ -855,26 +891,48 @@ class DailyService:
             return "\n".join(lines)
 
         recipients = []
-        for chat_id in self.db.get_all_tracked_groups():
-            try:
-                cid = int(chat_id)
-            except Exception:
-                continue
-            # Privatchats/User: positive Telegram-ID. Gruppen/Supergruppen/Kanäle: negativ.
-            # Positive IDs in group_settings würden sonst beim Dedup vor dem User-Eintrag stehen und
-            # die persönliche Daily-News-DM (mit User-Sprache) verdrängen — wirkt wie „nur Gruppe/RU“.
-            if cid >= 0:
-                logger.warning(
-                    "AI News: group_settings chat_id=%s übersprungen (keine Gruppen-ID); vermeidet Konflikt mit User-DMs.",
-                    cid,
-                )
-                continue
-            lang = self.db.get_group_language(chat_id)
-            recipients.append(("group", cid, lang))
-        for user_id in self.db.get_subscribed_users():
-            settings = self.db.get_user_settings(user_id)
-            lang = settings.get("lang", "en")
-            recipients.append(("user", user_id, lang))
+        only_ids = [int(x) for x in (only_chat_ids or []) if x is not None]
+
+        if only_ids:
+            for cid in only_ids:
+                lang = "de"
+                if self.channels_registry:
+                    row = self.channels_registry.get_row(cid)
+                    if row and (row.get("language") or "").strip():
+                        lg = (row.get("language") or "de").strip()
+                        lang = lg if lg in ("de", "en", "ru", "kk") else "de"
+                    else:
+                        lang = self.db.get_group_language(cid)
+                else:
+                    lang = self.db.get_group_language(cid)
+                recipients.append(("channel", cid, lang))
+        else:
+            reg = self.channels_registry
+            for chat_id in self.db.get_all_tracked_groups():
+                try:
+                    cid = int(chat_id)
+                except Exception:
+                    continue
+                # Privatchats/User: positive Telegram-ID. Gruppen/Supergruppen/Kanäle: negativ.
+                # Positive IDs in group_settings würden sonst beim Dedup vor dem User-Eintrag stehen und
+                # die persönliche Daily-News-DM (mit User-Sprache) verdrängen — wirkt wie „nur Gruppe/RU“.
+                if cid >= 0:
+                    logger.warning(
+                        "AI News: group_settings chat_id=%s übersprungen (keine Gruppen-ID); vermeidet Konflikt mit User-DMs.",
+                        cid,
+                    )
+                    continue
+                if reg and reg.should_skip_default_group_broadcast(cid):
+                    continue
+                lang = self.db.get_group_language(chat_id)
+                recipients.append(("group", cid, lang))
+            for user_id in self.db.get_subscribed_users():
+                settings = self.db.get_user_settings(user_id)
+                lang = settings.get("lang", "en")
+                recipients.append(("user", user_id, lang))
+            if reg:
+                for cid, clang in reg.iter_daily_news_channels():
+                    recipients.append(("channel", int(cid), clang))
         if not recipients:
             return {"ok": False, "reason": "no_recipients", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
 
@@ -892,15 +950,22 @@ class DailyService:
             seen_chat_ids.add(cid)
             dedup.append((t_type, cid, t_lang))
 
-        # User zuerst: Daily-News per DM in der jeweiligen UI-Sprache vor Gruppenposts (Gruppe = eine Sprache für alle).
+        # User zuerst: Daily-News per DM in der jeweiligen UI-Sprache vor Gruppen/Channels.
         dedup.sort(key=lambda row: (0 if row[0] == "user" else 1, row[1]))
 
         targets = dedup if broadcast_all else [random.choice(dedup)]
         if broadcast_all and targets:
             n_u = sum(1 for t, _, _ in targets if t == "user")
             n_g = sum(1 for t, _, _ in targets if t == "group")
+            n_c = sum(1 for t, _, _ in targets if t == "channel")
             langs = sorted({((lg or "en").strip() or "en") for _, _, lg in targets})
-            logger.info("Azamat AI News: Zielverteilung — %s User-DM(s), %s Gruppe(n); Sprachen in dieser Runde: %s.", n_u, n_g, langs)
+            logger.info(
+                "Azamat AI News: Zielverteilung — %s User-DM(s), %s Gruppe(n), %s Channel(s); Sprachen: %s.",
+                n_u,
+                n_g,
+                n_c,
+                langs,
+            )
         sent_count = 0
         first_sent_to = None
         first_type = None
@@ -921,7 +986,7 @@ class DailyService:
             if lang_key not in summary_by_lang:
                 prompt_tpl = get_text("azamat_news_summary_prompt", lang_key)
                 prompt = f"{prompt_tpl}\n\n---\n{news_block}\n---\n\nOutput ONLY the summarized news text."
-                user_id_for_gen = target_id if target_type == "user" else (self.db.get_subscribed_users() or [target_id])[0]
+                user_id_for_gen = self._billing_user_id_for_news(target_type, target_id)
                 t0 = time.perf_counter()
                 logger.info("Azamat AI News: starte Zusammenfassung für Sprache %s …", lang_key)
                 ok, result = self.generation_service.process_request(

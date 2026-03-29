@@ -83,6 +83,8 @@ class Settings:
         self.IMPRINT_REG = (os.getenv("IMPRINT_REG") or "").strip()
         self.IMPRINT_VAT = (os.getenv("IMPRINT_VAT") or "").strip()
         self.LEGAL_SERVICE_NAME = (os.getenv("LEGAL_SERVICE_NAME") or "AZAMAT AI").strip()
+        # Optional: separates Neon-Projekt für Channel-Metadaten (Daily News Opt-in)
+        self.CHANNELS_DATABASE_URL = (os.getenv("CHANNELS_DATABASE_URL") or "").strip()
 
     def _get_required(self, key: str) -> str:
         """Holt eine Variable oder wirft, wenn sie fehlt."""

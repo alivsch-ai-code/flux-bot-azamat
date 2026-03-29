@@ -254,6 +254,7 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
         if lang not in ("de", "en", "ru", "kk"):
             await message.answer("❌ Ungültige Sprache. Erlaubt: de, en, ru, kk.")
             return
+        db.add_group_if_not_exists(chat_id, lang)
         db.set_group_language(chat_id, lang)
         await message.answer(
             "✅ Channel/Chat für Daily News registriert.\n"
@@ -281,10 +282,108 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
             await message.answer("ℹ️ Keine negativen Chat-IDs registriert.")
             return
         ids_sorted = sorted(set(ids))
-        lines = ["📣 Registrierte Channel/Group IDs für Daily News:"]
+        lines = ["📣 <b>group_settings</b> (negative IDs):"]
         for cid in ids_sorted:
             lines.append(f"• <code>{cid}</code> ({db.get_group_language(cid)})")
+        if daily_service and getattr(daily_service, "channels_registry", None) and daily_service.channels_registry.is_configured():
+            rows = daily_service.channels_registry.list_all_rows()
+            if rows:
+                lines.append("")
+                lines.append("📣 <b>Neon Channel-Registry</b> (CHANNELS_DATABASE_URL):")
+                for r in rows:
+                    rd = "✅" if r.get("receive_daily_news") else "⏸"
+                    tg = r.get("telegram_chat_type") or "?"
+                    lines.append(
+                        f"• <code>{r.get('chat_id')}</code> [{tg}] {rd} daily | lang={r.get('language')} | {r.get('title') or ''}"
+                    )
+            else:
+                lines.append("")
+                lines.append("📣 Neon Channel-Registry: (noch keine Einträge)")
         await message.answer("\n".join(lines), parse_mode="HTML")
+
+    def _channel_admin_ok(message: Message) -> bool:
+        if not message.from_user:
+            return False
+        if not ADMIN_ID:
+            return False
+        return int(message.from_user.id) == int(ADMIN_ID)
+
+    @router.message(Command("azamat_take_channel_as_group"), F.chat.type == ChatType.CHANNEL)
+    async def cmd_azamat_take_channel_as_group(message: Message):
+        """
+        Im Channel: Admin registriert den Channel in der separaten Neon-DB + group_settings (Sprache).
+        Daily-News-Auto: erst nach /azamat_post_daily (receive_daily_news).
+        """
+        if not _channel_admin_ok(message):
+            return
+        if not daily_service or not getattr(daily_service, "channels_registry", None) or not daily_service.channels_registry.is_configured():
+            await message.answer(
+                "❌ Channel-Registry nicht aktiv. Setze <code>CHANNELS_DATABASE_URL</code> (zweites Neon-Projekt).",
+                parse_mode="HTML",
+            )
+            return
+        parts = (message.text or "").strip().split()
+        lang = "de"
+        if len(parts) >= 2 and parts[1].strip().lower() in ("de", "en", "ru", "kk"):
+            lang = parts[1].strip().lower()
+        chat = message.chat
+        db.add_group_if_not_exists(chat.id, lang)
+        db.set_group_language(chat.id, lang)
+        daily_service.channels_registry.upsert_channel(
+            int(chat.id),
+            "channel",
+            title=chat.title,
+            username=getattr(chat, "username", None),
+            treat_as_group=True,
+            language=lang,
+            touch_receive_daily_news=False,
+        )
+        await message.answer(
+            "✅ Channel erfasst (Sprache/Gruppen-Logik wie Gruppe).\n"
+            "📰 Automatische Daily News in diesen Channel: nach <code>/azamat_post_daily</code> hier.",
+            parse_mode="HTML",
+        )
+
+    @router.message(Command("azamat_post_daily"), F.chat.type == ChatType.CHANNEL)
+    async def cmd_azamat_post_daily(message: Message):
+        """Aktiviert Daily-News für diesen Channel und sendet einen Lauf (Admin)."""
+        if not _channel_admin_ok(message):
+            return
+        if not daily_service or not getattr(daily_service, "channels_registry", None) or not daily_service.channels_registry.is_configured():
+            await message.answer(
+                "❌ Channel-Registry nicht aktiv. Setze <code>CHANNELS_DATABASE_URL</code>.",
+                parse_mode="HTML",
+            )
+            return
+        chat = message.chat
+        lang = db.get_group_language(chat.id)
+        daily_service.channels_registry.upsert_channel(
+            int(chat.id),
+            "channel",
+            title=chat.title,
+            username=getattr(chat, "username", None),
+            treat_as_group=True,
+            language=lang,
+            touch_receive_daily_news=True,
+            receive_daily_news=True,
+        )
+        try:
+            result = await asyncio.to_thread(daily_service.post_daily_news_to_channel, chat.id)
+        except Exception as e:
+            logger.exception("azamat_post_daily failed: %s", e)
+            await message.answer(f"❌ Daily News Fehler: {e}")
+            return
+        if result.get("ok"):
+            await message.answer(
+                f"✅ Daily News gesendet (sent_count={result.get('sent_count')}). "
+                f"Zukünftige Auto-Runden: eingeschaltet für diesen Channel.",
+                parse_mode="HTML",
+            )
+        else:
+            await message.answer(
+                f"⚠️ Daily News nicht gesendet. Grund: <code>{result.get('reason', 'unknown')}</code>",
+                parse_mode="HTML",
+            )
 
     def _lang_from_message(message: Message) -> str:
         if message.chat.type == ChatType.PRIVATE:
