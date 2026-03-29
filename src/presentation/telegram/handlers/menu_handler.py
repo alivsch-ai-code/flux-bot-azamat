@@ -277,6 +277,14 @@ def process_webapp_action(
                 for x in val:
                     _maybe_add_image_uri(x)
 
+        schema_props: dict = {}
+        if model and getattr(model, "input_schema", None) and isinstance(model.input_schema, dict):
+            raw_props = model.input_schema.get("properties")
+            if isinstance(raw_props, dict):
+                schema_props = raw_props
+
+        # Reihenfolge wie im Replicate-Schema (x-order), z. B. image → last_frame_image
+        media_rows: list[tuple[int, str, object]] = []
         for k, v in list(options.items()):
             kl = str(k).lower()
             # Nur Media-ähnliche Keys (damit wir z.B. aspect_ratio nicht anfassen).
@@ -290,8 +298,17 @@ def process_webapp_action(
                 or kl in ("reference_images",)
             ):
                 if v:
-                    _maybe_add_image_uri(v)
+                    prop = schema_props.get(k, {}) if isinstance(schema_props, dict) else {}
+                    try:
+                        x_order = int(prop.get("x-order", 999))
+                    except (TypeError, ValueError):
+                        x_order = 999
+                    media_rows.append((x_order, k, v))
                     media_keys_used.add(k)
+
+        media_rows.sort(key=lambda t: (t[0], str(t[1])))
+        for _xo, _k, v in media_rows:
+            _maybe_add_image_uri(v)
 
         # Entferne die URI-Keys aus generation_options, weil UnifiedAIClient sie via
         # media_files bereits über das Replicate-Schema korrekt mappen soll.

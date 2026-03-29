@@ -471,8 +471,9 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
                             "provider": getattr(m, "provider", "") or "",
                         }
                     )
-                elif path_str == "root" and "/" not in m.menu_path and m.menu_path != "root":
-                    sub_cats.add(m.menu_path)
+                elif path_str == "root" and m.menu_path and m.menu_path != "root":
+                    mp_root = str(m.menu_path)
+                    sub_cats.add(mp_root.split("/")[0] if "/" in mp_root else mp_root)
                 elif path_str in ("image", "video", "audio", "text", "tools"):
                     if str(m.menu_path or "").startswith(path_str + "/"):
                         rel = str(m.menu_path)[len(path_str) + 1 :]

@@ -106,10 +106,13 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
 
   const dynamicKeys = useMemo(() => {
     const props = schemaProps || {};
-    return Object.keys(props).filter((k) => {
+    const refImgEnabled = !!(opt?.reference_images && opt.reference_images.enabled);
+    const keys = Object.keys(props).filter((k) => {
       const p = props[k] || {};
       const kl = String(k).toLowerCase();
-      if (['prompt', 'negative_prompt', 'image', 'images', 'start_image', 'end_image', 'reference_images', 'duration', 'resolution', 'aspect_ratio', 'generate_audio', 'messages', 'system_prompt'].includes(kl))
+      // `image` nur ausblenden, wenn das Referenzbilder-Feld separat existiert (z. B. Veo).
+      if (kl === 'image' && refImgEnabled) return false;
+      if (['prompt', 'negative_prompt', 'images', 'start_image', 'end_image', 'reference_images', 'duration', 'resolution', 'aspect_ratio', 'generate_audio', 'messages', 'system_prompt'].includes(kl))
         return false;
       if (p.readOnly) return false;
       // Include uri-like arrays as dynamic fields (e.g. image_input for Nano Banana Pro).
@@ -131,7 +134,14 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
         );
       return ['string', 'number', 'integer', 'boolean'].includes(p.type) || Array.isArray(p.enum) || isArrayUriLike || looksConfigLikeWithoutType;
     });
-  }, [schemaProps]);
+    keys.sort((a, b) => {
+      const oa = Number(props[a]?.['x-order'] ?? 999);
+      const ob = Number(props[b]?.['x-order'] ?? 999);
+      if (oa !== ob) return oa - ob;
+      return String(a).localeCompare(String(b));
+    });
+    return keys;
+  }, [schemaProps, opt]);
 
   const hasGenOptions = useMemo(() => {
     return !!(
@@ -472,7 +482,8 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
   function renderDynamicField(k) {
     const p = schemaProps?.[k] || {};
     const requiredMark = schemaRequired.includes(k) ? ' *' : '';
-    const label = String(k) + requiredMark;
+    const titleFromSchema = p.title != null && String(p.title).trim() ? String(p.title).trim() : '';
+    const label = (titleFromSchema || String(k)) + requiredMark;
 
     const fmt = String(p.format || '').toLowerCase();
     const typeStr = String(p.type || '').toLowerCase();

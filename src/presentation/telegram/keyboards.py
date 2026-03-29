@@ -56,8 +56,9 @@ def get_dynamic_model_menu(
 
         if m.menu_path == current_path:
             is_in_current_path = True
-        elif current_path == "root" and "/" not in m.menu_path and m.menu_path != "root":
-            sub_categories.add(m.menu_path)
+        elif current_path == "root" and m.menu_path and m.menu_path != "root":
+            mp_top = str(m.menu_path)
+            sub_categories.add(mp_top.split("/")[0] if "/" in mp_top else mp_top)
             continue
         elif m.menu_path.startswith(current_path + "/"):
             relative = m.menu_path[len(current_path) + 1 :]
@@ -244,8 +245,9 @@ def get_path_reply_keyboard(
         if m.menu_path == current_path:
             cost_display = f"({m.final_cost} ⭐️)" if m.final_cost > 0 else "(FREE)"
             model_buttons.append((f"{m.name} {cost_display}", m.key))
-        elif current_path == "root" and "/" not in m.menu_path and m.menu_path != "root":
-            sub_categories.add(m.menu_path)
+        elif current_path == "root" and m.menu_path and m.menu_path != "root":
+            mp_top = str(m.menu_path)
+            sub_categories.add(mp_top.split("/")[0] if "/" in mp_top else mp_top)
         elif m.menu_path.startswith(current_path + "/"):
             rel = m.menu_path[len(current_path) + 1 :]
             sub_categories.add(rel.split("/")[0])
@@ -293,8 +295,9 @@ def get_path_keyboard_action(
 
     sub_categories = set()
     for m in models:
-        if current_path == "root" and "/" not in m.menu_path and m.menu_path != "root":
-            sub_categories.add(m.menu_path)
+        if current_path == "root" and m.menu_path and m.menu_path != "root":
+            mp_top = str(m.menu_path)
+            sub_categories.add(mp_top.split("/")[0] if "/" in mp_top else mp_top)
         elif m.menu_path.startswith(current_path + "/"):
             rel = m.menu_path[len(current_path) + 1 :]
             sub_categories.add(rel.split("/")[0])

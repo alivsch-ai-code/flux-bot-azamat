@@ -39,6 +39,12 @@ STRINGS = {
     "menu_pro": { "en": "💎 Professional", "de": "💎 Profi-Tools", "ru": "💎 Pro", "kk": "💎 Pro" },
     "menu_wan": { "en": "🎬 Wan Video", "de": "🎬 Wan Video", "ru": "🎬 Wan", "kk": "🎬 Wan" },
     "menu_hunyuan": { "en": "🎥 Hunyuan", "de": "🎥 Hunyuan", "ru": "🎥 Hunyuan", "kk": "🎥 Hunyuan" },
+    "menu_bytedance": {
+        "en": "🎬 ByteDance",
+        "de": "🎬 ByteDance",
+        "ru": "🎬 ByteDance",
+        "kk": "🎬 ByteDance",
+    },
 
     # --- CHAT MODE ---
     "ask_chat_mode": {

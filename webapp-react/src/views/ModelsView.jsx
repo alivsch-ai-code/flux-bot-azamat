@@ -13,6 +13,7 @@ function folderIcon(slug) {
   if (s.includes('qwen')) return '🛰️';
   if (s.includes('minimax')) return '🎞️';
   if (s.includes('tencent')) return '🟦';
+  if (s.includes('bytedance') || s.includes('byte_dance')) return '🎬';
   if (s.includes('kling')) return '⚡';
   if (s.includes('ideogram')) return '🧩';
   if (s.includes('recraft')) return '🪄';
@@ -35,6 +36,7 @@ function folderLogoUrl(slug) {
   if (s.includes('qwen')) return 'https://cdn.simpleicons.org/alibabadotcom/FF6A00';
   if (s.includes('minimax')) return 'https://cdn.simpleicons.org/minutemailer/7DE7FF';
   if (s.includes('tencent')) return 'https://cdn.simpleicons.org/tencentqq/5AC8FA';
+  if (s.includes('bytedance') || s.includes('byte_dance')) return 'https://cdn.simpleicons.org/bytedance/3C8CFF';
   if (s.includes('kling')) return 'https://cdn.simpleicons.org/lightning/64D2FF';
   if (s.includes('flux')) return 'https://cdn.simpleicons.org/lightning/64D2FF';
   if (s.includes('ideogram')) return 'https://cdn.simpleicons.org/pictureinpicture/64D2FF';
