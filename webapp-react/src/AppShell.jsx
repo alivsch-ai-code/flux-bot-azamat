@@ -1,12 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { initTelegram, getTelegramWebApp } from './telegram';
-import { loadModels, loadModelDetail, loadShopPackages, loadStrings, loadUserInfo, sendWebappAction } from './apiClient';
+import {
+  loadLegal,
+  loadModels,
+  loadModelDetail,
+  loadShopPackages,
+  loadStrings,
+  loadUserInfo,
+  sendWebappAction,
+} from './apiClient';
 import MainView from './views/MainView.jsx';
 import ModelsView from './views/ModelsView.jsx';
 import SettingsView from './views/SettingsView.jsx';
 import ShopView from './views/ShopView.jsx';
 import ProfileView from './views/ProfileView.jsx';
 import ModelDetailView from './views/ModelDetailView.jsx';
+import LegalDocsView from './views/LegalDocsView.jsx';
 
 function showToastError(msg) {
   const el = document.createElement('div');
@@ -42,9 +51,35 @@ export default function AppShell() {
 
   const [modelsData, setModelsData] = useState({ title: '', folders: [], models: [] });
   const [loading, setLoading] = useState(false);
+  const [legalCache, setLegalCache] = useState(null);
+  const [legalDoc, setLegalDoc] = useState(null);
 
   function t(key, fallback) {
     return strings?.[key] || fallback || key;
+  }
+
+  async function openLegal(doc) {
+    const forLang = user.lang || 'de';
+    try {
+      setLoading(true);
+      let bundle = legalCache;
+      if (!bundle || bundle.lang !== forLang) {
+        const data = await loadLegal(forLang);
+        bundle = {
+          lang: forLang,
+          privacy: data.privacy,
+          impressum: data.impressum,
+          labels: data.labels || {},
+        };
+        setLegalCache(bundle);
+      }
+      setLegalDoc(doc);
+      setView('legal');
+    } catch {
+      showToastError('Rechtstexte konnten nicht geladen werden');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function fetchModelsForPath(path) {
@@ -215,6 +250,7 @@ export default function AppShell() {
           onSetLang={async (lang) => {
             await sendWebappAction('set_lang_' + lang);
             setUser((u) => ({ ...u, lang }));
+            setLegalCache(null);
             try {
               const st = await loadStrings(lang);
               setStrings(st || {});
@@ -229,6 +265,21 @@ export default function AppShell() {
           onToggleDaily={async () => {
             await sendWebappAction('toggle_daily');
             setUser((u) => ({ ...u, daily_msg: !u.daily_msg }));
+          }}
+          onOpenPrivacy={() => openLegal('privacy')}
+          onOpenImpressum={() => openLegal('impressum')}
+        />
+      ) : null}
+
+      {view === 'legal' && legalCache && legalDoc ? (
+        <LegalDocsView
+          doc={legalDoc}
+          labels={legalCache.labels}
+          privacyText={legalCache.privacy}
+          impressumText={legalCache.impressum}
+          onBack={() => {
+            setView('settings');
+            setLegalDoc(null);
           }}
         />
       ) : null}

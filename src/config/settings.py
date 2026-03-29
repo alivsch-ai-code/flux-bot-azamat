@@ -74,6 +74,16 @@ class Settings:
         url = raw.rstrip("/")
         self.APP_URL = url if url.startswith("https://") else ""
 
+        # Impressum / rechtliche Anzeige (optional; Platzhalter in src/legal/impressum.py)
+        self.IMPRINT_LEGAL_NAME = (os.getenv("IMPRINT_LEGAL_NAME") or "").strip()
+        self.IMPRINT_ADDRESS = (os.getenv("IMPRINT_ADDRESS") or "").strip().replace("\\n", "\n")
+        self.IMPRINT_EMAIL = (os.getenv("IMPRINT_EMAIL") or "").strip()
+        self.IMPRINT_PHONE = (os.getenv("IMPRINT_PHONE") or "").strip()
+        self.IMPRINT_RESPONSIBLE = (os.getenv("IMPRINT_RESPONSIBLE") or "").strip()
+        self.IMPRINT_REG = (os.getenv("IMPRINT_REG") or "").strip()
+        self.IMPRINT_VAT = (os.getenv("IMPRINT_VAT") or "").strip()
+        self.LEGAL_SERVICE_NAME = (os.getenv("LEGAL_SERVICE_NAME") or "AZAMAT AI").strip()
+
     def _get_required(self, key: str) -> str:
         """Holt eine Variable oder wirft, wenn sie fehlt."""
         value = os.getenv(key)

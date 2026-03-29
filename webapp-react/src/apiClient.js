@@ -33,6 +33,14 @@ export async function loadStrings(lang) {
   return data || {};
 }
 
+/** Datenschutz + Impressum (src/legal auf dem Server). */
+export async function loadLegal(lang) {
+  const res = await getJSON('/api/legal?lang=' + encodeURIComponent(lang || 'de'));
+  const data = await res.json();
+  if (!data?.ok) throw new Error(data?.error || 'legal_failed');
+  return data;
+}
+
 export async function loadModels(path, lang) {
   const qs = new URLSearchParams();
   if (path) qs.set('path', path);

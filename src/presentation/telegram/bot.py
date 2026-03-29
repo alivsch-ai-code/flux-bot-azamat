@@ -24,6 +24,8 @@ async def setup_bot(
                 BotCommand(command="credits", description="💎 Current Credits"),
                 BotCommand(command="shop", description="💎 Buy Credits"),
                 BotCommand(command="help", description="🆘 Help"),
+                BotCommand(command="info", description="🔒 Privacy / Datenschutz"),
+                BotCommand(command="impressum", description="📋 Impressum / Legal notice"),
             ]
         )
     except Exception as e:

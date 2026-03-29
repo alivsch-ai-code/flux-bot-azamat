@@ -44,6 +44,25 @@ class TestApiStrings:
         assert r.status_code == 200
 
 
+class TestApiLegal:
+    def test_legal_returns_privacy_and_impressum(self, client):
+        r = client.get("/api/legal?lang=de")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["ok"] is True
+        assert "privacy" in data and len(data["privacy"]) > 100
+        assert "impressum" in data and len(data["impressum"]) > 50
+        assert data["labels"]["open_privacy"]
+        assert data["lang"] == "de"
+
+    def test_legal_en(self, client):
+        r = client.get("/api/legal?lang=en")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["ok"] is True
+        assert "PRIVACY POLICY" in data["privacy"] or "privacy" in data["privacy"].lower()
+
+
 class TestApiShopPackages:
     """GET /api/shop_packages – Credit-Pakete für WebApp."""
 

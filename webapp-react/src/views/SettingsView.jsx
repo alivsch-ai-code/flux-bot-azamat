@@ -27,7 +27,26 @@ function LangButton({ lang, label, active, onClick }) {
   );
 }
 
-export default function SettingsView({ lang, auto_opt, daily_msg, t, onBack, onSetLang, onToggleOpt, onToggleDaily }) {
+const LEGAL_UI = {
+  de: { section: 'Rechtliches', privacy: 'Datenschutz', impressum: 'Impressum' },
+  en: { section: 'Legal', privacy: 'Privacy policy', impressum: 'Legal notice (Impressum)' },
+  ru: { section: 'Правовая информация', privacy: 'Конфиденциальность', impressum: 'Правовые сведения' },
+  kk: { section: 'Құқықтық ақпарат', privacy: 'Құпиялылық', impressum: 'Заңды мәліметтер' },
+};
+
+export default function SettingsView({
+  lang,
+  auto_opt,
+  daily_msg,
+  t,
+  onBack,
+  onSetLang,
+  onToggleOpt,
+  onToggleDaily,
+  onOpenPrivacy,
+  onOpenImpressum,
+}) {
+  const leg = LEGAL_UI[lang] || LEGAL_UI.de;
   return (
     <div>
       <div className="back-btn" onClick={onBack} role="button" tabIndex={0}>
@@ -59,6 +78,18 @@ export default function SettingsView({ lang, auto_opt, daily_msg, t, onBack, onS
         <div className="gen-row" style={{ marginTop: 8 }}>
           <button type="button" className="btn-secondary" onClick={onToggleDaily}>
             {daily_msg ? '📰 Daily News: ON' : '🔕 Daily News: OFF'}
+          </button>
+        </div>
+      </div>
+
+      <div className="section">
+        <div className="section-title">{leg.section}</div>
+        <div className="gen-row" style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button type="button" className="btn-secondary" onClick={onOpenPrivacy}>
+            🔒 {leg.privacy}
+          </button>
+          <button type="button" className="btn-secondary" onClick={onOpenImpressum}>
+            📋 {leg.impressum}
           </button>
         </div>
       </div>

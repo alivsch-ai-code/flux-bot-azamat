@@ -15,6 +15,13 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
 from src.config.settings import config
+from src.legal import (
+    build_imprint_placeholders,
+    build_privacy_context,
+    render_impressum,
+    render_privacy,
+    split_telegram_chunks,
+)
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.chat_debounce import cancel_pending_batch
 from src.presentation.telegram.handlers.common import clear_context, get_context, set_context
@@ -215,6 +222,30 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
         except Exception as e:
             logger.exception("Admin trigger_daily_news failed: %s", e)
             await message.answer(f"❌ Fehler beim Triggern der Daily News: {e}")
+
+    def _lang_from_message(message: Message) -> str:
+        if message.chat.type == ChatType.PRIVATE:
+            return get_lang(message.chat.id)
+        db.add_group_if_not_exists(message.chat.id, "en")
+        return db.get_group_language(message.chat.id)
+
+    @router.message(
+        Command("info", "privacy", "datenschutz"),
+        F.chat.type.in_({ChatType.PRIVATE, ChatType.GROUP, ChatType.SUPERGROUP}),
+    )
+    async def cmd_privacy_info(message: Message):
+        lang_key = _lang_from_message(message)
+        text = render_privacy(lang_key, build_privacy_context(config))
+        for chunk in split_telegram_chunks(text):
+            await message.answer(chunk)
+
+    @router.message(Command("impressum"), F.chat.type.in_({ChatType.PRIVATE, ChatType.GROUP, ChatType.SUPERGROUP}))
+    async def cmd_impressum(message: Message):
+        lang_key = _lang_from_message(message)
+        im_ctx = build_imprint_placeholders(config, lang_key)
+        text = render_impressum(lang_key, im_ctx)
+        for chunk in split_telegram_chunks(text):
+            await message.answer(chunk)
 
     @router.message(F.content_type == ContentType.WEB_APP_DATA, F.chat.type == ChatType.PRIVATE)
     async def handle_web_app_data(message: Message):

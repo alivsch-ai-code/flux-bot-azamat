@@ -215,6 +215,34 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             logger.warning("api_strings error: %s", e)
             return jsonify({}), 200
 
+    @app.route("/api/legal")
+    def api_legal():
+        """WebApp: Datenschutz + Impressum (Texte aus src/legal/, nicht strings.py)."""
+        lang = request.args.get("lang", "de") or "de"
+        if lang not in ("de", "en", "ru", "kk"):
+            lang = "de"
+        try:
+            from src.legal import (
+                build_imprint_placeholders,
+                build_privacy_context,
+                render_impressum,
+                render_privacy,
+                webapp_legal_labels,
+            )
+
+            im_ctx = build_imprint_placeholders(config, lang)
+            pr_ctx = build_privacy_context(config)
+            return jsonify(
+                ok=True,
+                lang=lang,
+                privacy=render_privacy(lang, pr_ctx),
+                impressum=render_impressum(lang, im_ctx),
+                labels=webapp_legal_labels(lang),
+            )
+        except Exception as e:
+            logger.exception("api_legal error: %s", e)
+            return jsonify(ok=False, error="internal_error"), 500
+
     @app.route("/api/model")
     def api_model():
         if runtime.db is None:
