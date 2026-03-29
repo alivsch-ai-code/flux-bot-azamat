@@ -195,3 +195,135 @@ def test_dispatch_concurrent_second_call_skipped(monkeypatch):
     t1.join(timeout=10.0)
     assert out["a"]["ok"] is True
 
+
+def test_dispatch_skips_negative_group_when_marked_as_telegram_channel(monkeypatch):
+    """Gruppen-ID in telegram_channels → should_skip: kein Gruppen-Broadcast, User bleibt."""
+    bot = MagicMock()
+    bot.send_photo_sync = MagicMock()
+    bot.send_message_sync = MagicMock()
+    db = MagicMock()
+    generation_service = MagicMock()
+    service = DailyService(bot, db, generation_service)
+
+    group_id = -1001234567890
+    user_id = 424242
+    db.get_all_tracked_groups.return_value = [group_id]
+    db.should_skip_channel_from_group_daily.return_value = True
+    db.iter_telegram_channels_daily_news.return_value = []
+    db.get_subscribed_users.return_value = [user_id]
+    db.get_user_settings.return_value = {"lang": "en", "daily_msg": True}
+    db.get_model_by_key.side_effect = lambda key: _text_model() if key == "google-gemini-2-5-flash" else _image_model()
+    db.get_azamat_random_count_today.return_value = 0
+
+    monkeypatch.setattr(
+        service,
+        "_fetch_ai_news_from_rss",
+        lambda max_items=2: [
+            {"title": "A", "snippet": "S1", "link": "https://example.com/a", "source": "SrcA"},
+            {"title": "B", "snippet": "S2", "link": "https://example.com/b", "source": "SrcB"},
+        ],
+    )
+
+    def fake_process_request(_uid, model, _prompt, media_files=None, no_charge=True, **kwargs):
+        if "image" in ",".join(model.type):
+            return True, "https://img.example.com/news.png"
+        return True, "English summary"
+
+    generation_service.process_request.side_effect = fake_process_request
+
+    result = service._dispatch_ai_news_post(force=True, broadcast_all=True)
+
+    assert result["ok"] is True
+    assert bot.send_photo_sync.call_count == 1
+    assert bot.send_photo_sync.call_args[0][0] == user_id
+    db.should_skip_channel_from_group_daily.assert_called_with(group_id)
+
+
+def test_dispatch_includes_channels_from_iter_telegram_channels_daily_news(monkeypatch):
+    """Nur Channel-Empfänger aus telegram_channels (receive_daily_news), ohne Gruppen/User."""
+    bot = MagicMock()
+    bot.send_photo_sync = MagicMock()
+    bot.send_message_sync = MagicMock()
+    db = MagicMock()
+    generation_service = MagicMock()
+    service = DailyService(bot, db, generation_service)
+
+    channel_id = -100200300400
+    db.get_all_tracked_groups.return_value = []
+    db.get_subscribed_users.return_value = []
+    db.should_skip_channel_from_group_daily.return_value = False
+    db.iter_telegram_channels_daily_news.return_value = [(channel_id, "kk")]
+    db.get_model_by_key.side_effect = lambda key: _text_model() if key == "google-gemini-2-5-flash" else _image_model()
+    db.get_azamat_random_count_today.return_value = 0
+
+    monkeypatch.setattr(
+        service,
+        "_fetch_ai_news_from_rss",
+        lambda max_items=2: [
+            {"title": "A", "snippet": "S1", "link": "https://example.com/a", "source": "SrcA"},
+            {"title": "B", "snippet": "S2", "link": "https://example.com/b", "source": "SrcB"},
+        ],
+    )
+
+    def fake_process_request(_uid, model, _prompt, media_files=None, no_charge=True, **kwargs):
+        if "image" in ",".join(model.type):
+            return True, "https://img.example.com/kk.png"
+        return True, "KK summary"
+
+    generation_service.process_request.side_effect = fake_process_request
+
+    result = service._dispatch_ai_news_post(force=True, broadcast_all=True)
+
+    assert result["ok"] is True
+    assert bot.send_photo_sync.call_count == 1
+    assert bot.send_photo_sync.call_args[0][0] == channel_id
+    text_calls = [c for c in generation_service.process_request.call_args_list if "image" not in ",".join(c.args[1].type)]
+    assert any(c.kwargs.get("lang") == "kk" for c in text_calls)
+
+
+def test_post_daily_news_to_channel_uses_registry_language_then_group_fallback(monkeypatch):
+    """only_chat_ids: Sprache aus get_telegram_channel_row, sonst get_group_language."""
+    bot = MagicMock()
+    bot.send_photo_sync = MagicMock()
+    bot.send_message_sync = MagicMock()
+    db = MagicMock()
+    generation_service = MagicMock()
+    service = DailyService(bot, db, generation_service)
+
+    ch = -100777
+    db.get_telegram_channel_row.return_value = {"language": "ru", "receive_daily_news": True}
+    db.get_group_language.return_value = "de"
+    db.get_model_by_key.side_effect = lambda key: _text_model() if key == "google-gemini-2-5-flash" else _image_model()
+    db.get_azamat_random_count_today.return_value = 0
+
+    monkeypatch.setattr(
+        service,
+        "_fetch_ai_news_from_rss",
+        lambda max_items=2: [
+            {"title": "A", "snippet": "S1", "link": "https://example.com/a", "source": "SrcA"},
+            {"title": "B", "snippet": "S2", "link": "https://example.com/b", "source": "SrcB"},
+        ],
+    )
+
+    def fake_process_request(_uid, model, _prompt, media_files=None, no_charge=True, **kwargs):
+        if "image" in ",".join(model.type):
+            return True, "https://img.example.com/x.png"
+        return True, "RU text"
+
+    generation_service.process_request.side_effect = fake_process_request
+
+    r1 = service.post_daily_news_to_channel(ch)
+    assert r1["ok"] is True
+    text_calls = [c for c in generation_service.process_request.call_args_list if "image" not in ",".join(c.args[1].type)]
+    assert text_calls[-1].kwargs.get("lang") == "ru"
+
+    generation_service.process_request.reset_mock()
+    generation_service.process_request.side_effect = fake_process_request
+    db.get_telegram_channel_row.return_value = None
+
+    r2 = service.post_daily_news_to_channel(ch)
+    assert r2["ok"] is True
+    text_calls2 = [c for c in generation_service.process_request.call_args_list if "image" not in ",".join(c.args[1].type)]
+    assert text_calls2[-1].kwargs.get("lang") == "de"
+    db.get_group_language.assert_called_with(ch)
+

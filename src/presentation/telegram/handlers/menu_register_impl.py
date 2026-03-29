@@ -285,11 +285,11 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
         lines = ["📣 <b>group_settings</b> (negative IDs):"]
         for cid in ids_sorted:
             lines.append(f"• <code>{cid}</code> ({db.get_group_language(cid)})")
-        if daily_service and getattr(daily_service, "channels_registry", None) and daily_service.channels_registry.is_configured():
-            rows = daily_service.channels_registry.list_all_rows()
+        if getattr(db, "db_url", None):
+            rows = db.list_telegram_channels()
             if rows:
                 lines.append("")
-                lines.append("📣 <b>Neon Channel-Registry</b> (CHANNELS_DATABASE_URL):")
+                lines.append("📣 <b>telegram_channels</b> (gleiche Neon-DB):")
                 for r in rows:
                     rd = "✅" if r.get("receive_daily_news") else "⏸"
                     tg = r.get("telegram_chat_type") or "?"
@@ -298,7 +298,7 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
                     )
             else:
                 lines.append("")
-                lines.append("📣 Neon Channel-Registry: (noch keine Einträge)")
+                lines.append("📣 telegram_channels: (noch keine Einträge)")
         await message.answer("\n".join(lines), parse_mode="HTML")
 
     def _channel_admin_ok(message: Message) -> bool:
@@ -311,14 +311,14 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
     @router.message(Command("azamat_take_channel_as_group"), F.chat.type == ChatType.CHANNEL)
     async def cmd_azamat_take_channel_as_group(message: Message):
         """
-        Im Channel: Admin registriert den Channel in der separaten Neon-DB + group_settings (Sprache).
+        Im Channel: Admin registriert den Channel in telegram_channels + group_settings (Sprache).
         Daily-News-Auto: erst nach /azamat_post_daily (receive_daily_news).
         """
         if not _channel_admin_ok(message):
             return
-        if not daily_service or not getattr(daily_service, "channels_registry", None) or not daily_service.channels_registry.is_configured():
+        if not getattr(db, "db_url", None):
             await message.answer(
-                "❌ Channel-Registry nicht aktiv. Setze <code>CHANNELS_DATABASE_URL</code> (zweites Neon-Projekt).",
+                "❌ Keine Datenbank (<code>DATABASE_URL</code>). Channel-Metadaten brauchen Neon.",
                 parse_mode="HTML",
             )
             return
@@ -329,7 +329,7 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
         chat = message.chat
         db.add_group_if_not_exists(chat.id, lang)
         db.set_group_language(chat.id, lang)
-        daily_service.channels_registry.upsert_channel(
+        db.upsert_telegram_channel(
             int(chat.id),
             "channel",
             title=chat.title,
@@ -349,15 +349,18 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
         """Aktiviert Daily-News für diesen Channel und sendet einen Lauf (Admin)."""
         if not _channel_admin_ok(message):
             return
-        if not daily_service or not getattr(daily_service, "channels_registry", None) or not daily_service.channels_registry.is_configured():
+        if not getattr(db, "db_url", None):
             await message.answer(
-                "❌ Channel-Registry nicht aktiv. Setze <code>CHANNELS_DATABASE_URL</code>.",
+                "❌ Keine Datenbank (<code>DATABASE_URL</code>).",
                 parse_mode="HTML",
             )
             return
+        if not daily_service:
+            await message.answer("❌ Daily-Service nicht verfügbar.", parse_mode="HTML")
+            return
         chat = message.chat
         lang = db.get_group_language(chat.id)
-        daily_service.channels_registry.upsert_channel(
+        db.upsert_telegram_channel(
             int(chat.id),
             "channel",
             title=chat.title,

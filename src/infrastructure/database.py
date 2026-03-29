@@ -323,6 +323,23 @@ class DatabaseManager:
                             (_url, _i),
                         )
 
+                # Telegram-Kanäle (Metadaten + Daily-News Opt-in) — dieselbe Neon-DB wie der Rest.
+                c.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS telegram_channels (
+                        chat_id BIGINT PRIMARY KEY,
+                        telegram_chat_type TEXT NOT NULL,
+                        title TEXT,
+                        username TEXT,
+                        treat_as_group INTEGER NOT NULL DEFAULT 0,
+                        receive_daily_news INTEGER NOT NULL DEFAULT 0,
+                        language TEXT NOT NULL DEFAULT 'de',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+
                 conn.commit()
             except Exception as e:
                 logger.warning("Migration Warning: %s", e)
@@ -1060,3 +1077,215 @@ class DatabaseManager:
                 c.execute("DELETE FROM chat_sessions WHERE user_id = %s", (user_id,))
             conn.commit()
             conn.close()
+
+    # --- Telegram-Kanäle (Tabelle telegram_channels, gleiche DB wie DATABASE_URL) ---
+
+    def upsert_telegram_channel(
+        self,
+        chat_id: int,
+        telegram_chat_type: str,
+        *,
+        title: str | None = None,
+        username: str | None = None,
+        treat_as_group: bool = False,
+        language: str = "de",
+        touch_receive_daily_news: bool = False,
+        receive_daily_news: bool = False,
+    ) -> None:
+        """touch_receive_daily_news=False: receive_daily_news bleibt bei ON CONFLICT unverändert."""
+        if not self._pool:
+            return
+        lang = language if language in ("de", "en", "ru", "kk") else "de"
+        ctype = (telegram_chat_type or "channel").strip().lower()
+        tg = 1 if treat_as_group else 0
+        with self.lock:
+            conn = self._get_connection()
+            try:
+                c = conn.cursor()
+                if touch_receive_daily_news:
+                    rd = 1 if receive_daily_news else 0
+                    c.execute(
+                        """
+                        INSERT INTO telegram_channels (
+                            chat_id, telegram_chat_type, title, username,
+                            treat_as_group, receive_daily_news, language, updated_at
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                        ON CONFLICT (chat_id) DO UPDATE SET
+                            telegram_chat_type = EXCLUDED.telegram_chat_type,
+                            title = EXCLUDED.title,
+                            username = EXCLUDED.username,
+                            treat_as_group = EXCLUDED.treat_as_group,
+                            receive_daily_news = EXCLUDED.receive_daily_news,
+                            language = EXCLUDED.language,
+                            updated_at = NOW()
+                        """,
+                        (chat_id, ctype, title, username, tg, rd, lang),
+                    )
+                else:
+                    c.execute(
+                        """
+                        INSERT INTO telegram_channels (
+                            chat_id, telegram_chat_type, title, username,
+                            treat_as_group, language, updated_at
+                        ) VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                        ON CONFLICT (chat_id) DO UPDATE SET
+                            telegram_chat_type = EXCLUDED.telegram_chat_type,
+                            title = EXCLUDED.title,
+                            username = EXCLUDED.username,
+                            treat_as_group = EXCLUDED.treat_as_group,
+                            language = EXCLUDED.language,
+                            updated_at = NOW()
+                        """,
+                        (chat_id, ctype, title, username, tg, lang),
+                    )
+                conn.commit()
+            except Exception as e:
+                logger.warning("upsert_telegram_channel failed: %s", e)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            finally:
+                conn.close()
+
+    def set_telegram_channel_receive_daily_news(self, chat_id: int, enabled: bool = True) -> None:
+        if not self._pool:
+            return
+        v = 1 if enabled else 0
+        with self.lock:
+            conn = self._get_connection()
+            try:
+                c = conn.cursor()
+                c.execute(
+                    "UPDATE telegram_channels SET receive_daily_news = %s, updated_at = NOW() WHERE chat_id = %s",
+                    (v, chat_id),
+                )
+                conn.commit()
+            except Exception as e:
+                logger.warning("set_telegram_channel_receive_daily_news failed: %s", e)
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            finally:
+                conn.close()
+
+    def should_skip_channel_from_group_daily(self, chat_id: int) -> bool:
+        """True: als Channel erfasst → nicht über den normalen Gruppen-Daily-Loop."""
+        if not self._pool:
+            return False
+        with self.lock:
+            conn = self._get_connection()
+            try:
+                c = conn.cursor()
+                c.execute(
+                    "SELECT 1 FROM telegram_channels WHERE chat_id = %s AND telegram_chat_type = %s",
+                    (int(chat_id), "channel"),
+                )
+                return c.fetchone() is not None
+            except Exception as e:
+                logger.warning("should_skip_channel_from_group_daily failed: %s", e)
+                return False
+            finally:
+                conn.close()
+
+    def iter_telegram_channels_daily_news(self) -> list[tuple[int, str]]:
+        """Channels mit receive_daily_news=1."""
+        if not self._pool:
+            return []
+        with self.lock:
+            conn = self._get_connection()
+            try:
+                c = conn.cursor()
+                c.execute(
+                    """
+                    SELECT chat_id, language FROM telegram_channels
+                    WHERE receive_daily_news = 1 AND telegram_chat_type = 'channel'
+                    """
+                )
+                rows = c.fetchall() or []
+                out: list[tuple[int, str]] = []
+                for r in rows:
+                    try:
+                        cid = int(r[0])
+                        lang = (r[1] or "de").strip() or "de"
+                        if lang not in ("de", "en", "ru", "kk"):
+                            lang = "de"
+                        out.append((cid, lang))
+                    except Exception:
+                        continue
+                return out
+            except Exception as e:
+                logger.warning("iter_telegram_channels_daily_news failed: %s", e)
+                return []
+            finally:
+                conn.close()
+
+    def list_telegram_channels(self) -> list[dict]:
+        if not self._pool:
+            return []
+        with self.lock:
+            conn = self._get_connection()
+            try:
+                c = conn.cursor()
+                c.execute(
+                    """
+                    SELECT chat_id, telegram_chat_type, title, username, treat_as_group,
+                           receive_daily_news, language
+                    FROM telegram_channels
+                    ORDER BY chat_id
+                    """
+                )
+                rows = c.fetchall() or []
+                out: list[dict] = []
+                for row in rows:
+                    out.append(
+                        {
+                            "chat_id": row[0],
+                            "telegram_chat_type": row[1],
+                            "title": row[2],
+                            "username": row[3],
+                            "treat_as_group": bool(row[4]),
+                            "receive_daily_news": bool(row[5]),
+                            "language": row[6] or "de",
+                        }
+                    )
+                return out
+            except Exception as e:
+                logger.warning("list_telegram_channels failed: %s", e)
+                return []
+            finally:
+                conn.close()
+
+    def get_telegram_channel_row(self, chat_id: int) -> dict | None:
+        if not self._pool:
+            return None
+        with self.lock:
+            conn = self._get_connection()
+            try:
+                c = conn.cursor()
+                c.execute(
+                    """
+                    SELECT chat_id, telegram_chat_type, title, username, treat_as_group,
+                           receive_daily_news, language
+                    FROM telegram_channels WHERE chat_id = %s
+                    """,
+                    (int(chat_id),),
+                )
+                row = c.fetchone()
+                if not row:
+                    return None
+                return {
+                    "chat_id": row[0],
+                    "telegram_chat_type": row[1],
+                    "title": row[2],
+                    "username": row[3],
+                    "treat_as_group": bool(row[4]),
+                    "receive_daily_news": bool(row[5]),
+                    "language": row[6] or "de",
+                }
+            except Exception as e:
+                logger.warning("get_telegram_channel_row failed: %s", e)
+                return None
+            finally:
+                conn.close()

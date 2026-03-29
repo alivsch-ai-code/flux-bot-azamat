@@ -21,7 +21,6 @@ from flask import Flask
 from src.application.services import GenerationService
 from src.config.settings import config
 from src.infrastructure.ai.unified_client import UnifiedAIClient
-from src.infrastructure.channels_registry import create_channels_registry
 from src.infrastructure.database import DatabaseManager
 from src.infrastructure.metrics import get_stats
 from src.presentation.http.http_routes import AppRuntime, register_flask_routes
@@ -111,7 +110,7 @@ def start_log_status_loop() -> None:
     threading.Thread(target=_loop, daemon=True).start()
 
 
-async def _run_bot_async(db, generation_service, channels_registry=None) -> None:
+async def _run_bot_async(db, generation_service) -> None:
     loop = asyncio.get_running_loop()
     bot, facade = create_bot_and_facade(loop)
     app_runtime.db = db
@@ -130,7 +129,7 @@ async def _run_bot_async(db, generation_service, channels_registry=None) -> None
     threading.Thread(target=run_web_server, daemon=True).start()
     start_log_status_loop()
 
-    _, dp = await setup_bot(bot, facade, generation_service, db, channels_registry=channels_registry)
+    _, dp = await setup_bot(bot, facade, generation_service, db)
     logger.info("Telegram Handler registriert (aiogram).")
 
     try:
@@ -178,18 +177,12 @@ def main():
     db = DatabaseManager()
     logger.info("Datenbank verbunden (PostgreSQL via Neon).")
 
-    channels_registry = create_channels_registry()
-    if channels_registry:
-        logger.info("Channel-Registry: zweites Neon-Projekt aktiv (CHANNELS_DATABASE_URL).")
-    else:
-        logger.info("Channel-Registry: deaktiviert (CHANNELS_DATABASE_URL fehlt).")
-
     ai_provider = UnifiedAIClient(config)
     generation_service = GenerationService(db_manager=db, ai_unified_client=ai_provider)
     logger.info("Service Layer initialisiert.")
 
     try:
-        asyncio.run(_run_bot_async(db, generation_service, channels_registry))
+        asyncio.run(_run_bot_async(db, generation_service))
     except KeyboardInterrupt:
         logger.info("Beende durch Benutzer.")
 

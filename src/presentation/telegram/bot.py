@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 async def setup_bot(
-    bot: Bot, facade: TelegramBotFacade, generation_service, db, channels_registry=None
+    bot: Bot, facade: TelegramBotFacade, generation_service, db
 ) -> tuple[DailyService, Dispatcher]:
     try:
         await bot.set_my_commands(
@@ -45,7 +45,7 @@ async def setup_bot(
         except Exception as e:
             logger.debug("Menü-Button Reset: %s", e)
 
-    daily = DailyService(facade, db, generation_service, channels_registry=channels_registry)
+    daily = DailyService(facade, db, generation_service)
 
     dp = Dispatcher()
     group_router = Router()

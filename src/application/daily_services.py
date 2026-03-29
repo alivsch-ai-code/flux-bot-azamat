@@ -109,11 +109,10 @@ def _resolve_daily_message_text(raw: str | None, lang: str) -> str:
 
 
 class DailyService:
-    def __init__(self, bot, db, generation_service=None, channels_registry=None):
+    def __init__(self, bot, db, generation_service=None):
         self.bot = bot
         self.db = db
         self.generation_service = generation_service
-        self.channels_registry = channels_registry
         self.running = False
         # Laufzeit-Guard gegen Doppelversand bei kurz aufeinanderfolgenden Loop-Läufen.
         self._last_rss_signature_runtime = ""
@@ -896,18 +895,14 @@ class DailyService:
         if only_ids:
             for cid in only_ids:
                 lang = "de"
-                if self.channels_registry:
-                    row = self.channels_registry.get_row(cid)
-                    if row and (row.get("language") or "").strip():
-                        lg = (row.get("language") or "de").strip()
-                        lang = lg if lg in ("de", "en", "ru", "kk") else "de"
-                    else:
-                        lang = self.db.get_group_language(cid)
+                row = self.db.get_telegram_channel_row(cid)
+                if row and (row.get("language") or "").strip():
+                    lg = (row.get("language") or "de").strip()
+                    lang = lg if lg in ("de", "en", "ru", "kk") else "de"
                 else:
                     lang = self.db.get_group_language(cid)
                 recipients.append(("channel", cid, lang))
         else:
-            reg = self.channels_registry
             for chat_id in self.db.get_all_tracked_groups():
                 try:
                     cid = int(chat_id)
@@ -922,7 +917,7 @@ class DailyService:
                         cid,
                     )
                     continue
-                if reg and reg.should_skip_default_group_broadcast(cid):
+                if self.db.should_skip_channel_from_group_daily(cid):
                     continue
                 lang = self.db.get_group_language(chat_id)
                 recipients.append(("group", cid, lang))
@@ -930,9 +925,8 @@ class DailyService:
                 settings = self.db.get_user_settings(user_id)
                 lang = settings.get("lang", "en")
                 recipients.append(("user", user_id, lang))
-            if reg:
-                for cid, clang in reg.iter_daily_news_channels():
-                    recipients.append(("channel", int(cid), clang))
+            for cid, clang in self.db.iter_telegram_channels_daily_news():
+                recipients.append(("channel", int(cid), clang))
         if not recipients:
             return {"ok": False, "reason": "no_recipients", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
 
