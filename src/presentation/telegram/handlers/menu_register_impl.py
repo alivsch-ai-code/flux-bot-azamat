@@ -223,6 +223,69 @@ def register_menu_handlers(router, facade, generation_service, db, daily_service
             logger.exception("Admin trigger_daily_news failed: %s", e)
             await message.answer(f"❌ Fehler beim Triggern der Daily News: {e}")
 
+    @router.message(Command("track_channel"), F.chat.type == ChatType.PRIVATE)
+    async def admin_track_channel(message: Message):
+        """
+        Registriert einen Telegram-Channel für Daily-News-Broadcast.
+        Nutzung: /track_channel -1001234567890 [de|en|ru|kk]
+        """
+        user_id = message.chat.id
+        if ADMIN_ID and user_id != ADMIN_ID:
+            return
+        parts = (message.text or "").strip().split()
+        if len(parts) < 2:
+            await message.answer(
+                "ℹ️ Nutzung:\n"
+                "<code>/track_channel -1001234567890 de</code>\n\n"
+                "• chat_id muss negativ sein (Channel/Group-ID)\n"
+                "• Sprache optional: de | en | ru | kk",
+                parse_mode="HTML",
+            )
+            return
+        try:
+            chat_id = int(parts[1].strip())
+        except (TypeError, ValueError):
+            await message.answer("❌ Ungültige chat_id. Erwartet wird eine numerische ID wie -1001234567890.")
+            return
+        if chat_id >= 0:
+            await message.answer("❌ chat_id muss negativ sein (Telegram Channel/Group-ID).")
+            return
+        lang = (parts[2].strip().lower() if len(parts) >= 3 else "de")
+        if lang not in ("de", "en", "ru", "kk"):
+            await message.answer("❌ Ungültige Sprache. Erlaubt: de, en, ru, kk.")
+            return
+        db.set_group_language(chat_id, lang)
+        await message.answer(
+            "✅ Channel/Chat für Daily News registriert.\n"
+            f"chat_id: <code>{chat_id}</code>\n"
+            f"Sprache: <b>{lang}</b>\n\n"
+            "Hinweis: Der Bot muss im Channel Admin-Rechte zum Posten haben.",
+            parse_mode="HTML",
+        )
+
+    @router.message(Command("tracked_channels"), F.chat.type == ChatType.PRIVATE)
+    async def admin_tracked_channels(message: Message):
+        """Zeigt alle aktuell für Daily News erfassten negativen Chat-IDs."""
+        user_id = message.chat.id
+        if ADMIN_ID and user_id != ADMIN_ID:
+            return
+        ids = []
+        for cid in db.get_all_tracked_groups():
+            try:
+                i = int(cid)
+            except Exception:
+                continue
+            if i < 0:
+                ids.append(i)
+        if not ids:
+            await message.answer("ℹ️ Keine negativen Chat-IDs registriert.")
+            return
+        ids_sorted = sorted(set(ids))
+        lines = ["📣 Registrierte Channel/Group IDs für Daily News:"]
+        for cid in ids_sorted:
+            lines.append(f"• <code>{cid}</code> ({db.get_group_language(cid)})")
+        await message.answer("\n".join(lines), parse_mode="HTML")
+
     def _lang_from_message(message: Message) -> str:
         if message.chat.type == ChatType.PRIVATE:
             return get_lang(message.chat.id)
