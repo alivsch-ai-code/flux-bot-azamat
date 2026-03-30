@@ -323,6 +323,148 @@ class DatabaseManager:
                             (_url, _i),
                         )
 
+                # Curated Kling-Modelle für neue Unterordner (idempotent via ON CONFLICT).
+                # Ziel:
+                # - video/motioncontrol: Bild + Video (Motion Transfer)
+                # - video/avatar_sync: Bild + Audio (Avatar Lip Sync)
+                # - tools/video_background_edit: Bild + Video (Background Edit)
+                curated_models = [
+                    {
+                        "key": "kling-v3-motion-control",
+                        "replicate_id": "kwaivgi/kling-v3-motion-control",
+                        "name": "Kling v3 Motion Control",
+                        "description": "Transfer motion from a source video onto a reference image.",
+                        "internal_cost": 70,
+                        "provider": "replicate",
+                        "model_type": "video,image",
+                        "menu_path": "video/motioncontrol",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {
+                                "prompt": {"type": "string", "title": "Prompt"},
+                                "input_image": {"type": "string", "format": "uri", "title": "Reference Image"},
+                                "input_video": {"type": "string", "format": "uri", "title": "Motion Video"},
+                            },
+                            "required": ["input_image", "input_video"],
+                        },
+                        "output_schema": {"type": "string", "format": "uri"},
+                        "example_data": {
+                            "prompt": "Keep identity and outfit; transfer pose and camera motion from the video."
+                        },
+                    },
+                    {
+                        "key": "kling-v2-6-motion-control",
+                        "replicate_id": "kwaivgi/kling-v2.6-motion-control",
+                        "name": "Kling v2.6 Motion Control",
+                        "description": "Transfer motion from a source video onto a reference image.",
+                        "internal_cost": 65,
+                        "provider": "replicate",
+                        "model_type": "video,image",
+                        "menu_path": "video/motioncontrol",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {
+                                "prompt": {"type": "string", "title": "Prompt"},
+                                "input_image": {"type": "string", "format": "uri", "title": "Reference Image"},
+                                "input_video": {"type": "string", "format": "uri", "title": "Motion Video"},
+                            },
+                            "required": ["input_image", "input_video"],
+                        },
+                        "output_schema": {"type": "string", "format": "uri"},
+                        "example_data": {
+                            "prompt": "Transfer movement from the video while preserving character appearance."
+                        },
+                    },
+                    {
+                        "key": "kling-avatar-v2",
+                        "replicate_id": "kwaivgi/kling-avatar-v2",
+                        "name": "Kling Avatar v2",
+                        "description": "Create speaking avatar video from a portrait image and an audio track.",
+                        "internal_cost": 70,
+                        "provider": "replicate",
+                        "model_type": "video,image,audio",
+                        "menu_path": "video/avatar_sync",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {
+                                "prompt": {"type": "string", "title": "Prompt"},
+                                "input_image": {"type": "string", "format": "uri", "title": "Avatar Image"},
+                                "input_audio": {"type": "string", "format": "uri", "title": "Audio"},
+                            },
+                            "required": ["input_image", "input_audio"],
+                        },
+                        "output_schema": {"type": "string", "format": "uri"},
+                        "example_data": {
+                            "prompt": "Natural face movements, stable identity, clean lip-sync."
+                        },
+                    },
+                    {
+                        "key": "kling-o1-video-background-edit",
+                        "replicate_id": "kwaivgi/kling-o1",
+                        "name": "Kling O1 Video Background Edit",
+                        "description": "Edit video background using a reference image and source video.",
+                        "internal_cost": 65,
+                        "provider": "replicate",
+                        "model_type": "video,image",
+                        "menu_path": "tools/video_background_edit",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {
+                                "prompt": {"type": "string", "title": "Prompt"},
+                                "input_image": {"type": "string", "format": "uri", "title": "Background Image"},
+                                "input_video": {"type": "string", "format": "uri", "title": "Source Video"},
+                            },
+                            "required": ["input_image", "input_video"],
+                        },
+                        "output_schema": {"type": "string", "format": "uri"},
+                        "example_data": {
+                            "prompt": "Replace background with the image style, keep subject motion natural."
+                        },
+                    },
+                ]
+                for m in curated_models:
+                    c.execute(
+                        """
+                        INSERT INTO ai_models (
+                            key, replicate_id, name, description,
+                            base_cost_usd, internal_cost, custom_price,
+                            provider, model_type, menu_path, is_active, is_favorite,
+                            is_commercial, manual_override, input_schema, output_schema, example_data
+                        ) VALUES (
+                            %s, %s, %s, %s,
+                            0.0, %s, NULL,
+                            %s, %s, %s, 1, 0,
+                            1, 0, %s::jsonb, %s::jsonb, %s::jsonb
+                        )
+                        ON CONFLICT (key) DO UPDATE SET
+                            replicate_id = EXCLUDED.replicate_id,
+                            name = EXCLUDED.name,
+                            description = EXCLUDED.description,
+                            internal_cost = EXCLUDED.internal_cost,
+                            provider = EXCLUDED.provider,
+                            model_type = EXCLUDED.model_type,
+                            menu_path = EXCLUDED.menu_path,
+                            is_active = 1,
+                            is_commercial = 1,
+                            input_schema = EXCLUDED.input_schema,
+                            output_schema = EXCLUDED.output_schema,
+                            example_data = EXCLUDED.example_data
+                        """,
+                        (
+                            m["key"],
+                            m["replicate_id"],
+                            m["name"],
+                            m["description"],
+                            m["internal_cost"],
+                            m["provider"],
+                            m["model_type"],
+                            m["menu_path"],
+                            json.dumps(m["input_schema"], ensure_ascii=False),
+                            json.dumps(m["output_schema"], ensure_ascii=False),
+                            json.dumps(m["example_data"], ensure_ascii=False),
+                        ),
+                    )
+
                 # Telegram-Kanäle (Metadaten + Daily-News Opt-in) — dieselbe Neon-DB wie der Rest.
                 c.execute(
                     """

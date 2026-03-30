@@ -45,6 +45,42 @@ STRINGS = {
         "ru": "🎬 ByteDance",
         "kk": "🎬 ByteDance",
     },
+    "menu_motioncontrol": {
+        "en": "🕹️ MotionControl",
+        "de": "🕹️ MotionControl",
+        "ru": "🕹️ MotionControl",
+        "kk": "🕹️ MotionControl",
+    },
+    "menu_avatar_sync": {
+        "en": "🧑 Avatar Sync",
+        "de": "🧑 Avatar Sync",
+        "ru": "🧑 Avatar Sync",
+        "kk": "🧑 Avatar Sync",
+    },
+    "menu_video_background_edit": {
+        "en": "🪄 Video Background Edit",
+        "de": "🪄 Video-Hintergrund bearbeiten",
+        "ru": "🪄 Редактировать фон видео",
+        "kk": "🪄 Видео фонын өңдеу",
+    },
+    "title_video_motioncontrol": {
+        "en": "🕹️ <b>MotionControl</b>",
+        "de": "🕹️ <b>MotionControl</b>",
+        "ru": "🕹️ <b>MotionControl</b>",
+        "kk": "🕹️ <b>MotionControl</b>",
+    },
+    "title_video_avatar_sync": {
+        "en": "🧑 <b>Avatar Sync</b>",
+        "de": "🧑 <b>Avatar Sync</b>",
+        "ru": "🧑 <b>Avatar Sync</b>",
+        "kk": "🧑 <b>Avatar Sync</b>",
+    },
+    "title_tools_video_background_edit": {
+        "en": "🪄 <b>Video Background Edit</b>",
+        "de": "🪄 <b>Video-Hintergrund bearbeiten</b>",
+        "ru": "🪄 <b>Редактировать фон видео</b>",
+        "kk": "🪄 <b>Видео фонын өңдеу</b>",
+    },
 
     # --- CHAT MODE ---
     "ask_chat_mode": {
