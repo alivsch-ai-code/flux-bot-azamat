@@ -423,6 +423,40 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     }
   }
 
+  async function getVideoDurationSec(file) {
+    return await new Promise((resolve) => {
+      try {
+        const url = URL.createObjectURL(file);
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.onloadedmetadata = () => {
+          const d = Number(video.duration || 0);
+          URL.revokeObjectURL(url);
+          resolve(Number.isFinite(d) ? d : 0);
+        };
+        video.onerror = () => {
+          URL.revokeObjectURL(url);
+          resolve(0);
+        };
+        video.src = url;
+      } catch {
+        resolve(0);
+      }
+    });
+  }
+
+  async function validateVideoFilesMaxDuration(files, maxSec = 30) {
+    for (const f of files || []) {
+      const d = await getVideoDurationSec(f);
+      // Wenn Metadaten nicht lesbar sind, blocken wir nicht hart.
+      if (d > maxSec) {
+        showErrorOverlay(`Video ist zu lang (${Math.round(d)}s). Maximal ${maxSec}s erlaubt.`);
+        return false;
+      }
+    }
+    return true;
+  }
+
   async function handleStartMediaRecording(k, kind, isArrayField) {
     if (!navigator?.mediaDevices?.getUserMedia) {
       showErrorOverlay('Kamera/Mikrofon wird in diesem Browser nicht unterstützt.');
@@ -617,12 +651,22 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
               onChange={(e) => {
                 const files = e.target.files;
                 if (!files || !files.length) return;
-                if (isArrayField) {
-                  handleUploadDynamicKeyMultiple(k, Array.from(files));
-                } else {
-                  handleUploadDynamicKey(k, files[0]);
-                }
-                e.target.value = '';
+                (async () => {
+                  const picked = Array.from(files);
+                  if (wantsVideo) {
+                    const ok = await validateVideoFilesMaxDuration(picked, 30);
+                    if (!ok) {
+                      e.target.value = '';
+                      return;
+                    }
+                  }
+                  if (isArrayField) {
+                    await handleUploadDynamicKeyMultiple(k, picked);
+                  } else {
+                    await handleUploadDynamicKey(k, picked[0]);
+                  }
+                  e.target.value = '';
+                })();
               }}
             />
             <button

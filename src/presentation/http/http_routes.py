@@ -333,9 +333,37 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
 
     @app.route("/api/webapp_upload_reference", methods=["POST"])
     def api_webapp_upload_reference():
-        max_bytes = 10 * 1024 * 1024
+        # Für Video/Audio-Workflows höheres Limit als reine Bild-Uploads.
+        max_bytes = 80 * 1024 * 1024
         max_files = 10
-        allowed_mime = frozenset({"image/jpeg", "image/png", "image/webp"})
+        allowed_mime = frozenset(
+            {
+                # Images
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "image/heic",
+                "image/heif",
+                "image/bmp",
+                "image/gif",
+                # Video
+                "video/mp4",
+                "video/quicktime",
+                "video/webm",
+                "video/x-msvideo",
+                "video/x-matroska",
+                "video/mp2t",
+                # Audio
+                "audio/mpeg",
+                "audio/wav",
+                "audio/x-wav",
+                "audio/mp4",
+                "audio/aac",
+                "audio/ogg",
+                "audio/flac",
+                "audio/webm",
+            }
+        )
 
         if runtime.db is None:
             return jsonify(ok=False, error="no_db"), 400
@@ -375,6 +403,33 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
                     return "image/png"
                 if ext == ".webp":
                     return "image/webp"
+                if ext in (".heic", ".heif"):
+                    return "image/heic"
+                if ext == ".bmp":
+                    return "image/bmp"
+                if ext == ".gif":
+                    return "image/gif"
+                if ext in (".mp4", ".m4v"):
+                    return "video/mp4"
+                if ext == ".mov":
+                    return "video/quicktime"
+                if ext == ".webm":
+                    # webm kann Audio oder Video enthalten; serverseitig ist beides erlaubt.
+                    return "video/webm"
+                if ext == ".avi":
+                    return "video/x-msvideo"
+                if ext == ".mkv":
+                    return "video/x-matroska"
+                if ext == ".mp3":
+                    return "audio/mpeg"
+                if ext == ".wav":
+                    return "audio/wav"
+                if ext in (".m4a", ".aac"):
+                    return "audio/aac"
+                if ext == ".ogg":
+                    return "audio/ogg"
+                if ext == ".flac":
+                    return "audio/flac"
                 return ""
 
             # Replicate Files API → URLs für Model-Input (s. Input files in der Doku):
@@ -389,7 +444,7 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
                 mime = _mime_for_upload(fs)
                 if mime not in allowed_mime:
                     return jsonify(ok=False, error="invalid_type"), 400
-                fn = os.path.basename(fs.filename or "image.jpg") or "image.jpg"
+                fn = os.path.basename(fs.filename or "upload.bin") or "upload.bin"
                 resp = client.files.create(file=io.BytesIO(raw), filename=fn, type=mime)
                 url = _replicate_file_url(resp)
                 if not url or not (url.startswith("http://") or url.startswith("https://")):
