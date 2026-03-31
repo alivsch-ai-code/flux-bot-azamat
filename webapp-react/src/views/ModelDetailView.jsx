@@ -60,6 +60,9 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
   const [uploadStatusMap, setUploadStatusMap] = useState({});
   const [uploadingMap, setUploadingMap] = useState({});
   const dynamicFileInputRefs = useRef({});
+  const mediaRecorderRef = useRef(null);
+  const mediaChunksRef = useRef([]);
+  const [recordingAudioKey, setRecordingAudioKey] = useState('');
 
   const [referenceUploadStatus, setReferenceUploadStatus] = useState('');
   const [referenceUploading, setReferenceUploading] = useState(false);
@@ -167,7 +170,14 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
         kl.includes('inputreference') ||
         kl.includes('first_frame') ||
         kl.includes('last_frame') ||
-        kl.includes('frame_image')
+        kl.includes('frame_image') ||
+        kl.includes('video') ||
+        kl.includes('motion_video') ||
+        kl.includes('input_video') ||
+        kl.includes('audio') ||
+        kl.includes('voice') ||
+        kl.includes('speech') ||
+        kl.includes('input_audio')
       );
     });
   }, [dynamicKeys]);
@@ -412,6 +422,57 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     }
   }
 
+  async function handleStartAudioRecording(k, isArrayField) {
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      showErrorOverlay('Mikrofon wird in diesem Browser nicht unterstützt.');
+      return;
+    }
+    if (recordingAudioKey) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      mediaChunksRef.current = [];
+      mr.ondataavailable = (ev) => {
+        if (ev?.data && ev.data.size > 0) mediaChunksRef.current.push(ev.data);
+      };
+      mr.onstop = async () => {
+        try {
+          const blob = new Blob(mediaChunksRef.current, { type: 'audio/webm' });
+          const file = new File([blob], `recording-${Date.now()}.webm`, { type: 'audio/webm' });
+          if (isArrayField) {
+            await handleUploadDynamicKeyMultiple(k, [file]);
+          } else {
+            await handleUploadDynamicKey(k, file);
+          }
+        } catch {
+          showErrorOverlay('Audio-Aufnahme konnte nicht hochgeladen werden.');
+        } finally {
+          try {
+            stream.getTracks().forEach((t) => t.stop());
+          } catch {
+            // ignore
+          }
+          setRecordingAudioKey('');
+        }
+      };
+      mediaRecorderRef.current = mr;
+      setRecordingAudioKey(k);
+      mr.start();
+    } catch {
+      showErrorOverlay('Mikrofon-Zugriff verweigert oder fehlgeschlagen.');
+    }
+  }
+
+  function handleStopAudioRecording() {
+    try {
+      const mr = mediaRecorderRef.current;
+      if (mr && mr.state !== 'inactive') mr.stop();
+    } catch {
+      showErrorOverlay('Konnte Aufnahme nicht stoppen.');
+      setRecordingAudioKey('');
+    }
+  }
+
   async function handleSubmit(action) {
     if (submitting) return;
     const isAnyUploadInProgress =
@@ -500,18 +561,27 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
       kl.includes('first_frame') ||
       kl.includes('last_frame') ||
       kl.includes('frame_image');
+    const wantsVideo = kl.includes('video') || kl.includes('motion_video') || kl.includes('input_video');
+    const wantsAudio = kl.includes('audio') || kl.includes('voice') || kl.includes('speech') || kl.includes('input_audio');
 
     const wantsUriLike = fmt.includes('uri') || fmt.includes('url') || fmt.includes('path') || fmt === '' || fmt === 'uri' || fmt === 'url';
-    const wantsUriImageUpload = wantsImage && (isUriLikeInputType || wantsUriLike);
+    const wantsMediaUpload = (wantsImage || wantsVideo || wantsAudio) && (isUriLikeInputType || wantsUriLike);
 
     const currentValue = dynamicValues?.[k] ?? '';
 
-    if (wantsUriImageUpload) {
+    if (wantsMediaUpload) {
       const status = uploadStatusMap?.[k] || '';
       const uploading = !!uploadingMap?.[k];
       const isArrayField = String(p?.type || '').toLowerCase() === 'array';
       const currentUrls = Array.isArray(currentValue) ? currentValue : (currentValue ? [currentValue] : []);
       const displayVal = currentUrls.length ? `✓ ${currentUrls.length} URL(s)` : '';
+      const accept = wantsAudio
+        ? 'audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac,.webm'
+        : wantsVideo
+          ? 'video/*,.mp4,.mov,.webm,.avi,.mkv,.m4v'
+          : 'image/jpeg,image/png,image/webp,image/heic,image/bmp,image/gif';
+      const uploadLabel = wantsAudio ? '🎙️ Upload Audio' : wantsVideo ? '🎬 Upload Video' : '📎 Upload';
+      const isRecordingThisKey = recordingAudioKey === k;
 
       return (
         <div className="gen-row" key={k}>
@@ -521,7 +591,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
               type="file"
               multiple={isArrayField}
               style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
-              accept="image/jpeg,image/png,image/webp"
+              accept={accept}
               ref={(el) => {
                 dynamicFileInputRefs.current[k] = el;
               }}
@@ -539,14 +609,24 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
             <button
               type="button"
               className="btn-ref-upload"
-              disabled={uploading || submitting || optimizing}
+              disabled={uploading || submitting || optimizing || isRecordingThisKey}
               onClick={() => {
                 const el = dynamicFileInputRefs.current[k];
                 el?.click();
               }}
             >
-              📎 Upload
+              {uploadLabel}
             </button>
+            {wantsAudio ? (
+              <button
+                type="button"
+                className="btn-ref-upload"
+                disabled={uploading || submitting || optimizing}
+                onClick={() => (isRecordingThisKey ? handleStopAudioRecording() : handleStartAudioRecording(k, isArrayField))}
+              >
+                {isRecordingThisKey ? '⏹️ Stop Mic' : '🎤 Mic'}
+              </button>
+            ) : null}
             <span className="gen-hint" style={{ display: status ? 'inline' : 'none', margin: 0 }}>
               {status}
             </span>

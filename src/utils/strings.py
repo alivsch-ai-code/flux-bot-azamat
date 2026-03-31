@@ -45,6 +45,12 @@ STRINGS = {
         "ru": "🎬 ByteDance",
         "kk": "🎬 ByteDance",
     },
+    "menu_seedance": {
+        "en": "🌱 Seedance",
+        "de": "🌱 Seedance",
+        "ru": "🌱 Seedance",
+        "kk": "🌱 Seedance",
+    },
     "menu_motioncontrol": {
         "en": "🎞️ MotionControl",
         "de": "🎞️ MotionControl",
