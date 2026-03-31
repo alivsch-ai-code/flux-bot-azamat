@@ -62,7 +62,8 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
   const dynamicFileInputRefs = useRef({});
   const mediaRecorderRef = useRef(null);
   const mediaChunksRef = useRef([]);
-  const [recordingAudioKey, setRecordingAudioKey] = useState('');
+  const [recordingKey, setRecordingKey] = useState('');
+  const [recordingKind, setRecordingKind] = useState(''); // 'audio' | 'video'
 
   const [referenceUploadStatus, setReferenceUploadStatus] = useState('');
   const [referenceUploading, setReferenceUploading] = useState(false);
@@ -422,14 +423,16 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     }
   }
 
-  async function handleStartAudioRecording(k, isArrayField) {
+  async function handleStartMediaRecording(k, kind, isArrayField) {
     if (!navigator?.mediaDevices?.getUserMedia) {
-      showErrorOverlay('Mikrofon wird in diesem Browser nicht unterstützt.');
+      showErrorOverlay('Kamera/Mikrofon wird in diesem Browser nicht unterstützt.');
       return;
     }
-    if (recordingAudioKey) return;
+    if (recordingKey) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const isVideo = kind === 'video';
+      const constraints = isVideo ? { video: true, audio: true } : { audio: true };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       const mr = new MediaRecorder(stream);
       mediaChunksRef.current = [];
       mr.ondataavailable = (ev) => {
@@ -437,39 +440,55 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
       };
       mr.onstop = async () => {
         try {
-          const blob = new Blob(mediaChunksRef.current, { type: 'audio/webm' });
-          const file = new File([blob], `recording-${Date.now()}.webm`, { type: 'audio/webm' });
+          const mime = isVideo ? 'video/webm' : 'audio/webm';
+          const blob = new Blob(mediaChunksRef.current, { type: mime });
+          const file = new File([blob], `recording-${Date.now()}.webm`, { type: mime });
           if (isArrayField) {
             await handleUploadDynamicKeyMultiple(k, [file]);
           } else {
             await handleUploadDynamicKey(k, file);
           }
         } catch {
-          showErrorOverlay('Audio-Aufnahme konnte nicht hochgeladen werden.');
+          showErrorOverlay('Aufnahme konnte nicht hochgeladen werden.');
         } finally {
           try {
             stream.getTracks().forEach((t) => t.stop());
           } catch {
             // ignore
           }
-          setRecordingAudioKey('');
+          setRecordingKey('');
+          setRecordingKind('');
         }
       };
       mediaRecorderRef.current = mr;
-      setRecordingAudioKey(k);
+      setRecordingKey(k);
+      setRecordingKind(kind);
       mr.start();
+      // Für Video-Aufnahmen: automatisch nach 30 Sekunden stoppen.
+      if (isVideo) {
+        setTimeout(() => {
+          try {
+            if (mediaRecorderRef.current === mr && mr.state === 'recording') {
+              mr.stop();
+            }
+          } catch {
+            // ignore
+          }
+        }, 30000);
+      }
     } catch {
-      showErrorOverlay('Mikrofon-Zugriff verweigert oder fehlgeschlagen.');
+      showErrorOverlay('Kamera/Mikrofon-Zugriff verweigert oder fehlgeschlagen.');
     }
   }
 
-  function handleStopAudioRecording() {
+  function handleStopMediaRecording() {
     try {
       const mr = mediaRecorderRef.current;
       if (mr && mr.state !== 'inactive') mr.stop();
     } catch {
       showErrorOverlay('Konnte Aufnahme nicht stoppen.');
-      setRecordingAudioKey('');
+      setRecordingKey('');
+      setRecordingKind('');
     }
   }
 
@@ -561,7 +580,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
       kl.includes('first_frame') ||
       kl.includes('last_frame') ||
       kl.includes('frame_image');
-    const wantsVideo = kl.includes('video') || kl.includes('motion_video') || kl.includes('input_video');
+    const wantsVideo = kl.includes('video') || kl.includes('motion_video') || kl.includes('input_video') || kl.includes('source_video');
     const wantsAudio = kl.includes('audio') || kl.includes('voice') || kl.includes('speech') || kl.includes('input_audio');
 
     const wantsUriLike = fmt.includes('uri') || fmt.includes('url') || fmt.includes('path') || fmt === '' || fmt === 'uri' || fmt === 'url';
@@ -581,7 +600,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
           ? 'video/*,.mp4,.mov,.webm,.avi,.mkv,.m4v'
           : 'image/jpeg,image/png,image/webp,image/heic,image/bmp,image/gif';
       const uploadLabel = wantsAudio ? '🎙️ Upload Audio' : wantsVideo ? '🎬 Upload Video' : '📎 Upload';
-      const isRecordingThisKey = recordingAudioKey === k;
+      const isRecordingThisKey = recordingKey === k;
 
       return (
         <div className="gen-row" key={k}>
@@ -622,9 +641,27 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
                 type="button"
                 className="btn-ref-upload"
                 disabled={uploading || submitting || optimizing}
-                onClick={() => (isRecordingThisKey ? handleStopAudioRecording() : handleStartAudioRecording(k, isArrayField))}
+                onClick={() =>
+                  isRecordingThisKey && recordingKind === 'audio'
+                    ? handleStopMediaRecording()
+                    : handleStartMediaRecording(k, 'audio', isArrayField)
+                }
               >
                 {isRecordingThisKey ? '⏹️ Stop Mic' : '🎤 Mic'}
+              </button>
+            ) : null}
+            {wantsVideo ? (
+              <button
+                type="button"
+                className="btn-ref-upload"
+                disabled={uploading || submitting || optimizing}
+                onClick={() =>
+                  isRecordingThisKey && recordingKind === 'video'
+                    ? handleStopMediaRecording()
+                    : handleStartMediaRecording(k, 'video', isArrayField)
+                }
+              >
+                {isRecordingThisKey && recordingKind === 'video' ? '⏹️ Stop Cam' : '📹 Cam'}
               </button>
             ) : null}
             <span className="gen-hint" style={{ display: status ? 'inline' : 'none', margin: 0 }}>
