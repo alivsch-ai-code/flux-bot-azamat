@@ -465,6 +465,16 @@ class DatabaseManager:
                         ),
                     )
 
+                # Seedance soll als eigener Ordner sichtbar sein (nicht nur Favoriten).
+                c.execute(
+                    """
+                    UPDATE ai_models
+                    SET menu_path = %s, last_checked = NOW()
+                    WHERE key = %s OR replicate_id = %s
+                    """,
+                    ("video/seedance", "bytedance-seedance-1.5-pro", "bytedance/seedance-1.5-pro"),
+                )
+
                 # Telegram-Kanäle (Metadaten + Daily-News Opt-in) — dieselbe Neon-DB wie der Rest.
                 c.execute(
                     """

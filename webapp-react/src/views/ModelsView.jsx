@@ -3,6 +3,9 @@ import React from 'react';
 function folderIcon(slug) {
   const s = String(slug || '').toLowerCase();
   if (s.includes('favorites') || s.includes('favoriten') || s.includes('favourites')) return '⭐';
+  if (s.includes('avatar')) return '🗣️';
+  if (s.includes('motioncontrol') || s.includes('motion control')) return '🎞️';
+  if (s.includes('seedance')) return '🌱';
   if (s.includes('google')) return '🧠';
   if (s.includes('flux')) return '✨';
   if (s.includes('openai')) return '🤖';
@@ -27,6 +30,7 @@ function folderIcon(slug) {
 function folderLogoUrl(slug) {
   const s = String(slug || '').toLowerCase();
   // Official brand marks via Simple Icons CDN.
+  if (s.includes('seedance')) return 'https://cdn.simpleicons.org/bytedance/3C8CFF';
   if (s.includes('google')) return 'https://cdn.simpleicons.org/google/4285F4';
   if (s.includes('openai')) return 'https://cdn.simpleicons.org/openai/FFFFFF';
   if (s.includes('anthropic')) return 'https://cdn.simpleicons.org/anthropic/FFFFFF';
