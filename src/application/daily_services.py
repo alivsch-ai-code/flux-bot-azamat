@@ -81,7 +81,7 @@ _last_errors_cleanup_date = None
 _last_azamat_slots_done = set()
 
 AZAMAT_GREETING_MODEL = "google-gemini-2-5-flash"
-RSS_WATCH_MIN_INTERVAL_SECONDS = max(300, int(os.getenv("RSS_WATCH_MIN_INTERVAL_SECONDS", "7200")))
+RSS_WATCH_MIN_INTERVAL_SECONDS = max(300, int(os.getenv("RSS_WATCH_MIN_INTERVAL_SECONDS", "18000")))
 
 
 def _resolve_daily_message_text(raw: str | None, lang: str) -> str:
@@ -733,7 +733,7 @@ class DailyService:
         ):
             return
 
-        news_items = self._fetch_ai_news_from_rss(max_items=2)
+        news_items = self._fetch_ai_news_from_rss(max_items=5)
         if len(news_items) < 2:
             return
         signature = self._build_news_signature(news_items)
@@ -860,7 +860,7 @@ class DailyService:
         if not model or "text" not in (model.type or []):
             return {"ok": False, "reason": "text_model_missing", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
 
-        news_items = preloaded_news_items if preloaded_news_items is not None else self._fetch_ai_news_from_rss(max_items=2)
+        news_items = preloaded_news_items if preloaded_news_items is not None else self._fetch_ai_news_from_rss(max_items=5)
         if len(news_items) < 2:
             return {"ok": False, "reason": "not_enough_news_items", "sent_to": None, "target_type": None, "sent_count": 0, "total_recipients": 0}
 
@@ -979,7 +979,12 @@ class DailyService:
             lang_key = (lang or "en").strip() or "en"
             if lang_key not in summary_by_lang:
                 prompt_tpl = get_text("azamat_news_summary_prompt", lang_key)
-                prompt = f"{prompt_tpl}\n\n---\n{news_block}\n---\n\nOutput ONLY the summarized news text."
+                prompt = (
+                    f"{prompt_tpl}\n\n---\n{news_block}\n---\n\n"
+                    "Also add one subtle, practical future recommendation for readers. "
+                    "Stay cheeky and blunt, but keep it useful.\n\n"
+                    "Output ONLY the summarized news text."
+                )
                 user_id_for_gen = self._billing_user_id_for_news(target_type, target_id)
                 t0 = time.perf_counter()
                 logger.info("Azamat AI News: starte Zusammenfassung für Sprache %s …", lang_key)
@@ -1012,25 +1017,24 @@ class DailyService:
             footer = _build_sources_footer(lang_key)
             final_text = f"{text}\n\n{footer}"
             try:
-                photo_caption = self._compose_daily_news_photo_caption(text, footer)
                 logger.info(
-                    "Azamat AI News: sende an %s chat_id=%s (caption_len=%s, mit_bild=%s)",
+                    "Azamat AI News: sende an %s chat_id=%s (text_len=%s, mit_bild=%s)",
                     target_type,
                     target_id,
-                    len(photo_caption) if batch_image_url else len(final_text),
+                    len(final_text),
                     bool(batch_image_url),
                 )
-                # Anforderung: Bild + Text in EINER Nachricht.
+                # Bild + Text getrennt senden: mehr Platz für längeren Text.
                 if batch_image_url:
                     sent_img = self._send_news_image_with_retry(
                         target_id,
                         batch_image_url,
-                        caption=photo_caption,
+                        caption=None,
                         retries=3,
                         delay_s=2.0,
                     )
                     if sent_img:
-                        pass
+                        self.bot.send_message_sync(target_id, final_text)
                     else:
                         self.bot.send_message_sync(target_id, final_text)
                 else:

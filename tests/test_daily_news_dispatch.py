@@ -100,8 +100,11 @@ def test_dispatch_dedupes_same_chat_id_across_group_and_user(monkeypatch):
     sent_chat_ids = [c.args[0] for c in bot.send_photo_sync.call_args_list]
     assert overlap_chat_id in sent_chat_ids
     assert 123456 in sent_chat_ids
-    # No extra plain-text fallback send for successful photo path.
-    assert bot.send_message_sync.call_count == 0
+    # Bild + Text werden getrennt gesendet (auch bei erfolgreichem Foto).
+    assert bot.send_message_sync.call_count == 2
+    sent_text_ids = [c.args[0] for c in bot.send_message_sync.call_args_list]
+    assert overlap_chat_id in sent_text_ids
+    assert 123456 in sent_text_ids
 
 
 def test_compose_daily_news_photo_caption_keeps_sources_when_summary_long():
