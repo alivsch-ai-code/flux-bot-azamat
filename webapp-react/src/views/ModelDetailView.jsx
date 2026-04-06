@@ -73,6 +73,104 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
   const [optimizing, setOptimizing] = useState(false);
   const [submitInfo, setSubmitInfo] = useState('');
   const [showInfo, setShowInfo] = useState(false);
+  const initializedForModelKeyRef = useRef('');
+
+  function applyModelDefaults(data) {
+    if (!data || typeof data !== 'object') return;
+    if (initializedForModelKeyRef.current === String(modelKey || '')) return;
+
+    const localOpt = data?.generation_options_schema || {};
+    const localInputSchema = data?.input_schema || {};
+    const localSchemaProps = (localInputSchema && localInputSchema.properties) ? localInputSchema.properties : {};
+
+    const params = new URLSearchParams(window.location.search || '');
+    const prefillPrompt = (params.get('prompt') || '').trim();
+    setPromptText(prefillPrompt);
+    setNegativePromptText('');
+
+    const durEnum = (localOpt.duration && Array.isArray(localOpt.duration.enum) && localOpt.duration.enum.length) ? localOpt.duration.enum : [5, 6, 7, 8];
+    const durDefault = Number((localOpt.duration && localOpt.duration.default) || 5);
+    setDuration(Number.isFinite(durDefault) ? durDefault : (durEnum[0] || 5));
+
+    const resolutionProp = localSchemaProps?.resolution || {};
+    const resEnum = Array.isArray(resolutionProp.enum) ? resolutionProp.enum : [];
+    const resDefault =
+      resolutionProp.default != null && String(resolutionProp.default).trim()
+        ? String(resolutionProp.default)
+        : resEnum.length
+          ? String(resEnum[0])
+          : '';
+    setResolution(resDefault);
+
+    const aspectRatioProp = localSchemaProps?.aspect_ratio || {};
+    const ratioEnum = Array.isArray(aspectRatioProp.enum) ? aspectRatioProp.enum : [];
+    const ratioDefault =
+      aspectRatioProp.default != null && String(aspectRatioProp.default).trim()
+        ? String(aspectRatioProp.default)
+        : ratioEnum.length
+          ? String(ratioEnum[0])
+          : '';
+    setAspectRatio(ratioDefault);
+
+    setGenerateAudio(localOpt.generate_audio && localOpt.generate_audio.enabled ? localOpt.generate_audio.default !== false : false);
+    setReferenceImagesText('');
+
+    const props = localSchemaProps || {};
+    const refImgEnabled = !!(localOpt?.reference_images && localOpt.reference_images.enabled);
+    const keys = Object.keys(props).filter((k) => {
+      const p = props[k] || {};
+      const kl = String(k).toLowerCase();
+      if (kl === 'image' && refImgEnabled) return false;
+      if (['prompt', 'negative_prompt', 'images', 'start_image', 'end_image', 'reference_images', 'duration', 'resolution', 'aspect_ratio', 'generate_audio', 'messages', 'system_prompt'].includes(kl))
+        return false;
+      if (p.readOnly) return false;
+      const isArrayUriLike =
+        p.type === 'array' &&
+        (
+          String(p.format || '').toLowerCase().includes('uri') ||
+          String(p.items?.format || '').toLowerCase().includes('uri') ||
+          String(p.items?.type || '').toLowerCase() === 'string'
+        );
+      const looksConfigLikeWithoutType =
+        !p.type &&
+        (
+          p.default !== undefined ||
+          Array.isArray(p.enum) ||
+          Array.isArray(p.anyOf) ||
+          Array.isArray(p.oneOf) ||
+          Array.isArray(p.allOf)
+        );
+      return ['string', 'number', 'integer', 'boolean'].includes(p.type) || Array.isArray(p.enum) || isArrayUriLike || looksConfigLikeWithoutType;
+    });
+    keys.sort((a, b) => {
+      const oa = Number(props[a]?.['x-order'] ?? 999);
+      const ob = Number(props[b]?.['x-order'] ?? 999);
+      if (oa !== ob) return oa - ob;
+      return String(a).localeCompare(String(b));
+    });
+
+    const initDyn = {};
+    for (const k of keys) {
+      const p = localSchemaProps?.[k] || {};
+      let defVal = p?.default ?? '';
+      if (Array.isArray(p.enum) && p.enum.length) {
+        defVal = p.default ?? p.enum[0];
+      } else if (p.type === 'boolean') {
+        defVal = p.default !== false;
+      }
+      initDyn[k] = defVal;
+    }
+    setDynamicValues(initDyn);
+
+    setUploadStatusMap({});
+    setUploadingMap({});
+    setReferenceUploadStatus('');
+    setReferenceUploading(false);
+    setSubmitting(false);
+    setOptimizing(false);
+    setSubmitInfo('');
+    initializedForModelKeyRef.current = String(modelKey || '');
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +179,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
       setLoading(true);
       setError('');
       setModel(null);
+      initializedForModelKeyRef.current = '';
       try {
         if (!modelKey) throw new Error('missing_model_key');
         let data = await loadModelDetail(modelKey);
@@ -104,6 +203,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
           return;
         }
         setModel(data);
+        applyModelDefaults(data);
       } catch (e) {
         if (!cancelled) setError(t('webapp_model_load_failed', 'Modell konnte gerade nicht geladen werden. Bitte erneut versuchen.'));
       } finally {
@@ -206,64 +306,6 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     if (exShort) return 'z. B.: ' + exShort + (exRaw.length > 200 ? '...' : '');
     return isText ? 'Erste Nachricht optional...' : 'Beschreibe Szenenbild, Stil, Details...';
   }, [model, isText]);
-
-  // Initialize defaults when the model loads / changes
-  useEffect(() => {
-    if (!model) return;
-
-    const params = new URLSearchParams(window.location.search || '');
-    const prefillPrompt = (params.get('prompt') || '').trim();
-    setPromptText(prefillPrompt);
-    setNegativePromptText('');
-
-    const durEnum = (opt.duration && Array.isArray(opt.duration.enum) && opt.duration.enum.length) ? opt.duration.enum : [5, 6, 7, 8];
-    const durDefault = Number((opt.duration && opt.duration.default) || 5);
-    setDuration(Number.isFinite(durDefault) ? durDefault : (durEnum[0] || 5));
-
-    const resolutionProp = schemaProps?.resolution || {};
-    const resEnum = Array.isArray(resolutionProp.enum) ? resolutionProp.enum : [];
-    const resDefault =
-      resolutionProp.default != null && String(resolutionProp.default).trim()
-        ? String(resolutionProp.default)
-        : resEnum.length
-          ? String(resEnum[0])
-          : '';
-    setResolution(resDefault);
-
-    const aspectRatioProp = schemaProps?.aspect_ratio || {};
-    const ratioEnum = Array.isArray(aspectRatioProp.enum) ? aspectRatioProp.enum : [];
-    const ratioDefault =
-      aspectRatioProp.default != null && String(aspectRatioProp.default).trim()
-        ? String(aspectRatioProp.default)
-        : ratioEnum.length
-          ? String(ratioEnum[0])
-          : '';
-    setAspectRatio(ratioDefault);
-
-    setGenerateAudio(opt.generate_audio && opt.generate_audio.enabled ? opt.generate_audio.default !== false : false);
-    setReferenceImagesText('');
-
-    const initDyn = {};
-    for (const k of dynamicKeys) {
-      const p = schemaProps?.[k] || {};
-      let defVal = p?.default ?? '';
-      if (Array.isArray(p.enum) && p.enum.length) {
-        defVal = p.default ?? p.enum[0];
-      } else if (p.type === 'boolean') {
-        defVal = p.default !== false;
-      }
-      initDyn[k] = defVal;
-    }
-    setDynamicValues(initDyn);
-
-    setUploadStatusMap({});
-    setUploadingMap({});
-    setReferenceUploadStatus('');
-    setReferenceUploading(false);
-    setSubmitting(false);
-    setOptimizing(false);
-    setSubmitInfo('');
-  }, [modelKey, model]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const baseCost = Number(model?.final_cost || 0);
   const durationEnabled = !!(opt.duration && opt.duration.enabled);
@@ -789,19 +831,17 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
   }
 
   const shouldShowGenBlock = hasGenOptions || dynamicKeys.length > 0;
-  const infoSummary = useMemo(() => {
-    const inProps = (inputSchema && inputSchema.properties) ? Object.keys(inputSchema.properties) : [];
-    const outProps = (model?.output_schema && model.output_schema.properties) ? Object.keys(model.output_schema.properties) : [];
-    return {
-      provider: model?.provider || '-',
-      key: model?.key || '-',
-      replicateId: model?.replicate_id || '-',
-      types: Array.isArray(model?.model_type) ? model.model_type.join(', ') : '-',
-      required: Array.isArray(schemaRequired) ? schemaRequired : [],
-      inputProps: inProps,
-      outputProps: outProps,
-    };
-  }, [model, inputSchema, schemaRequired]);
+  const inProps = (inputSchema && inputSchema.properties) ? Object.keys(inputSchema.properties) : [];
+  const outProps = (model?.output_schema && model.output_schema.properties) ? Object.keys(model.output_schema.properties) : [];
+  const infoSummary = {
+    provider: model?.provider || '-',
+    key: model?.key || '-',
+    replicateId: model?.replicate_id || '-',
+    types: Array.isArray(model?.model_type) ? model.model_type.join(', ') : '-',
+    required: Array.isArray(schemaRequired) ? schemaRequired : [],
+    inputProps: inProps,
+    outputProps: outProps,
+  };
 
   return (
     <div className="detail-view">
