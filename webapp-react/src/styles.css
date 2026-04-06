@@ -71,6 +71,39 @@ body {
   letter-spacing: -0.01em;
 }
 
+.top-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-icon-btn {
+  min-width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-raised) 92%, #64748b);
+  color: var(--tg-theme-text-color);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.top-icon-btn b {
+  font-size: 0.82rem;
+  color: var(--apple-cyan);
+}
+
+.top-icon-btn:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #94a3b8 45%, transparent);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.32);
+}
+
 .header {
   text-align: center;
   padding: 22px 0 18px;

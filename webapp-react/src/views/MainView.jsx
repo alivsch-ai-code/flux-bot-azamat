@@ -60,9 +60,6 @@ export default function MainView({ t, azamatVersion, onNavigateModels, onOpenSho
           <Card icon="📝" tone="text" label={t('menu_text', 'Text / Chat')} desc={t('webapp_desc_text', 'LLMs & Chat')} onClick={() => onNavigateModels('text')} />
           <Card icon="🛠️" tone="tools" label={t('menu_tools', 'Werkzeuge')} desc={t('webapp_desc_tools', 'Profi Tools')} onClick={() => onNavigateModels('tools')} />
 
-          <Card icon="💎" tone="shop" label={t('webapp_credits_buy', 'Credits kaufen')} desc={t('webapp_shop_sub', 'Sicher per Telegram Stars')} onClick={onOpenShop} />
-          <Card icon="⚙️" tone="settings" label={t('webapp_settings', 'Einstellungen')} desc={''} onClick={onOpenSettings} />
-          <Card icon="👤" tone="profile" label={t('menu_profile', 'Profil')} desc={''} onClick={onOpenProfile} />
         </div>
       </div>
     </div>

@@ -208,9 +208,36 @@ export default function AppShell() {
           <span className="user" style={{ opacity: 0.92 }}>
             {(t('webapp_user', 'User') || 'User') + ': ' + (user.username || 'User')}
           </span>
-          <span className="credits">
-            💎 <b style={{ fontWeight: 800 }}>{user.credits || 0}</b> ⭐
-          </span>
+          <div className="top-actions">
+            <button
+              type="button"
+              className="top-icon-btn top-icon-shop"
+              onClick={() => setView('shop')}
+              title={t('webapp_credits_buy', 'Credits kaufen')}
+              aria-label={t('webapp_credits_buy', 'Credits kaufen')}
+            >
+              <span aria-hidden="true">💎</span>
+              <b>{user.credits || 0}</b>
+            </button>
+            <button
+              type="button"
+              className="top-icon-btn top-icon-settings"
+              onClick={() => setView('settings')}
+              title={t('webapp_settings', 'Einstellungen')}
+              aria-label={t('webapp_settings', 'Einstellungen')}
+            >
+              <span aria-hidden="true">⚙️</span>
+            </button>
+            <button
+              type="button"
+              className="top-icon-btn top-icon-profile"
+              onClick={() => setView('profile')}
+              title={t('menu_profile', 'Profil')}
+              aria-label={t('menu_profile', 'Profil')}
+            >
+              <span aria-hidden="true">👤</span>
+            </button>
+          </div>
         </div>
       ) : null}
 

@@ -74,6 +74,9 @@ function ModelLogo({ model }) {
 export default function ModelsView({ title, folders, models, favoritesModels, freeLabel, loading, currentPath, onBack, onSelectFolder, onSelectModel, t }) {
   const favoriteModels = Array.isArray(favoritesModels) ? favoritesModels : [];
   const regularModels = models || [];
+  const path = String(currentPath || '').toLowerCase();
+  const isStudioTopLevel = ['image', 'video', 'audio', 'text', 'tools'].includes(path);
+  const visibleFavoriteModels = isStudioTopLevel ? favoriteModels : [];
   const activateOnKey = (e, fn) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -132,13 +135,13 @@ export default function ModelsView({ title, folders, models, favoritesModels, fr
           })}
         </div> : null}
 
-        {favoriteModels.length ? (
+        {visibleFavoriteModels.length ? (
           <div className="section-title" style={{ marginTop: 12, marginBottom: 8 }}>
             ⭐ {t ? t('webapp_favorites', 'Favoriten') : 'Favoriten'}
           </div>
         ) : null}
 
-        {favoriteModels.length ? <div className="favorites-grid">{favoriteModels.map((m) => {
+        {visibleFavoriteModels.length ? <div className="favorites-grid">{visibleFavoriteModels.map((m) => {
           const isFree = (m.final_cost ?? 0) <= 0;
           const costLabel = isFree ? freeLabel : String(m.final_cost) + ' ⭐';
           return (
@@ -181,7 +184,7 @@ export default function ModelsView({ title, folders, models, favoritesModels, fr
           );
         })}
 
-        {(!folders || folders.length === 0) && (!regularModels || regularModels.length === 0) && (!favoriteModels || favoriteModels.length === 0) && !loading ? (
+        {(!folders || folders.length === 0) && (!regularModels || regularModels.length === 0) && (!visibleFavoriteModels || visibleFavoriteModels.length === 0) && !loading ? (
           <div className="loading">{t ? t('webapp_no_models', 'Keine Modelle gefunden.') : 'Keine Modelle gefunden.'}</div>
         ) : null}
       </div>
