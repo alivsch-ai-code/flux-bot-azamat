@@ -10,6 +10,8 @@ from __future__ import annotations
 import io
 import logging
 import os
+import threading
+import time
 from typing import Any
 
 from flask import Flask, jsonify, redirect, request, send_from_directory
@@ -17,6 +19,41 @@ from flask import Flask, jsonify, redirect, request, send_from_directory
 from src.config.settings import config
 
 logger = logging.getLogger(__name__)
+
+# --- Lightweight API rate limiting (in-memory, process-local) ---
+_rate_lock = threading.Lock()
+_rate_hits: dict[tuple[str, str], list[float]] = {}
+
+
+def _client_ip() -> str:
+    # Hinter Proxies zuerst X-Forwarded-For beachten.
+    xff = (request.headers.get("X-Forwarded-For") or "").strip()
+    if xff:
+        return xff.split(",")[0].strip()
+    return (request.remote_addr or "unknown").strip()
+
+
+def _rate_limited(bucket: str, key: str, max_requests: int, window_seconds: int) -> bool:
+    now = time.time()
+    cutoff = now - max(1, int(window_seconds))
+    bk = (bucket, key)
+    with _rate_lock:
+        arr = _rate_hits.get(bk, [])
+        if arr:
+            arr = [ts for ts in arr if ts >= cutoff]
+        arr.append(now)
+        _rate_hits[bk] = arr
+        # Opportunistisches Cleanup alter Buckets.
+        if len(_rate_hits) > 5000:
+            dead_keys = [k for k, v in _rate_hits.items() if not v or v[-1] < cutoff]
+            for dk in dead_keys[:1000]:
+                _rate_hits.pop(dk, None)
+        return len(arr) > max_requests
+
+
+def _too_many_requests(message: str = "rate_limited", retry_after_sec: int = 10):
+    body = jsonify(ok=False, error=message)
+    return body, 429, {"Retry-After": str(max(1, int(retry_after_sec)))}
 
 
 class AppRuntime:
@@ -96,6 +133,32 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
       JSON-Endpunkte liefern Daten für den React Flow.
     """
 
+    rate_window = max(1, int(os.getenv("HTTP_RATE_LIMIT_WINDOW_SECONDS", "10")))
+    ip_limit_general = max(10, int(os.getenv("HTTP_RATE_LIMIT_MAX_REQUESTS_PER_IP", "180")))
+    ip_limit_heavy = max(5, int(os.getenv("HTTP_RATE_LIMIT_MAX_REQUESTS_PER_IP_HEAVY", "50")))
+    user_limit_actions = max(5, int(os.getenv("HTTP_RATE_LIMIT_MAX_REQUESTS_PER_USER", "45")))
+
+    @app.before_request
+    def _global_rate_limit_guard():
+        path = request.path or "/"
+        if not path.startswith("/api/"):
+            return None
+        ip = _client_ip()
+        # Allgemeines API-Limit.
+        if _rate_limited("ip:all", ip, ip_limit_general, rate_window):
+            return _too_many_requests("rate_limited_ip", retry_after_sec=rate_window)
+        # Schärferes Limit für teure Endpunkte.
+        heavy = (
+            path.startswith("/api/webapp_action")
+            or path.startswith("/api/webapp_upload_reference")
+            or path.startswith("/api/user_info")
+            or path.startswith("/api/models")
+            or path.startswith("/api/model")
+        )
+        if heavy and _rate_limited("ip:heavy", f"{ip}:{path}", ip_limit_heavy, rate_window):
+            return _too_many_requests("rate_limited_heavy", retry_after_sec=rate_window)
+        return None
+
     @app.route("/")
     def health_check():
         return "🤖 System Status: ONLINE", 200
@@ -118,7 +181,11 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
         """Statische Assets aus dem Vite-Output (z. B. /webapp/assets/…)."""
         dist_dir = _webapp_react_dist_dir(project_root)
         try:
-            return send_from_directory(dist_dir, filename)
+            resp = send_from_directory(dist_dir, filename)
+            # Aggressiver Cache für hash-basierten Build-Output -> schnelleres TTI.
+            if "/assets/" in f"/{filename}":
+                resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return resp
         except Exception:
             return "", 404
 
@@ -152,6 +219,8 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             user_id = validate_init_data(init_data, config.TELEGRAM_TOKEN)
             if not user_id:
                 return jsonify(ok=False, error="invalid_init_data"), 403
+            if _rate_limited("uid:webapp_action", str(user_id), user_limit_actions, rate_window):
+                return _too_many_requests("rate_limited_user", retry_after_sec=rate_window)
 
             if runtime.bot is None:
                 return jsonify(ok=False, error="no_bot"), 500
@@ -183,6 +252,8 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             user_id = validate_init_data(init_data, config.TELEGRAM_TOKEN)
             if not user_id:
                 return jsonify(ok=False, error="invalid_init_data"), 403
+            if _rate_limited("uid:user_info", str(user_id), user_limit_actions, rate_window):
+                return _too_many_requests("rate_limited_user", retry_after_sec=rate_window)
 
             user = runtime.db.get_user(user_id)
             settings = runtime.db.get_user_settings(user_id)
@@ -381,6 +452,8 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             user_id = validate_init_data(init_data, config.TELEGRAM_TOKEN)
             if not user_id:
                 return jsonify(ok=False, error="invalid_init_data"), 403
+            if _rate_limited("uid:upload", str(user_id), max(3, user_limit_actions // 2), rate_window):
+                return _too_many_requests("rate_limited_upload", retry_after_sec=rate_window)
 
             files = request.files.getlist("files")
             if not files:

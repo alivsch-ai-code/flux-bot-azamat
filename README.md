@@ -82,6 +82,8 @@ python main.py
 - CI: GitHub Actions testet jetzt mit Python **3.12**.
 - DB: `DatabaseManager` sorgt zuverlässig dafür, dass Connections auch bei Exceptions wieder an den Pool zurückgegeben werden (verhindert Pool-„Lecks“ im Fehlerfall).
 - Replicate-Audit (Schema + UX + Tests): siehe [`doc/replicate_schema_ux_audit_2026_04.md`](doc/replicate_schema_ux_audit_2026_04.md).
+- HTTP-Ratelimits (DDoS-/Burst-Schutz) für `/api/*` inkl. verschärfter Limits auf Upload-/Action-Endpunkten; Antwort bei Überschreitung: `429` + `Retry-After`.
+- WebApp-Assets unter `/webapp/assets/*` werden mit `Cache-Control: immutable` ausgeliefert (schnelleres Laden auf Mobilgeräten).
 
 ---
 
