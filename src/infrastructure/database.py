@@ -46,7 +46,7 @@ class _PooledConnectionProxy:
 class DatabaseManager:
     def __init__(self):
         self.db_url = os.getenv("DATABASE_URL")
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self._pool = None
         
         if self.db_url:
@@ -492,6 +492,23 @@ class DatabaseManager:
                     """
                 )
 
+                # Performance-Indizes für häufige Filter.
+                c.execute("CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions (user_id)")
+                c.execute("CREATE INDEX IF NOT EXISTS idx_generation_errors_user_id ON generation_errors (user_id)")
+                c.execute("CREATE INDEX IF NOT EXISTS idx_replicate_webhook_jobs_user_id ON replicate_webhook_jobs (user_id)")
+
+                # daily_posts: DATE-Spalte für robuste Datumsfilter (legacy TEXT bleibt kompatibel).
+                c.execute("ALTER TABLE daily_posts ADD COLUMN IF NOT EXISTS date_to_send_date DATE")
+                c.execute(
+                    """
+                    UPDATE daily_posts
+                    SET date_to_send_date = CAST(date_to_send AS DATE)
+                    WHERE date_to_send_date IS NULL
+                      AND date_to_send ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                    """
+                )
+                c.execute("CREATE INDEX IF NOT EXISTS idx_daily_posts_date_to_send_date ON daily_posts (date_to_send_date)")
+
                 conn.commit()
             except Exception as e:
                 logger.warning("Migration Warning: %s", e)
@@ -523,30 +540,61 @@ class DatabaseManager:
 
         with self.lock:
             conn = self._get_connection()
-            c = conn.cursor()
-            query = (
-                f"SELECT {self._get_model_columns()} FROM ai_models "
-                "WHERE is_active = 1 "
-                "ORDER BY is_favorite DESC, menu_path, name"
-            )
-            c.execute(query)
-            rows = c.fetchall()
-            conn.close()
-            models = [self._map_row(r) for r in rows]
+            try:
+                c = conn.cursor()
+                query = (
+                    f"SELECT {self._get_model_columns()} FROM ai_models "
+                    "WHERE is_active = 1 "
+                    "ORDER BY is_favorite DESC, menu_path, name"
+                )
+                c.execute(query)
+                rows = c.fetchall()
+                models = [self._map_row(r) for r in rows]
+            finally:
+                conn.close()
 
         self._models_cache = models
         self._models_cache_ts = time.time()
         return models
 
+    def get_models_for_menu(self) -> list[AIModel]:
+        """
+        Lightweight Modell-Query für Menü/WebApp-Listen.
+        Lässt schwere JSON-Schemas weg, behält aber example_data für Thumbnails.
+        """
+        with self.lock:
+            conn = self._get_connection()
+            try:
+                c = conn.cursor()
+                c.execute(
+                    """
+                    SELECT
+                        key, replicate_id, name, description,
+                        0.0 AS base_cost_usd, internal_cost, custom_price,
+                        provider, model_type, menu_path, is_active, is_favorite,
+                        is_commercial, manual_override,
+                        '{}'::jsonb AS input_schema, '{}'::jsonb AS output_schema, example_data
+                    FROM ai_models
+                    WHERE is_active = 1
+                    ORDER BY is_favorite DESC, menu_path, name
+                    """
+                )
+                rows = c.fetchall()
+                return [self._map_row(r) for r in rows]
+            finally:
+                conn.close()
+
     def get_model_by_key(self, key: str) -> AIModel:
         with self.lock:
             conn = self._get_connection()
-            c = conn.cursor()
-            query = f"SELECT {self._get_model_columns()} FROM ai_models WHERE key = %s"
-            c.execute(query, (key,))
-            r = c.fetchone()
-            conn.close()
-            return self._map_row(r) if r else None
+            try:
+                c = conn.cursor()
+                query = f"SELECT {self._get_model_columns()} FROM ai_models WHERE key = %s"
+                c.execute(query, (key,))
+                r = c.fetchone()
+                return self._map_row(r) if r else None
+            finally:
+                conn.close()
 
     def get_fallback_model(self, original_model: AIModel) -> AIModel:
         """Sucht Ersatzmodell."""
@@ -714,13 +762,15 @@ class DatabaseManager:
     def get_user_settings(self, user_id):
         with self.lock:
             conn = self._get_connection()
-            c = conn.cursor()
-            c.execute(
-                "SELECT language, auto_opt, auto_negative_prompt, daily_msg FROM users WHERE user_id = %s",
-                (user_id,),
-            )
-            result = c.fetchone()
-            conn.close()
+            try:
+                c = conn.cursor()
+                c.execute(
+                    "SELECT language, auto_opt, auto_negative_prompt, daily_msg FROM users WHERE user_id = %s",
+                    (user_id,),
+                )
+                result = c.fetchone()
+            finally:
+                conn.close()
             if result:
                 lang = result[0] if result[0] and result[0].strip() in ("de", "en", "ru", "kk") else "en"
                 return {
@@ -734,19 +784,30 @@ class DatabaseManager:
     def add_user_if_not_exists(self, user_id, username):
         with self.lock:
             conn = self._get_connection()
-            c = conn.cursor()
-            c.execute("INSERT INTO users (user_id, username) VALUES (%s, %s) ON CONFLICT (user_id) DO NOTHING", (user_id, username))
-            conn.commit()
-            conn.close()
+            try:
+                c = conn.cursor()
+                c.execute("INSERT INTO users (user_id, username) VALUES (%s, %s) ON CONFLICT (user_id) DO NOTHING", (user_id, username))
+                conn.commit()
+            finally:
+                conn.close()
 
     def update_setting(self, user_id, column, value):
         with self.lock:
             conn = self._get_connection()
-            c = conn.cursor()
-            if column in ["language", "auto_opt", "auto_negative_prompt", "daily_msg"]:
-                c.execute(f"UPDATE users SET {column} = %s WHERE user_id = %s", (value, user_id))
-                conn.commit()
-            conn.close()
+            try:
+                c = conn.cursor()
+                queries = {
+                    "language": "UPDATE users SET language = %s WHERE user_id = %s",
+                    "auto_opt": "UPDATE users SET auto_opt = %s WHERE user_id = %s",
+                    "auto_negative_prompt": "UPDATE users SET auto_negative_prompt = %s WHERE user_id = %s",
+                    "daily_msg": "UPDATE users SET daily_msg = %s WHERE user_id = %s",
+                }
+                q = queries.get(column)
+                if q:
+                    c.execute(q, (value, user_id))
+                    conn.commit()
+            finally:
+                conn.close()
 
     def get_bot_setting(self, key: str, default: str = "") -> str:
         """Liest einen globalen Bot-Einstellungswert (z.B. menu_mode)."""
@@ -980,11 +1041,23 @@ class DatabaseManager:
         today = datetime.now().strftime("%Y-%m-%d")
         with self.lock:
             conn = self._get_connection()
-            c = conn.cursor()
-            c.execute("SELECT id, message_text, image_path FROM daily_posts WHERE date_to_send = %s AND sent_status = 0", (today,))
-            result = c.fetchone()
-            conn.close()
-            return result 
+            try:
+                c = conn.cursor()
+                c.execute(
+                    """
+                    SELECT id, message_text, image_path
+                    FROM daily_posts
+                    WHERE (
+                        date_to_send_date = %s::date
+                        OR date_to_send = %s
+                    ) AND sent_status = 0
+                    """,
+                    (today, today),
+                )
+                result = c.fetchone()
+                return result
+            finally:
+                conn.close()
 
     def mark_post_as_sent(self, post_id):
         with self.lock:

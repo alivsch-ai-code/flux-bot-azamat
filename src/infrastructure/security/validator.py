@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from dataclasses import dataclass
 
 
@@ -86,7 +87,11 @@ class InputValidator:
         """
         if not text:
             return ""
-        return text.strip()[: InputValidator.MAX_PROMPT_LEN]
+        # NFKC normalisiert Homoglyphen-/Unicode-Varianten robuster.
+        normalized = unicodedata.normalize("NFKC", text)
+        # Zero-width Zeichen entfernen, um Regex-Bypässe zu reduzieren.
+        normalized = re.sub(r"[\u200B-\u200D\uFEFF]", "", normalized)
+        return normalized.strip()[: InputValidator.MAX_PROMPT_LEN]
 
     sanitize_prompt = sanitize  # Alias (services, tests)
 
@@ -106,9 +111,8 @@ class InputValidator:
             return ValidationResult(is_safe=False, reason="too_long")
 
         for pattern, category in InputValidator._FORBIDDEN_PATTERNS:
-            if re.search(pattern, text, re.IGNORECASE | re.DOTALL):
-                # Welcher konkrete Ausdruck hat getroffen?
-                match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+            if match:
                 snippet = match.group(0)[:40] if match else ""
                 return ValidationResult(
                     is_safe=False,

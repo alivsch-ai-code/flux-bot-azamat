@@ -18,12 +18,27 @@ from typing import Any
 from flask import Flask, jsonify, redirect, request, send_from_directory
 
 from src.config.settings import config
+from src.utils import telegram_init_data as telegram_init_data_mod
+from src.presentation.telegram.handlers import menu_handler as menu_handler_mod
 
 logger = logging.getLogger(__name__)
 
 # --- Lightweight API rate limiting (in-memory, process-local) ---
 _rate_lock = threading.Lock()
 _rate_hits: dict[tuple[str, str], list[float]] = {}
+_redis_client = None
+
+try:
+    import redis as _redis_mod
+except Exception:
+    _redis_mod = None
+
+_redis_url = (os.getenv("REDIS_URL", "") or "").strip()
+if _redis_mod is not None and _redis_url:
+    try:
+        _redis_client = _redis_mod.from_url(_redis_url, decode_responses=True)
+    except Exception:
+        _redis_client = None
 
 
 def _client_ip() -> str:
@@ -35,6 +50,17 @@ def _client_ip() -> str:
 
 
 def _rate_limited(bucket: str, key: str, max_requests: int, window_seconds: int) -> bool:
+    if _redis_client is not None:
+        rk = f"rl:{bucket}:{key}"
+        try:
+            cnt = _redis_client.incr(rk)
+            if cnt == 1:
+                _redis_client.expire(rk, max(1, int(window_seconds)))
+            return int(cnt) > int(max_requests)
+        except Exception:
+            # Falls Redis temporär ausfällt, auf in-memory zurückfallen.
+            pass
+
     now = time.time()
     cutoff = now - max(1, int(window_seconds))
     bk = (bucket, key)
@@ -169,9 +195,23 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
     ip_limit_heavy = max(5, int(os.getenv("HTTP_RATE_LIMIT_MAX_REQUESTS_PER_IP_HEAVY", "50")))
     user_limit_actions = max(5, int(os.getenv("HTTP_RATE_LIMIT_MAX_REQUESTS_PER_USER", "45")))
 
+    cors_origin = (os.getenv("CORS_ALLOW_ORIGIN", "") or "").strip() or (config.APP_URL or "*")
+
+    @app.after_request
+    def _attach_cors_headers(resp):
+        # Nur API-Routen mit CORS versehen.
+        if (request.path or "").startswith("/api/"):
+            resp.headers["Access-Control-Allow-Origin"] = cors_origin
+            resp.headers["Vary"] = "Origin"
+            resp.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+            resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        return resp
+
     @app.before_request
     def _global_rate_limit_guard():
         path = request.path or "/"
+        if request.method == "OPTIONS" and path.startswith("/api/"):
+            return ("", 204)
         if not path.startswith("/api/"):
             return None
         ip = _client_ip()
@@ -246,18 +286,15 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
         if runtime.db is None:
             return jsonify(ok=False, error="no_db"), 400
         try:
-            from src.utils.telegram_init_data import validate_init_data
-            from src.presentation.telegram.handlers.menu_handler import process_webapp_action, _is_webapp_mode
-
             data = request.get_json() or {}
             action = data.get("action", "")
             init_data = data.get("init_data", "")
             if not action or not init_data:
                 return jsonify(ok=False, error="missing_params"), 400
-            if not _is_webapp_mode(runtime.db):
+            if not menu_handler_mod._is_webapp_mode(runtime.db):
                 return jsonify(ok=False, error="webapp_disabled"), 400
 
-            user_id = validate_init_data(init_data, config.TELEGRAM_TOKEN)
+            user_id = telegram_init_data_mod.validate_init_data(init_data, config.TELEGRAM_TOKEN)
             if not user_id:
                 return jsonify(ok=False, error="invalid_init_data"), 403
             if _rate_limited("uid:webapp_action", str(user_id), user_limit_actions, rate_window):
@@ -266,7 +303,7 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             if runtime.bot is None:
                 return jsonify(ok=False, error="no_bot"), 500
 
-            res_data = process_webapp_action(runtime.bot, user_id, action, runtime.db, payload=data)
+            res_data = menu_handler_mod.process_webapp_action(runtime.bot, user_id, action, runtime.db, payload=data)
             if res_data is None:
                 return jsonify(ok=True)
             return jsonify(ok=True, **res_data)
@@ -283,14 +320,12 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
         if runtime.db is None:
             return jsonify(ok=False, error="no_db"), 400
         try:
-            from src.utils.telegram_init_data import validate_init_data
-
             data = request.get_json() or {}
             init_data = data.get("init_data", "")
             if not init_data:
                 return jsonify(ok=False, error="missing_init_data"), 400
 
-            user_id = validate_init_data(init_data, config.TELEGRAM_TOKEN)
+            user_id = telegram_init_data_mod.validate_init_data(init_data, config.TELEGRAM_TOKEN)
             if not user_id:
                 return jsonify(ok=False, error="invalid_init_data"), 403
             if _rate_limited("uid:user_info", str(user_id), user_limit_actions, rate_window):
@@ -489,16 +524,14 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             return jsonify(ok=False, error="no_db"), 400
         try:
             import replicate
-            from src.utils.telegram_init_data import validate_init_data
-            from src.presentation.telegram.handlers.menu_handler import _is_webapp_mode
 
             init_data = request.form.get("init_data", "")
             if not init_data:
                 return jsonify(ok=False, error="missing_init_data"), 400
-            if not _is_webapp_mode(runtime.db):
+            if not menu_handler_mod._is_webapp_mode(runtime.db):
                 return jsonify(ok=False, error="webapp_disabled"), 400
 
-            user_id = validate_init_data(init_data, config.TELEGRAM_TOKEN)
+            user_id = telegram_init_data_mod.validate_init_data(init_data, config.TELEGRAM_TOKEN)
             if not user_id:
                 return jsonify(ok=False, error="invalid_init_data"), 403
             if _rate_limited("uid:upload", str(user_id), max(3, user_limit_actions // 2), rate_window):
@@ -600,7 +633,8 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             return jsonify(models=[], folders=[], title=""), 200
         path = request.args.get("path", "root") or "root"
         try:
-            models = runtime.db.get_all_models()
+            get_models_fn = getattr(runtime.db, "get_models_for_menu", None)
+            models = get_models_fn() if callable(get_models_fn) else runtime.db.get_all_models()
             sub_cats: set[str] = set()
             items = []
             favorites_items = []
