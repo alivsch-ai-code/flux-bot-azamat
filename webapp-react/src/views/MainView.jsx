@@ -17,16 +17,34 @@ function Card({ icon, label, desc, tone = 'default', onClick }) {
   );
 }
 
+function HeroVisual() {
+  return (
+    <div className="hero-visual" aria-hidden="true">
+      <div className="hero-orb hero-orb-a" />
+      <div className="hero-orb hero-orb-b" />
+      <div className="hero-ring hero-ring-a" />
+      <div className="hero-ring hero-ring-b" />
+      <div className="hero-grid-glow" />
+    </div>
+  );
+}
+
 export default function MainView({ t, onNavigateModels, onOpenShop, onOpenSettings, onOpenProfile }) {
   return (
     <div>
       <div className="header">
+        <HeroVisual />
         <h1>
           🤖 <span>{t('webapp_title', 'AZAMAT AI Hub')}</span>
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginTop: '8px' }}>
           {t('webapp_choose_category', 'Wähle eine Kategorie')}
         </p>
+        <div className="hero-chip-row">
+          <span className="hero-chip">⚡ Fast Pipeline</span>
+          <span className="hero-chip">🧠 Multi-Model</span>
+          <span className="hero-chip">🛡️ Safe by Design</span>
+        </div>
         <div className="credits-badge" style={{ display: 'none' }}>
           💎 <span>0</span> Credits
         </div>
