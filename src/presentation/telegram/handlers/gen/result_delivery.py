@@ -46,7 +46,10 @@ def _infer_media_kind_from_url(url: str) -> str | None:
     if path.endswith((".mp3", ".wav", ".ogg", ".m4a", ".flac")):
         return "audio"
     if "replicate.delivery" in u:
-        return "image"
+        # replicate.delivery liefert häufig URLs ohne Dateiendung.
+        # Ohne weitere Hinweise hier nichts erzwingen; spätere Stufen (Model-Typ / Byte-Sniffing)
+        # entscheiden robuster über den Medientyp.
+        return None
     return None
 
 

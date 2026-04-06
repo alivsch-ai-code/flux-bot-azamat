@@ -97,3 +97,29 @@ def test_parse_and_deliver_infers_media_from_replicate_url_when_type_missing(mon
 
     assert facade.send_photo.await_count == 1
     assert facade.send_message.await_count == 0
+
+
+def test_parse_and_deliver_replicate_delivery_without_type_falls_back_to_message(monkeypatch):
+    facade = _facade()
+    monkeypatch.setattr(result_delivery, "get_text", _text)
+    monkeypatch.setattr(result_delivery, "set_context", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(result_delivery, "download_url_to_bytes", lambda *_args, **_kwargs: b"")
+
+    asyncio.run(
+        result_delivery.parse_and_deliver(
+            facade=facade,
+            user_id=1,
+            result="https://replicate.delivery/xyz/noext",
+            model=_model([]),
+            cost=2,
+            lang="de",
+            ctx={},
+            is_chat=False,
+            prompt="p",
+            keyboards_fn=MagicMock(),
+        )
+    )
+
+    assert facade.send_photo.await_count == 0
+    assert facade.send_video.await_count == 0
+    assert facade.send_message.await_count == 1

@@ -77,6 +77,30 @@ Impact:
 
 - Bessere Accessibility und konsistentes Verhalten für Tastaturnutzer.
 
+### 4) Striktes Schema-Merging für `generation_params` (zweite Audit-Welle)
+
+In `UnifiedAIClient.build_replicate_input_dict()`:
+
+- Es werden nur noch `generation_params`-Keys übernommen, die im `input_schema.properties` existieren.
+- Werte werden gegen den erwarteten Typ coerced (`boolean`, `integer`, `number`, `string`, `array`).
+- `enum` wird strikt geprüft (nicht erlaubte Werte werden verworfen).
+
+Impact:
+
+- Weniger 400er/Validation-Fehler bei Replicate.
+- WebApp/Caller können keine schemafremden Parameter mehr unbemerkt injizieren.
+
+### 5) Delivery-Heuristik für `replicate.delivery` entschärft
+
+In `result_delivery._infer_media_kind_from_url()`:
+
+- `replicate.delivery` ohne Dateiendung wird nicht mehr pauschal als Bild angenommen.
+- Medientyp-Entscheid bleibt bei Modelltyp/Byte-Sniffing.
+
+Impact:
+
+- Weniger falsche `send_photo`-Versuche bei Video/Audio-Assets mit extensionlosen URLs.
+
 ---
 
 ## Ergänzte Tests
@@ -86,6 +110,8 @@ Impact:
 - `tests/test_dynamic_adapter.py`
   - neuer Test: extensionlose URL wird korrekt auf `input_video` gemappt.
   - neuer Test: extensionlose URL wird korrekt auf `input_audio` gemappt.
+- `tests/test_result_delivery_media_types.py`
+  - neuer Test: extensionlose `replicate.delivery`-URL ohne Modelltyp fällt sauber auf Text-Link zurück.
 
 ---
 

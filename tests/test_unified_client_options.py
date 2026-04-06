@@ -22,7 +22,16 @@ def test_run_replicate_includes_generation_params():
         internal_cost=200,
         custom_price=None,
         provider="replicate",
-        input_schema={"properties": {"prompt": {"type": "string"}}},
+        input_schema={
+            "properties": {
+                "prompt": {"type": "string"},
+                "duration": {"type": "integer"},
+                "resolution": {"type": "string"},
+                "aspect_ratio": {"type": "string"},
+                "generate_audio": {"type": "boolean"},
+                "reference_images": {"type": "array"},
+            }
+        },
     )
     client = UnifiedAIClient(DummyConfig())
 
@@ -74,7 +83,7 @@ def test_run_replicate_includes_generic_schema_params():
             model,
             prompt="x",
             media_files=None,
-            generation_params={"cfg_scale": 0.8, "prompt": "should_not_override", "empty": ""},
+            generation_params={"cfg_scale": 0.8, "prompt": "should_not_override", "empty": "", "foo": 123},
         )
 
     _, kwargs = run_mock.call_args
@@ -82,8 +91,52 @@ def test_run_replicate_includes_generic_schema_params():
     assert sent_input["prompt"] == "x"
     assert sent_input["cfg_scale"] == 0.8
     assert "empty" not in sent_input
+    # unknown key wird strikt verworfen (nicht im input_schema.properties).
+    assert "foo" not in sent_input
     assert run_mock.call_args.kwargs.get("wait") == 60
     assert run_mock.call_args.kwargs.get("use_file_output") is True
+
+
+def test_run_replicate_strict_schema_type_and_enum_validation():
+    model = AIModel(
+        key="strict-model",
+        replicate_id="owner/strict",
+        name="Strict",
+        description="",
+        internal_cost=10,
+        custom_price=None,
+        provider="replicate",
+        input_schema={
+            "properties": {
+                "prompt": {"type": "string"},
+                "duration": {"type": "integer", "enum": [5, 10]},
+                "generate_audio": {"type": "boolean"},
+                "aspect_ratio": {"type": "string", "enum": ["16:9", "9:16"]},
+            }
+        },
+    )
+    client = UnifiedAIClient(DummyConfig())
+
+    with patch("src.infrastructure.ai.unified_client.replicate.run", return_value="ok") as run_mock:
+        client.generate(
+            model,
+            prompt="x",
+            media_files=None,
+            generation_params={
+                "duration": "10",  # coercion -> int + enum ok
+                "generate_audio": "true",  # coercion -> bool
+                "aspect_ratio": "4:3",  # invalid enum -> drop
+                "unknown_field": 123,  # not in schema -> drop
+            },
+        )
+
+    _, kwargs = run_mock.call_args
+    sent_input = kwargs["input"]
+    assert sent_input["prompt"] == "x"
+    assert sent_input["duration"] == 10
+    assert sent_input["generate_audio"] is True
+    assert "aspect_ratio" not in sent_input
+    assert "unknown_field" not in sent_input
 
 
 def test_run_replicate_caps_anthropic_max_tokens():

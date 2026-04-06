@@ -135,6 +135,64 @@ def _collect_replicate_iterator_chunks(output: Any, log: logging.Logger) -> list
     return chunks
 
 
+def _coerce_generation_param_value(prop: dict, value: Any) -> Any:
+    """
+    Striktes, aber pragmatisches Coercion gegen JSON-Schema-Property.
+    Wir akzeptieren nur Werte, die nach Coercion zum erwarteten Typ/Enum passen.
+    """
+    if not isinstance(prop, dict):
+        return value
+    expected_type = str(prop.get("type", "") or "").strip().lower()
+    enum_vals = prop.get("enum")
+    if isinstance(enum_vals, list) and enum_vals:
+        # Enum streng: nur erlaubte Werte; Stringvergleich tolerant.
+        for ev in enum_vals:
+            if value == ev:
+                return value
+            if isinstance(value, str) and str(ev) == value:
+                return ev
+        return None
+
+    if expected_type == "boolean":
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            v = value.strip().lower()
+            if v in ("true", "1", "yes", "on"):
+                return True
+            if v in ("false", "0", "no", "off"):
+                return False
+        return None
+    if expected_type == "integer":
+        try:
+            # bool ausschließen, da int(True)==1
+            if isinstance(value, bool):
+                return None
+            return int(value)
+        except Exception:
+            return None
+    if expected_type == "number":
+        try:
+            if isinstance(value, bool):
+                return None
+            return float(value)
+        except Exception:
+            return None
+    if expected_type == "array":
+        if isinstance(value, list):
+            return value
+        return None
+    if expected_type == "string":
+        if isinstance(value, str):
+            return value
+        # numerische/bool Werte als String zulassen wenn Schema string erwartet.
+        if isinstance(value, (int, float, bool)):
+            return str(value)
+        return None
+    # Kein/anderer Typ im Schema: Originalwert übernehmen.
+    return value
+
+
 def _local_paths_to_urls(paths: List[str], client) -> List[str]:
     """
     Konvertiert lokale Dateipfade zu URIs für Replicate (format: uri).
@@ -153,7 +211,34 @@ def _local_paths_to_urls(paths: List[str], client) -> List[str]:
                 with open(p, "rb") as f:
                     content = f.read()
                 ext = os.path.splitext(p)[1].lower() or ".jpg"
-                mime = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png" if ext == ".png" else "image/webp" if ext == ".webp" else "application/octet-stream"
+                if ext in [".jpg", ".jpeg"]:
+                    mime = "image/jpeg"
+                elif ext == ".png":
+                    mime = "image/png"
+                elif ext == ".webp":
+                    mime = "image/webp"
+                elif ext in [".mp4", ".m4v"]:
+                    mime = "video/mp4"
+                elif ext == ".mov":
+                    mime = "video/quicktime"
+                elif ext == ".webm":
+                    mime = "video/webm"
+                elif ext == ".avi":
+                    mime = "video/x-msvideo"
+                elif ext == ".mkv":
+                    mime = "video/x-matroska"
+                elif ext == ".mp3":
+                    mime = "audio/mpeg"
+                elif ext == ".wav":
+                    mime = "audio/wav"
+                elif ext in [".m4a", ".aac"]:
+                    mime = "audio/aac"
+                elif ext == ".ogg":
+                    mime = "audio/ogg"
+                elif ext == ".flac":
+                    mime = "audio/flac"
+                else:
+                    mime = "application/octet-stream"
                 import io
 
                 fn = os.path.basename(p) or "image.jpg"
@@ -328,6 +413,9 @@ class UnifiedAIClient:
         if "minimax" in (model.key or ""):
             input_data["prompt_optimizer"] = True
         if isinstance(gp, dict):
+            schema_props = {}
+            if isinstance(model.input_schema, dict):
+                schema_props = model.input_schema.get("properties") or {}
             for k, v in gp.items():
                 if v is None:
                     continue
@@ -337,7 +425,13 @@ class UnifiedAIClient:
                     continue
                 if isinstance(v, str) and v.strip() == "":
                     continue
-                input_data[k] = v
+                # Strikt: nur Keys erlauben, die im Schema existieren.
+                if not isinstance(schema_props, dict) or k not in schema_props:
+                    continue
+                coerced = _coerce_generation_param_value(schema_props.get(k) or {}, v)
+                if coerced is None:
+                    continue
+                input_data[k] = coerced
         _cap_max_tokens_for_anthropic(model, input_data)
         return input_data
 
