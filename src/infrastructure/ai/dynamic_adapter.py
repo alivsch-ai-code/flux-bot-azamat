@@ -150,9 +150,9 @@ class DynamicSchemaAdapter:
                         ufile["type"] == slot["type"]
                         or slot["type"] == "unknown"
                         # Fallback: URLs ohne Dateiendung (z.B. replicate.delivery) kommen oft als "unknown".
-                        # Für Bild/Video/Audio-Slots akzeptieren wir solche Werte, damit WebApp-Uploads
+                        # Für Bild/Video/Audio/Dokument-Slots akzeptieren wir solche Werte, damit WebApp-Uploads
                         # (ohne Dateiendung) sauber gemappt werden.
-                        or (slot["type"] in ("image", "video", "audio") and ufile["type"] == "unknown")
+                        or (slot["type"] in ("image", "video", "audio", "document") and ufile["type"] == "unknown")
                     ):
                         matching_urls.append(ufile["url"])
                         used_files_indices.add(i)
@@ -164,7 +164,7 @@ class DynamicSchemaAdapter:
                 for i, ufile in enumerate(user_files):
                     if i not in used_files_indices and (
                         ufile["type"] == slot["type"]
-                        or (slot["type"] in ("image", "video", "audio") and ufile["type"] == "unknown")
+                        or (slot["type"] in ("image", "video", "audio", "document") and ufile["type"] == "unknown")
                     ):
                         best_match_index = i
                         break

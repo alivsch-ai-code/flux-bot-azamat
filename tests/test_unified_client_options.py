@@ -139,6 +139,32 @@ def test_run_replicate_strict_schema_type_and_enum_validation():
     assert "unknown_field" not in sent_input
 
 
+def test_run_replicate_integer_param_rejects_fractional_string():
+    model = AIModel(
+        key="strict-int-model",
+        replicate_id="owner/strict-int",
+        name="Strict Int",
+        description="",
+        internal_cost=10,
+        custom_price=None,
+        provider="replicate",
+        input_schema={"properties": {"prompt": {"type": "string"}, "duration": {"type": "integer"}}},
+    )
+    client = UnifiedAIClient(DummyConfig())
+
+    with patch("src.infrastructure.ai.unified_client.replicate.run", return_value="ok") as run_mock:
+        client.generate(
+            model,
+            prompt="x",
+            media_files=None,
+            generation_params={"duration": "7.5"},
+        )
+
+    sent_input = run_mock.call_args.kwargs["input"]
+    assert sent_input["prompt"] == "x"
+    assert "duration" not in sent_input
+
+
 def test_run_replicate_caps_anthropic_max_tokens():
     model = AIModel(
         key="claude-test",

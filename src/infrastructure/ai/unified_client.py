@@ -164,13 +164,23 @@ def _coerce_generation_param_value(prop: dict, value: Any) -> Any:
                 return False
         return None
     if expected_type == "integer":
-        try:
-            # bool ausschließen, da int(True)==1
-            if isinstance(value, bool):
-                return None
-            return int(value)
-        except Exception:
+        # bool ausschließen, da int(True)==1
+        if isinstance(value, bool):
             return None
+        if isinstance(value, int):
+            return value
+        # Floats nur akzeptieren, wenn ganzzahlig.
+        if isinstance(value, float):
+            return int(value) if value.is_integer() else None
+        if isinstance(value, str):
+            s = value.strip()
+            if s and (s.isdigit() or (s.startswith("-") and s[1:].isdigit())):
+                try:
+                    return int(s)
+                except Exception:
+                    return None
+            return None
+        return None
     if expected_type == "number":
         try:
             if isinstance(value, bool):

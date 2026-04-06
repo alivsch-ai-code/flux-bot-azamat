@@ -24,6 +24,7 @@ def _facade():
     f.send_photo = AsyncMock()
     f.send_video = AsyncMock()
     f.send_message = AsyncMock()
+    f.send_media_group = AsyncMock()
     return f
 
 
@@ -123,3 +124,30 @@ def test_parse_and_deliver_replicate_delivery_without_type_falls_back_to_message
     assert facade.send_photo.await_count == 0
     assert facade.send_video.await_count == 0
     assert facade.send_message.await_count == 1
+
+
+def test_parse_and_deliver_sends_media_group_for_image_generation_multi_urls(monkeypatch):
+    facade = _facade()
+    monkeypatch.setattr(result_delivery, "get_text", _text)
+    monkeypatch.setattr(result_delivery, "set_context", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(result_delivery, "download_url_to_bytes", lambda *_args, **_kwargs: b"")
+
+    asyncio.run(
+        result_delivery.parse_and_deliver(
+            facade=facade,
+            user_id=1,
+            result=[
+                "https://replicate.delivery/a/img-1",
+                "https://replicate.delivery/a/img-2",
+            ],
+            model=_model(["image_generation"]),
+            cost=2,
+            lang="de",
+            ctx={},
+            is_chat=False,
+            prompt="p",
+            keyboards_fn=MagicMock(),
+        )
+    )
+
+    assert facade.send_media_group.await_count == 1

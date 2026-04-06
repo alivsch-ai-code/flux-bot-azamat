@@ -187,7 +187,7 @@ async def parse_and_deliver(facade, user_id, result, model, cost, lang, ctx, is_
     sent = False
 
     multi_urls = _extract_urls_from_result(result)
-    if multi_urls and len(multi_urls) > 1 and is_media_model and model.type and "image" in model.type:
+    if multi_urls and len(multi_urls) > 1 and is_media_model and _has_media_type(model, "image"):
         try:
             media_group = [
                 InputMediaPhoto(media=url, caption=caption if i == 0 else None)

@@ -507,6 +507,8 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
 
             # Replicate Files API → URLs für Model-Input (s. Input files in der Doku):
             # https://replicate.com/docs/topics/predictions/input-files
+            if not (config.REPLICATE_API_TOKEN or "").strip():
+                return jsonify(ok=False, error="replicate_not_configured"), 503
             client = replicate.Client(api_token=config.REPLICATE_API_TOKEN)
             urls: list[str] = []
 

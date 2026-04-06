@@ -208,3 +208,33 @@ class TestWebappUploadReference:
         assert data["ok"] is True
         assert data["urls"] == ["https://replicate.delivery/presigned/test.jpg"]
         fake_client.files.create.assert_called_once()
+
+    def test_missing_replicate_token_returns_503(self, client, monkeypatch):
+        import main as main_module
+
+        monkeypatch.setattr(main_module.app_runtime, "db", MagicMock())
+        monkeypatch.setattr(
+            "src.presentation.telegram.handlers.menu_handler._is_webapp_mode",
+            lambda _db: True,
+        )
+        monkeypatch.setattr(
+            "src.utils.telegram_init_data.validate_init_data",
+            lambda _d, _t: 1,
+        )
+        monkeypatch.setattr(
+            "src.presentation.http.http_routes.config.REPLICATE_API_TOKEN",
+            "",
+        )
+
+        r = client.post(
+            "/api/webapp_upload_reference",
+            data={
+                "init_data": "ok",
+                "files": (io.BytesIO(b"\xff\xd8\xff\xe0"), "shot.jpg"),
+            },
+            content_type="multipart/form-data",
+        )
+        assert r.status_code == 503
+        body = r.get_json()
+        assert body["ok"] is False
+        assert body["error"] == "replicate_not_configured"

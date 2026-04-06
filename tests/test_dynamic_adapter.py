@@ -95,6 +95,19 @@ class TestBuildInputPayload:
         result = adapter.build_input_payload(schema, "voice", file_urls=file_urls)
         assert result["input_audio"] == file_urls[0]
 
+    def test_maps_unknown_extensionless_url_to_document_slot(self):
+        """URLs ohne Extension sollen auch für Dokument-Slots mappen."""
+        adapter = DynamicSchemaAdapter()
+        schema = {
+            "properties": {
+                "prompt": {"type": "string"},
+                "input_file": {"type": "string", "format": "uri"},
+            }
+        }
+        file_urls = ["https://files.example.net/storage/blob-no-ext"]
+        result = adapter.build_input_payload(schema, "doc", file_urls=file_urls)
+        assert result["input_file"] == file_urls[0]
+
 
 class TestParseOutput:
     """Prüft parse_output: Extraktion von URL/Text aus API-Antworten."""
