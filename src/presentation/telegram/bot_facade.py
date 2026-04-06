@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
-from typing import Any, BinaryIO, List, Optional, Union
+from typing import Any, List, Optional, Union
 
 from aiogram import Bot
 from aiogram.enums import ChatAction, ParseMode
@@ -18,10 +18,7 @@ from aiogram.types import (
     BufferedInputFile,
     FSInputFile,
     InlineKeyboardMarkup,
-    InputMediaAudio,
-    InputMediaDocument,
     InputMediaPhoto,
-    InputMediaVideo,
     LabeledPrice,
     MenuButtonCommands,
     MenuButtonWebApp,

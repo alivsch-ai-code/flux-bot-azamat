@@ -13,18 +13,12 @@ Unified-Prinzip:
 """
 
 import asyncio
-import json
 import logging
 import os
 
-from aiogram import F
-from aiogram.enums import ChatType
-from aiogram.filters import Command
 from aiogram.types import (
-    CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    Message,
     ReplyKeyboardRemove,
     WebAppInfo,
 )
@@ -34,7 +28,6 @@ from src.presentation.telegram.runtime import run_coroutine_sync
 from src.presentation.telegram import keyboards
 from src.presentation.telegram.handlers.chat_debounce import cancel_pending_batch
 from src.presentation.telegram.handlers.common import clear_context, get_context, set_context
-from src.presentation.telegram.handlers.gen.chat_sessions import append_global_chat_event
 from src.presentation.telegram.handlers.group_handler import get_group_menu_markup
 from src.presentation.telegram.handlers.gen import ctx_media_to_list
 from src.presentation.telegram.handlers.gen.media_helpers import schema_requires_media
