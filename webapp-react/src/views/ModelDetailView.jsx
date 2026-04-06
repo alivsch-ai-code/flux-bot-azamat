@@ -73,6 +73,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
   const [optimizing, setOptimizing] = useState(false);
   const [submitInfo, setSubmitInfo] = useState('');
   const [showInfo, setShowInfo] = useState(false);
+  const [webappResult, setWebappResult] = useState(null);
   const initializedForModelKeyRef = useRef('');
 
   function applyModelDefaults(data) {
@@ -169,6 +170,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     setSubmitting(false);
     setOptimizing(false);
     setSubmitInfo('');
+    setWebappResult(null);
     initializedForModelKeyRef.current = String(modelKey || '');
   }
 
@@ -599,6 +601,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     }
 
     setSubmitting(true);
+    setWebappResult(null);
     setSubmitInfo(t('webapp_generation_started', '⏳ Generierung gestartet. Wir informieren dich, sobald sie fertig ist.'));
     try {
       const payload = {};
@@ -611,7 +614,25 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
         payload.generation_options = buildGenerationOptionsPayload();
       }
 
-      await sendWebappAction(action, payload);
+      const resp = await sendWebappAction(action, payload);
+      const gen = resp?.webapp_generation;
+      if (gen && typeof gen === 'object') {
+        if (typeof gen.credits === 'number' && onUpdateCredits) onUpdateCredits(gen.credits);
+        if (gen.status === 'pending') {
+          setSubmitInfo(gen.message || t('gen_webhook_pending', 'Generierung läuft noch... Ergebnis kommt gleich.'));
+          setWebappResult({ status: 'pending', result_urls: [], result_text: '' });
+        } else if (gen.status === 'success') {
+          setSubmitInfo(t('webapp_generation_started', '⏳ Generierung gestartet. Wir informieren dich, sobald sie fertig ist.'));
+          setWebappResult({
+            status: 'success',
+            result_urls: Array.isArray(gen.result_urls) ? gen.result_urls : [],
+            result_text: String(gen.result_text || ''),
+          });
+        } else if (gen.status === 'error') {
+          showErrorOverlay(gen.error || 'Fehler');
+          setSubmitInfo('');
+        }
+      }
     } catch {
       showErrorOverlay('Fehler');
       setSubmitInfo('');
@@ -843,6 +864,13 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
     outputProps: outProps,
   };
 
+  function mediaKindFromUrl(url) {
+    const u = String(url || '').toLowerCase();
+    if (u.match(/\.(mp4|mov|webm|mkv|avi)(\?|#|$)/)) return 'video';
+    if (u.match(/\.(mp3|wav|ogg|m4a|flac|aac)(\?|#|$)/)) return 'audio';
+    return 'image';
+  }
+
   return (
     <div className="detail-view">
       <div className="back-btn" onClick={() => onBackToModels && onBackToModels()} role="button" tabIndex={0}>
@@ -999,6 +1027,28 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
           </button>
         )}
         {submitInfo ? <div className="submit-hint">{submitInfo}</div> : null}
+        {webappResult && webappResult.status === 'success' ? (
+          <div className="webapp-result-card">
+            <div className="webapp-result-title">✅ Ergebnis in der App (parallel im Chat gesendet)</div>
+            {(webappResult.result_urls || []).length ? (
+              <div className="webapp-result-media-grid">
+                {(webappResult.result_urls || []).slice(0, 4).map((u, idx) => {
+                  const kind = mediaKindFromUrl(u);
+                  if (kind === 'video') {
+                    return <video key={idx} className="webapp-result-media" controls src={u} />;
+                  }
+                  if (kind === 'audio') {
+                    return <audio key={idx} className="webapp-result-audio" controls src={u} />;
+                  }
+                  return <img key={idx} className="webapp-result-media" src={u} alt={`result-${idx + 1}`} />;
+                })}
+              </div>
+            ) : null}
+            {webappResult.result_text ? (
+              <div className="webapp-result-text">{webappResult.result_text}</div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {showInfo ? (

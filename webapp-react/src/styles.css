@@ -815,6 +815,47 @@ button:focus-visible,
   animation: fade-in 220ms ease-out;
 }
 
+.webapp-result-card {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.webapp-result-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.webapp-result-media-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.webapp-result-media {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.webapp-result-audio {
+  width: 100%;
+}
+
+.webapp-result-text {
+  margin-top: 10px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--tg-theme-text-color);
+  white-space: pre-wrap;
+}
+
 .btn-info {
   width: auto;
   margin: 0;

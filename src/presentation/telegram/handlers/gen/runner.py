@@ -32,6 +32,38 @@ logger = logging.getLogger(__name__)
 REUSABLE_MEDIA_TTL_SECONDS = 240
 
 
+def _to_webapp_result_payload(result) -> dict:
+    """Builds a lightweight, UI-friendly result payload for the WebApp."""
+    raw_items = result if isinstance(result, list) else [result]
+    urls: list[str] = []
+    texts: list[str] = []
+
+    for item in raw_items:
+        val = None
+        if isinstance(item, str):
+            val = item
+        elif hasattr(item, "url"):
+            maybe_url = getattr(item, "url", None)
+            val = maybe_url() if callable(maybe_url) else maybe_url
+        elif item is not None:
+            val = str(item)
+
+        if not isinstance(val, str):
+            continue
+        s = val.strip()
+        if not s:
+            continue
+        if s.startswith(("http://", "https://")):
+            urls.append(s)
+        else:
+            texts.append(s)
+
+    return {
+        "result_urls": urls[:10],
+        "result_text": (texts[0][:4000] if texts else ""),
+    }
+
+
 async def post_generation_followup_after_success(
     facade,
     db,
@@ -185,7 +217,7 @@ def create_run_generation(facade, db, generation_service, get_lang):
         lang = get_lang(user_id)
         model = db.get_model_by_key(model_key)
         if not model:
-            return
+            return {"status": "error", "error": "model_not_found"}
         keep_context_for_image_loop = False
         webhook_pending = False
         try:
@@ -228,7 +260,7 @@ def create_run_generation(facade, db, generation_service, get_lang):
                 cost = int(round(base_cost * (duration / 5.0)))
             if int(db.get_user_credits(user_id)) < cost:
                 await smart_update_status(facade, user_id, get_text("err_no_credits", lang), ctx)
-                return
+                return {"status": "error", "error": get_text("err_no_credits", lang), "credits": int(db.get_user_credits(user_id))}
             wait_msg_id = await smart_update_status(
                 facade,
                 user_id,
@@ -302,6 +334,11 @@ def create_run_generation(facade, db, generation_service, get_lang):
                     get_text("gen_webhook_pending", lang),
                     parse_mode="HTML",
                 )
+                return {
+                    "status": "pending",
+                    "message": get_text("gen_webhook_pending", lang),
+                    "credits": int(db.get_user_credits(user_id)),
+                }
             elif success:
                 await parse_and_deliver(
                     facade, user_id, result, model, cost, lang, ctx, is_chat, prompt, keyboards
@@ -322,6 +359,12 @@ def create_run_generation(facade, db, generation_service, get_lang):
                     model_key,
                     chat_history_mode,
                 )
+                out = _to_webapp_result_payload(result)
+                return {
+                    "status": "success",
+                    "credits": int(db.get_user_credits(user_id)),
+                    **out,
+                }
             else:
                 logger.error("Generation failed: %s", result)
                 try:
@@ -331,6 +374,11 @@ def create_run_generation(facade, db, generation_service, get_lang):
                 await smart_update_status(
                     facade, user_id, get_text("err_gen_failed", lang).format(result=result), ctx
                 )
+                return {
+                    "status": "error",
+                    "error": str(result),
+                    "credits": int(db.get_user_credits(user_id)),
+                }
 
         except Exception as e:
             logger.exception("System Error: %s", e)
@@ -343,6 +391,7 @@ def create_run_generation(facade, db, generation_service, get_lang):
                 await smart_update_status(facade, user_id, msg, ctx)
             except Exception:
                 await facade.send_message(user_id, msg, parse_mode=None)
+            return {"status": "error", "error": msg, "credits": int(db.get_user_credits(user_id))}
         finally:
             if media_files:
                 for mf in media_files:

@@ -138,9 +138,9 @@ def _run_gen_from_webapp(run_fn, *args, **kwargs) -> None:
     if run_fn is None:
         return
     if asyncio.iscoroutinefunction(run_fn):
-        run_coroutine_sync(run_fn(*args, **kwargs), timeout=600)
+        return run_coroutine_sync(run_fn(*args, **kwargs), timeout=600)
     else:
-        run_fn(*args, **kwargs)
+        return run_fn(*args, **kwargs)
 
 
 def process_webapp_action(
@@ -341,8 +341,12 @@ def process_webapp_action(
             }
             set_context(user_id, ctx_pre)
             _send_generation_started_notice()
-            _run_gen_from_webapp(run_fn, user_id, model_key, prompt_trim, ctx_media_to_list(ctx_pre), is_chat=False)
+            gen_out = _run_gen_from_webapp(
+                run_fn, user_id, model_key, prompt_trim, ctx_media_to_list(ctx_pre), is_chat=False
+            )
             _remove_reply_keyboard_silently(facade, user_id)
+            if isinstance(gen_out, dict):
+                return {"webapp_generation": gen_out}
             return
 
         if options or media_paths:
@@ -374,7 +378,7 @@ def process_webapp_action(
             if prompt_trim and _webapp_run_generation:
                 user_name = getattr(db, "get_user_username_or_name", lambda _u: None)(user_id) or "User"
                 _send_generation_started_notice()
-                _run_gen_from_webapp(
+                gen_out = _run_gen_from_webapp(
                     _webapp_run_generation,
                     user_id,
                     model_key,
@@ -384,6 +388,8 @@ def process_webapp_action(
                     chat_history_mode="once_off",
                     chat_user_name=user_name,
                 )
+                if isinstance(gen_out, dict):
+                    return {"webapp_generation": gen_out}
     elif action.startswith("chat_mode_no_"):
         # WebApp: Chat-Modus deaktivieren (falls User gerade im Chat-Flow war).
         # Danach laufen wir wieder in den normalen Generierungs-Flow.
@@ -404,7 +410,7 @@ def process_webapp_action(
             set_context(user_id, ctx_pre)
             user_name = getattr(db, "get_user_username_or_name", lambda _u: None)(user_id) or "User"
             _send_generation_started_notice()
-            _run_gen_from_webapp(
+            gen_out = _run_gen_from_webapp(
                 _webapp_run_generation,
                 user_id,
                 model_key,
@@ -414,6 +420,8 @@ def process_webapp_action(
                 chat_history_mode="once_off",
                 chat_user_name=user_name,
             )
+            if isinstance(gen_out, dict):
+                return {"webapp_generation": gen_out}
             return
         run_coroutine_sync(do_start_gen_flow(facade, user_id, model_key, db, get_lang, edit_message_id=None))
     elif action == "cmd_shop":
