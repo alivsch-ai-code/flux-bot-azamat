@@ -205,7 +205,13 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
                 404,
                 {"Content-Type": "text/html; charset=utf-8"},
             )
-        return send_from_directory(dist_dir, "index.html")
+        resp = send_from_directory(dist_dir, "index.html")
+        # Immer frisches index.html ausliefern, damit neue Asset-Hashes sofort greifen
+        # und Telegram/WebView kein veraltetes UI (alte Kachel-Struktur) cached.
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        return resp
 
     @app.route("/webapp/<path:filename>")
     def webapp_assets(filename: str):
@@ -216,6 +222,10 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
             # Aggressiver Cache für hash-basierten Build-Output -> schnelleres TTI.
             if "/assets/" in f"/{filename}":
                 resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            elif filename.endswith(".html"):
+                resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+                resp.headers["Pragma"] = "no-cache"
+                resp.headers["Expires"] = "0"
             return resp
         except Exception:
             return "", 404
