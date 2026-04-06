@@ -1,5 +1,6 @@
 """Tests für Flask-Endpoints (main.app)."""
 import io
+import re
 
 import pytest
 from unittest.mock import MagicMock
@@ -42,6 +43,17 @@ class TestApiStrings:
     def test_strings_invalid_lang_fallback_de(self, client):
         r = client.get("/api/strings?lang=xy")
         assert r.status_code == 200
+
+
+class TestApiVersion:
+    def test_version_endpoint_returns_semver_like_value(self, client):
+        r = client.get("/api/version")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data is not None
+        assert data.get("ok") is True
+        version = str(data.get("version") or "")
+        assert re.match(r"^\d+\.\d+\.\d+$", version)
 
 
 class TestApiLegal:

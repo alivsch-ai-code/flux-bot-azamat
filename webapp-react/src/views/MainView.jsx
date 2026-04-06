@@ -29,7 +29,7 @@ function HeroVisual() {
   );
 }
 
-export default function MainView({ t, onNavigateModels, onOpenShop, onOpenSettings, onOpenProfile }) {
+export default function MainView({ t, azamatVersion, onNavigateModels, onOpenShop, onOpenSettings, onOpenProfile }) {
   return (
     <div>
       <div className="header">
@@ -45,6 +45,7 @@ export default function MainView({ t, onNavigateModels, onOpenShop, onOpenSettin
           <span className="hero-chip">🧠 Multi-Model</span>
           <span className="hero-chip">🛡️ Safe by Design</span>
         </div>
+        <div className="azamat-version-badge">AZAMAT v{azamatVersion || '0.0.1'}</div>
         <div className="credits-badge" style={{ display: 'none' }}>
           💎 <span>0</span> Credits
         </div>

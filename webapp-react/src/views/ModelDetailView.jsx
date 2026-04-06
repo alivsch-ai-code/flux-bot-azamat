@@ -76,22 +76,36 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
 
   useEffect(() => {
     let cancelled = false;
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     async function run() {
       setLoading(true);
       setError('');
       setModel(null);
       try {
         if (!modelKey) throw new Error('missing_model_key');
-        const data = await loadModelDetail(modelKey);
+        let data = await loadModelDetail(modelKey);
+        // Kurz retryen, falls API nur temporär limitiert/instabil war.
+        if (!data?.ok && (data?.status === 429 || data?.status >= 500)) {
+          await sleep(600);
+          if (cancelled) return;
+          data = await loadModelDetail(modelKey);
+        }
         if (cancelled) return;
         if (!data || !data.ok) {
-          setError('Model not found');
+          const err = String(data?.error || '');
+          if (data?.status === 429 || err.includes('rate_limited')) {
+            setError(t('webapp_model_load_rate_limited', 'Zu viele Anfragen. Bitte kurz warten und erneut tippen.'));
+          } else if (data?.status >= 500 || err === 'internal_error') {
+            setError(t('webapp_model_load_failed', 'Modell konnte gerade nicht geladen werden. Bitte erneut versuchen.'));
+          } else {
+            setError(t('webapp_model_not_found', 'Model not found'));
+          }
           setModel(data || null);
           return;
         }
         setModel(data);
       } catch (e) {
-        if (!cancelled) setError('Failed to load model');
+        if (!cancelled) setError(t('webapp_model_load_failed', 'Modell konnte gerade nicht geladen werden. Bitte erneut versuchen.'));
       } finally {
         if (!cancelled) setLoading(false);
       }

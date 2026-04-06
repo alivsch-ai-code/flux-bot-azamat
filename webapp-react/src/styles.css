@@ -186,6 +186,23 @@ body {
   box-shadow: 0 4px 10px rgba(2, 6, 23, 0.28);
 }
 
+.azamat-version-badge {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  background: rgba(15, 23, 42, 0.5);
+  color: rgba(226, 232, 240, 0.95);
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+  font-weight: 700;
+  position: relative;
+  z-index: 2;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

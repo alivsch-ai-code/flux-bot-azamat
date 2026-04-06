@@ -33,6 +33,12 @@ export async function loadStrings(lang) {
   return data || {};
 }
 
+export async function loadVersion() {
+  const res = await getJSON('/api/version');
+  const data = await res.json();
+  return data || {};
+}
+
 /** Datenschutz + Impressum (src/legal auf dem Server). */
 export async function loadLegal(lang) {
   const res = await getJSON('/api/legal?lang=' + encodeURIComponent(lang || 'de'));
@@ -54,7 +60,14 @@ export async function loadModelDetail(key) {
   const qs = new URLSearchParams();
   qs.set('key', key);
   const res = await getJSON('/api/model?' + qs.toString());
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: data?.error || 'model_detail_failed',
+      status: res.status,
+    };
+  }
   return data || {};
 }
 

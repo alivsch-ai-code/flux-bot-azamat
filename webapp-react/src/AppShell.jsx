@@ -7,6 +7,7 @@ import {
   loadShopPackages,
   loadStrings,
   loadUserInfo,
+  loadVersion,
   sendWebappAction,
 } from './apiClient';
 import MainView from './views/MainView.jsx';
@@ -48,6 +49,7 @@ export default function AppShell() {
   const [view, setView] = useState('main'); // main|models|detail|settings|shop|profile
   const [currentPath, setCurrentPath] = useState('root');
   const [modelKey, setModelKey] = useState('');
+  const [azamatVersion, setAzamatVersion] = useState('0.0.1');
 
   const [modelsData, setModelsData] = useState({ title: '', folders: [], models: [] });
   const [loading, setLoading] = useState(false);
@@ -138,6 +140,15 @@ export default function AppShell() {
 
   useEffect(() => {
     let cancelled = false;
+    async function loadVersionTag() {
+      try {
+        const v = await loadVersion();
+        if (!cancelled && v?.version) setAzamatVersion(String(v.version));
+      } catch {
+        // keep fallback
+      }
+    }
+
     async function loadEverything() {
       const tg = getTelegramWebApp();
       const hasInitData = !!tg?.initData;
@@ -178,6 +189,7 @@ export default function AppShell() {
         if (!cancelled) setLoading(false);
       }
     }
+    loadVersionTag();
     loadEverything();
     return () => {
       cancelled = true;
@@ -205,6 +217,7 @@ export default function AppShell() {
       {view === 'main' ? (
         <MainView
           t={t}
+          azamatVersion={azamatVersion}
           onNavigateModels={(path) => fetchModelsForPath(path)}
           onOpenShop={() => setView('shop')}
           onOpenSettings={() => setView('settings')}

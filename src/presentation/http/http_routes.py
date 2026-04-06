@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import subprocess
 import threading
 import time
 from typing import Any
@@ -120,6 +121,36 @@ def _replicate_file_url(resp) -> str | None:
     if not url and hasattr(resp, "urls") and isinstance(resp.urls, dict):
         url = resp.urls.get("get")
     return str(url) if url else None
+
+
+def _compute_azamat_version(project_root: str) -> str:
+    """
+    Version-Schema:
+    - Start: 0.0.1
+    - Pro Commit +1
+    - Bei jedem 10er-Schritt erhöht sich die mittlere Zahl (z. B. 0.0.9 -> 0.1.0)
+    """
+    base_version = "0.0.1"
+    base_commit = (os.getenv("AZAMAT_VERSION_BASE_COMMIT", "e3b7329") or "").strip()
+    if not base_commit:
+        return base_version
+    try:
+        res = subprocess.run(
+            ["git", "rev-list", "--count", f"{base_commit}..HEAD"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        ahead_count = int((res.stdout or "0").strip() or "0")
+    except Exception:
+        return base_version
+
+    # 0.0.1 ist der Startpunkt am Base-Commit.
+    value = 1 + max(0, ahead_count)
+    middle = value // 10
+    patch = value % 10
+    return f"0.{middle}.{patch}"
 
 
 def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str) -> None:
@@ -285,6 +316,14 @@ def register_flask_routes(app: Flask, runtime: AppRuntime, *, project_root: str)
         except Exception as e:
             logger.warning("api_strings error: %s", e)
             return jsonify({}), 200
+
+    @app.route("/api/version")
+    def api_version():
+        try:
+            return jsonify(ok=True, version=_compute_azamat_version(project_root))
+        except Exception as e:
+            logger.warning("api_version error: %s", e)
+            return jsonify(ok=True, version="0.0.1"), 200
 
     @app.route("/api/legal")
     def api_legal():
