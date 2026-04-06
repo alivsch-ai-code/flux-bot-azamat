@@ -411,10 +411,9 @@ class UnifiedAIClient:
         if isinstance(output, list):
             if not output:
                 return GenerationResult(success=True, data="")
-            first = output[0]
-            # Bilder/Media: erste URL / FileOutput
-            if hasattr(first, "url"):
-                return GenerationResult(success=True, data=first)
+            # Bilder/Media: komplette Liste behalten (z. B. Multi-Image/Multi-Asset Outputs).
+            if any(hasattr(item, "url") for item in output):
+                return GenerationResult(success=True, data=output)
             # Text: alle Teile zusammenfügen
             return GenerationResult(success=True, data="".join(str(x) for x in output))
 
@@ -426,8 +425,8 @@ class UnifiedAIClient:
         if hasattr(output, "__iter__") and not isinstance(output, (str, bytes)):
             try:
                 collected = _collect_replicate_iterator_chunks(output, logger)
-                if collected and hasattr(collected[0], "url"):
-                    return GenerationResult(success=True, data=collected[0])
+                if collected and any(hasattr(item, "url") for item in collected):
+                    return GenerationResult(success=True, data=collected)
                 return GenerationResult(success=True, data="".join(str(x) for x in collected))
             except TimeoutError:
                 return GenerationResult(

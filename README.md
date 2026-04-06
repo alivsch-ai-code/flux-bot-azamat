@@ -81,6 +81,7 @@ python main.py
 - Flask/WebApp: bei unerwarteten Fehlern geben APIs an Clients nur `error="internal_error"` zurück; die Details stehen in den Server-Logs.
 - CI: GitHub Actions testet jetzt mit Python **3.12**.
 - DB: `DatabaseManager` sorgt zuverlässig dafür, dass Connections auch bei Exceptions wieder an den Pool zurückgegeben werden (verhindert Pool-„Lecks“ im Fehlerfall).
+- Replicate-Audit (Schema + UX + Tests): siehe [`doc/replicate_schema_ux_audit_2026_04.md`](doc/replicate_schema_ux_audit_2026_04.md).
 
 ---
 
@@ -182,6 +183,14 @@ For a **German, detailed** breakdown (handlers, HTTP routes, `GenerationService`
 
 - **[Render](doc/render_deploy.md)** — Recommended, web service + health checks
 - **[Railway](doc/railway_deploy.md)** — Simple alternative
+
+---
+
+## 🔎 Replicate Notes
+
+- Offizielle Referenz zum Erstellen von Predictions: [Replicate Create Prediction](https://replicate.com/docs/topics/predictions/create-a-prediction)
+- Input-Files (Datei-Uploads, File URLs, Limits): [Replicate Input Files](https://replicate.com/docs/topics/predictions/input-files)
+- HTTP-API Details: [Replicate HTTP API](https://replicate.com/docs/reference/http)
 
 ---
 

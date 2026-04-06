@@ -74,10 +74,16 @@ function ModelLogo({ model }) {
 export default function ModelsView({ title, folders, models, favoritesModels, freeLabel, loading, currentPath, onBack, onSelectFolder, onSelectModel, t }) {
   const favoriteModels = Array.isArray(favoritesModels) ? favoritesModels : [];
   const regularModels = models || [];
+  const activateOnKey = (e, fn) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fn && fn();
+    }
+  };
 
   return (
     <div>
-      <div className="back-btn" onClick={onBack} role="button" tabIndex={0}>
+      <div className="back-btn" onClick={onBack} onKeyDown={(e) => activateOnKey(e, onBack)} role="button" tabIndex={0}>
         ← <span>{t ? t('webapp_back', 'Zurück') : 'Zurück'}</span>
       </div>
       <div className="header">
@@ -101,6 +107,7 @@ export default function ModelsView({ title, folders, models, favoritesModels, fr
                 key={'folder-' + fp}
                 className="folder-tile"
                 onClick={() => onSelectFolder(fp)}
+                onKeyDown={(e) => activateOnKey(e, () => onSelectFolder(fp))}
                 role="button"
                 tabIndex={0}
               >
@@ -139,6 +146,7 @@ export default function ModelsView({ title, folders, models, favoritesModels, fr
               key={m.key}
               className="favorite-tile"
               onClick={() => onSelectModel(m.key)}
+              onKeyDown={(e) => activateOnKey(e, () => onSelectModel(m.key))}
               role="button"
               tabIndex={0}
             >
@@ -160,6 +168,9 @@ export default function ModelsView({ title, folders, models, favoritesModels, fr
               className="model-card"
               style={{ cursor: 'pointer' }}
               onClick={() => onSelectModel(m.key)}
+              onKeyDown={(e) => activateOnKey(e, () => onSelectModel(m.key))}
+              role="button"
+              tabIndex={0}
             >
               <div className="model-left">
                 <ModelLogo model={m} />

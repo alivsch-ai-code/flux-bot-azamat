@@ -68,6 +68,33 @@ class TestBuildInputPayload:
         assert result["prompt"] == "hello"
         assert result["input_reference"] == file_urls[0]
 
+    def test_maps_unknown_extensionless_url_to_video_slot(self):
+        """URLs ohne Extension sollen auch für Video-Slots mappen (z. B. CDN-URLs)."""
+        adapter = DynamicSchemaAdapter()
+        schema = {
+            "properties": {
+                "prompt": {"type": "string"},
+                "input_video": {"type": "string", "format": "uri"},
+            }
+        }
+        # Keine Dateiendung -> unknown.
+        file_urls = ["https://example.com/blob/abcdef123456"]
+        result = adapter.build_input_payload(schema, "go", file_urls=file_urls)
+        assert result["input_video"] == file_urls[0]
+
+    def test_maps_unknown_extensionless_url_to_audio_slot(self):
+        """URLs ohne Extension sollen auch für Audio-Slots mappen."""
+        adapter = DynamicSchemaAdapter()
+        schema = {
+            "properties": {
+                "prompt": {"type": "string"},
+                "input_audio": {"type": "string", "format": "uri"},
+            }
+        }
+        file_urls = ["https://cdn.example.org/media/stream123"]
+        result = adapter.build_input_payload(schema, "voice", file_urls=file_urls)
+        assert result["input_audio"] == file_urls[0]
+
 
 class TestParseOutput:
     """Prüft parse_output: Extraktion von URL/Text aus API-Antworten."""

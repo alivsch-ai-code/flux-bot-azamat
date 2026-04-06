@@ -1,8 +1,14 @@
 import React from 'react';
 
 function Card({ icon, label, desc, tone = 'default', onClick }) {
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick && onClick();
+    }
+  };
   return (
-    <div className={`card card-tone-${tone}`} onClick={onClick} role="button" tabIndex={0}>
+    <div className={`card card-tone-${tone}`} onClick={onClick} onKeyDown={onKeyDown} role="button" tabIndex={0}>
       <div className="card-animated-bg" aria-hidden="true" />
       <div className="card-icon">{icon}</div>
       <div className="card-label">{label}</div>

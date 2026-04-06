@@ -181,3 +181,17 @@ def test_normalize_replicate_iterator_collect_timeout(monkeypatch):
     assert res.success is False
     err = (res.error or "").lower()
     assert "timeout" in err or "collect_timeout" in err
+
+
+def test_normalize_replicate_output_keeps_all_file_outputs():
+    class _F:
+        def __init__(self, url):
+            self.url = url
+
+    client = UnifiedAIClient(DummyConfig())
+    out = client.normalize_replicate_output([_F("https://a"), _F("https://b")])
+    assert out.success is True
+    assert isinstance(out.data, list)
+    assert len(out.data) == 2
+    assert out.data[0].url == "https://a"
+    assert out.data[1].url == "https://b"
