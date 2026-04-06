@@ -34,8 +34,7 @@
 body {
   margin: 0;
   padding: 16px;
-  background: linear-gradient(180deg, #0a0f19 0%, #0b1018 100%);
-    var(--tg-theme-bg-color);
+  background: linear-gradient(180deg, #0a0f19 0%, #0b1018 100%), var(--tg-theme-bg-color);
   color: var(--tg-theme-text-color);
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   min-height: 100vh;
@@ -161,6 +160,16 @@ body {
   border-color: color-mix(in srgb, #94a3b8 42%, transparent);
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.35);
   transform: translateY(-1px);
+}
+
+button:focus-visible,
+.card:focus-visible,
+.folder-tile:focus-visible,
+.favorite-tile:focus-visible,
+.model-card:focus-visible,
+.back-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 58%, #ffffff);
+  outline-offset: 2px;
 }
 
 .card:active {
@@ -635,6 +644,67 @@ body {
   animation: fade-in 220ms ease-out;
 }
 
+.btn-info {
+  width: auto;
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+}
+
+.info-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 8, 23, 0.68);
+  backdrop-filter: blur(8px);
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+}
+
+.info-modal {
+  width: min(760px, 100%);
+  max-height: 82vh;
+  overflow: auto;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 14px;
+}
+
+.info-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.info-modal-head h3 {
+  margin: 0;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.9rem;
+}
+
+.schema-raw {
+  margin-top: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
 @keyframes card-float {
   0% {
     transform: translate3d(-2%, -1%, 0) scale(1);
@@ -684,6 +754,14 @@ body {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .grid,
+  .folder-grid,
+  .favorites-grid {
+    grid-template-columns: 1fr;
   }
 }
 

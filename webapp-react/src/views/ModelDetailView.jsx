@@ -72,6 +72,7 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
   const [submitting, setSubmitting] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [submitInfo, setSubmitInfo] = useState('');
+  const [showInfo, setShowInfo] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -774,6 +775,19 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
   }
 
   const shouldShowGenBlock = hasGenOptions || dynamicKeys.length > 0;
+  const infoSummary = useMemo(() => {
+    const inProps = (inputSchema && inputSchema.properties) ? Object.keys(inputSchema.properties) : [];
+    const outProps = (model?.output_schema && model.output_schema.properties) ? Object.keys(model.output_schema.properties) : [];
+    return {
+      provider: model?.provider || '-',
+      key: model?.key || '-',
+      replicateId: model?.replicate_id || '-',
+      types: Array.isArray(model?.model_type) ? model.model_type.join(', ') : '-',
+      required: Array.isArray(schemaRequired) ? schemaRequired : [],
+      inputProps: inProps,
+      outputProps: outProps,
+    };
+  }, [model, inputSchema, schemaRequired]);
 
   return (
     <div className="detail-view">
@@ -783,6 +797,11 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
 
       <div className="header">
         <h1>🤖 {model.name}</h1>
+        <div style={{ marginTop: 8 }}>
+          <button type="button" className="btn-secondary btn-info" onClick={() => setShowInfo(true)}>
+            ℹ️ {t('webapp_info', 'Info')}
+          </button>
+        </div>
       </div>
 
       {imgHtml}
@@ -927,6 +946,36 @@ export default function ModelDetailView({ modelKey, t, user, onUpdateCredits, on
         )}
         {submitInfo ? <div className="submit-hint">{submitInfo}</div> : null}
       </div>
+
+      {showInfo ? (
+        <div className="info-modal-backdrop" onClick={() => setShowInfo(false)} role="button" tabIndex={0}>
+          <div className="info-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="info-modal-head">
+              <h3>ℹ️ {t('webapp_model_info', 'Model Info')}</h3>
+              <button type="button" className="btn-secondary" onClick={() => setShowInfo(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="info-grid">
+              <div><b>Provider:</b> {infoSummary.provider}</div>
+              <div><b>Key:</b> {infoSummary.key}</div>
+              <div><b>Replicate:</b> {infoSummary.replicateId}</div>
+              <div><b>Types:</b> {infoSummary.types}</div>
+              <div><b>Required:</b> {infoSummary.required.join(', ') || '-'}</div>
+              <div><b>Input Fields:</b> {infoSummary.inputProps.join(', ') || '-'}</div>
+              <div><b>Output Fields:</b> {infoSummary.outputProps.join(', ') || '-'}</div>
+            </div>
+            <details className="advanced-details" style={{ marginTop: 12 }}>
+              <summary>Input Schema (raw)</summary>
+              <pre className="schema-raw">{JSON.stringify(inputSchema || {}, null, 2)}</pre>
+            </details>
+            <details className="advanced-details" style={{ marginTop: 10 }}>
+              <summary>Output Schema (raw)</summary>
+              <pre className="schema-raw">{JSON.stringify(model?.output_schema || {}, null, 2)}</pre>
+            </details>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

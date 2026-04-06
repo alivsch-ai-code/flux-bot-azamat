@@ -179,6 +179,31 @@ For a **German, detailed** breakdown (handlers, HTTP routes, `GenerationService`
 
 ---
 
+## 🧩 System Block Diagram
+
+Simulink-style Überblick über Datenfluss und Komponenten:
+
+```mermaid
+flowchart LR
+  U[User] --> TG[Telegram Client]
+  U --> WA[Telegram WebApp]
+  TG --> BOT[aiogram Bot]
+  WA --> API[Flask API]
+  BOT --> H[Telegram Handlers]
+  API --> HR[HTTP Routes]
+  H --> GS[GenerationService]
+  HR --> GS
+  GS --> UAI[UnifiedAIClient]
+  UAI --> REP[Replicate]
+  GS --> DB[(Neon PostgreSQL)]
+  H --> DB
+  HR --> DB
+```
+
+Vollständige Diagramm-Doku: [`doc/system_block_diagram.md`](doc/system_block_diagram.md)
+
+---
+
 ## 📦 Deployment
 
 - **[Render](doc/render_deploy.md)** — Recommended, web service + health checks
