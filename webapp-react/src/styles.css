@@ -1,28 +1,29 @@
 :root {
-  --tg-theme-bg-color: #070b14;
-  --tg-theme-text-color: #e5e7eb;
-  --tg-theme-button-color: #6b7280;
-  --tg-theme-button-text-color: #f9fafb;
-  --tg-secondary-bg: rgba(255, 255, 255, 0.035);
-  --tg-hint-color: rgba(203, 213, 225, 0.66);
-  --apple-blue: #5ac8fa;
-  --apple-indigo: #6e6bff;
-  --apple-cyan: #7de7ff;
-  --apple-green: #39d98a;
-  --apple-orange: #ffb84d;
+  --tg-theme-bg-color: #030712;
+  --tg-theme-text-color: #F8FAFC;
+  --tg-theme-button-color: #8B5CF6;
+  --tg-theme-button-text-color: #FFFFFF;
+  --tg-secondary-bg: rgba(255, 255, 255, 0.04);
+  --tg-hint-color: rgba(148, 163, 184, 0.7);
+  --apple-blue: #3B82F6;
+  --apple-indigo: #6366F1;
+  --apple-cyan: #22D3EE;
+  --apple-green: #10B981;
+  --apple-orange: #F59E0B;
   --accent: var(--tg-theme-button-color);
   --accent-contrast: var(--tg-theme-button-text-color);
-  --surface: var(--tg-secondary-bg);
-  --surface-raised: color-mix(in srgb, var(--tg-theme-text-color) 4%, var(--tg-theme-bg-color));
-  --border: color-mix(in srgb, var(--tg-theme-text-color) 18%, transparent);
-  --border-strong: color-mix(in srgb, var(--accent) 35%, transparent);
+  --surface: rgba(15, 23, 42, 0.5);
+  --surface-raised: rgba(30, 41, 59, 0.6);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(139, 92, 246, 0.4);
   --text-muted: var(--tg-hint-color);
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.22);
-  --shadow-md: 0 12px 40px rgba(0, 0, 0, 0.35);
-  --glow-accent: color-mix(in srgb, var(--accent) 22%, transparent);
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --shadow-sm: 0 4px 20px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --glow-accent: rgba(139, 92, 246, 0.35);
+  --app-gradient: linear-gradient(135deg, #09090b 0%, #030712 100%);
 }
 
 *,
@@ -34,12 +35,17 @@
 body {
   margin: 0;
   padding: 16px;
-  background: linear-gradient(180deg, #0a0f19 0%, #0b1018 100%), var(--tg-theme-bg-color);
+  background: var(--app-gradient) no-repeat center center fixed;
+  background-size: cover;
   color: var(--tg-theme-text-color);
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   animation: page-enter 420ms ease-out;
+}
+
+h1, h2, h3, h4, .brand-font {
+  font-family: 'Outfit', 'Inter', sans-serif;
 }
 
 .hidden {
@@ -50,13 +56,13 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 14px 18px;
   background: var(--surface-raised);
-  border-radius: var(--radius-md);
-  margin-bottom: 18px;
+  border-radius: var(--radius-lg);
+  margin-bottom: 22px;
   border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(12px) saturate(125%);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(16px) saturate(140%);
   animation: rise-in 380ms ease both;
 }
 
@@ -136,25 +142,26 @@ body {
 
 .hero-orb {
   position: absolute;
-  width: 120px;
-  height: 120px;
+  width: 140px;
+  height: 140px;
   border-radius: 999px;
-  filter: blur(22px);
-  opacity: 0.42;
+  filter: blur(28px);
+  opacity: 0.55;
+  mix-blend-mode: screen;
 }
 
 .hero-orb-a {
-  top: -28px;
-  left: 6%;
-  background: radial-gradient(circle, rgba(90, 200, 250, 0.95) 0%, rgba(90, 200, 250, 0) 72%);
-  animation: float-slow 16s ease-in-out infinite;
+  top: -40px;
+  left: 2%;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.95) 0%, rgba(139, 92, 246, 0) 72%);
+  animation: float-slow 12s ease-in-out infinite;
 }
 
 .hero-orb-b {
-  top: -14px;
-  right: 8%;
-  background: radial-gradient(circle, rgba(110, 107, 255, 0.95) 0%, rgba(110, 107, 255, 0) 72%);
-  animation: float-slow 18s ease-in-out infinite reverse;
+  top: -20px;
+  right: 5%;
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.95) 0%, rgba(14, 165, 233, 0) 72%);
+  animation: float-slow 14s ease-in-out infinite reverse;
 }
 
 .hero-ring {
@@ -244,14 +251,14 @@ body {
 
 .card {
   background: var(--surface-raised);
-  border-radius: var(--radius-md);
-  padding: 18px 14px;
+  border-radius: var(--radius-lg);
+  padding: 22px 16px;
   cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
   border: 1px solid var(--border);
   text-align: center;
   box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(8px) saturate(112%);
+  backdrop-filter: blur(12px) saturate(120%);
   animation: rise-in 360ms ease both;
   position: relative;
   overflow: hidden;
@@ -310,9 +317,9 @@ body {
 }
 
 .card:hover {
-  border-color: color-mix(in srgb, #94a3b8 42%, transparent);
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.35);
-  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-4px) scale(1.02);
 }
 
 .card::after {
@@ -583,20 +590,26 @@ button:focus-visible,
 .btn-start {
   display: block;
   width: 100%;
-  padding: 15px 18px;
+  padding: 16px 18px;
   margin: 18px 0 10px;
-  background: linear-gradient(130deg, #475569 0%, #64748b 58%, #94a3b8 100%);
+  background: linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%);
   color: var(--accent-contrast);
   border: none;
   border-radius: var(--radius-md);
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.45);
-  transition: transform 0.17s ease, box-shadow 0.17s ease, filter 0.17s ease;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
   position: relative;
   overflow: hidden;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.02em;
+  font-family: 'Outfit', sans-serif;
+}
+
+.btn-start:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(99, 102, 241, 0.5);
 }
 
 .btn-start::before {
