@@ -1,4 +1,5 @@
 import logging
+from contextlib import contextmanager
 import psycopg2
 from psycopg2 import pool as psycopg2_pool
 import threading
@@ -68,6 +69,12 @@ class DatabaseManager:
         return psycopg2.connect(self.db_url, sslmode='require')
 
     def _release_connection(self, conn):
+        # Offene Transaktionen zurückrollen, bevor die Connection in den Pool geht.
+        # Nach commit() ist rollback() ein No-Op – daher immer sicher.
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         if self._pool is not None:
             try:
                 self._pool.putconn(conn)
@@ -79,140 +86,159 @@ class DatabaseManager:
         except Exception:
             pass
 
+    @contextmanager
+    def _connection(self, commit: bool = False):
+        """Liefert eine Connection und garantiert deren Freigabe.
+
+        - commit=True: committet am Ende automatisch (Schreibzugriffe).
+        - Bei Exceptions: Rollback, Connection wird trotzdem freigegeben.
+        """
+        conn = self._get_connection()
+        try:
+            yield conn
+            if commit:
+                conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise
+        finally:
+            conn.close()
+
     def _init_db(self):
         with self.lock:
             try:
-                conn = self._get_connection()
-                c = conn.cursor()
+                with self._connection(commit=True) as conn:
+                    c = conn.cursor()
                 
-                # Users Tabelle
-                c.execute('''
-                    CREATE TABLE IF NOT EXISTS users (
-                        user_id BIGINT PRIMARY KEY,
-                        username TEXT,
-                        credits INTEGER DEFAULT 150,
-                        language TEXT DEFAULT 'de',
-                        auto_opt INTEGER DEFAULT 1,
-                        auto_negative_prompt INTEGER DEFAULT 1,
-                        daily_msg INTEGER DEFAULT 1,
-                        last_model_key TEXT,
-                        is_chat_mode INTEGER DEFAULT 0
-                    )
-                ''')
+                    # Users Tabelle
+                    c.execute('''
+                        CREATE TABLE IF NOT EXISTS users (
+                            user_id BIGINT PRIMARY KEY,
+                            username TEXT,
+                            credits INTEGER DEFAULT 150,
+                            language TEXT DEFAULT 'de',
+                            auto_opt INTEGER DEFAULT 1,
+                            auto_negative_prompt INTEGER DEFAULT 1,
+                            daily_msg INTEGER DEFAULT 1,
+                            last_model_key TEXT,
+                            is_chat_mode INTEGER DEFAULT 0
+                        )
+                    ''')
                 
-                # AI Models Tabelle (Full Schema)
-                c.execute('''
-                    CREATE TABLE IF NOT EXISTS ai_models (
-                        key TEXT PRIMARY KEY,
-                        replicate_id TEXT,
-                        name TEXT,
-                        description TEXT,
+                    # AI Models Tabelle (Full Schema)
+                    c.execute('''
+                        CREATE TABLE IF NOT EXISTS ai_models (
+                            key TEXT PRIMARY KEY,
+                            replicate_id TEXT,
+                            name TEXT,
+                            description TEXT,
                         
-                        -- PREISE
-                        base_cost_usd FLOAT DEFAULT 0.0,
-                        internal_cost INTEGER DEFAULT 10,
-                        custom_price INTEGER,
+                            -- PREISE
+                            base_cost_usd FLOAT DEFAULT 0.0,
+                            internal_cost INTEGER DEFAULT 10,
+                            custom_price INTEGER,
                         
-                        -- METADATA
-                        provider TEXT,
-                        model_type TEXT, 
-                        menu_path TEXT DEFAULT 'root',
-                        is_active INTEGER DEFAULT 1,
-                        is_favorite INTEGER DEFAULT 0,
-                        is_commercial INTEGER DEFAULT 1,
-                        manual_override INTEGER DEFAULT 0,
+                            -- METADATA
+                            provider TEXT,
+                            model_type TEXT, 
+                            menu_path TEXT DEFAULT 'root',
+                            is_active INTEGER DEFAULT 1,
+                            is_favorite INTEGER DEFAULT 0,
+                            is_commercial INTEGER DEFAULT 1,
+                            manual_override INTEGER DEFAULT 0,
                         
-                        -- JSON DATEN
-                        input_schema JSONB,
-                        output_schema JSONB,
-                        example_data JSONB,
+                            -- JSON DATEN
+                            input_schema JSONB,
+                            output_schema JSONB,
+                            example_data JSONB,
                         
-                        last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                ''')
+                            last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    ''')
                 
-                # Transactions & Daily Posts
-                c.execute('''CREATE TABLE IF NOT EXISTS transactions (id SERIAL PRIMARY KEY, user_id BIGINT, amount INTEGER, reason TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-                c.execute('''CREATE TABLE IF NOT EXISTS daily_posts (id SERIAL PRIMARY KEY, date_to_send TEXT UNIQUE, message_text TEXT, image_path TEXT, sent_status INTEGER DEFAULT 0)''')
+                    # Transactions & Daily Posts
+                    c.execute('''CREATE TABLE IF NOT EXISTS transactions (id SERIAL PRIMARY KEY, user_id BIGINT, amount INTEGER, reason TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+                    c.execute('''CREATE TABLE IF NOT EXISTS daily_posts (id SERIAL PRIMARY KEY, date_to_send TEXT UNIQUE, message_text TEXT, image_path TEXT, sent_status INTEGER DEFAULT 0)''')
 
-                # Generation Errors (Fehlermeldungen mit User/Modell; werden nach 7 Tagen gelöscht)
-                c.execute('''
-                    CREATE TABLE IF NOT EXISTS generation_errors (
-                        id SERIAL PRIMARY KEY,
-                        user_id BIGINT NOT NULL,
-                        model_key TEXT,
-                        error_message TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                ''')
-                # Bot-Einstellungen (global, z.B. menu_mode: commands | keyboard)
-                c.execute('''
-                    CREATE TABLE IF NOT EXISTS bot_settings (
-                        key TEXT PRIMARY KEY,
-                        value TEXT NOT NULL DEFAULT ''
-                    )
-                ''')
-                # Gruppen-Einstellungen (Sprache pro Gruppe)
-                c.execute('''
-                    CREATE TABLE IF NOT EXISTS group_settings (
-                        chat_id BIGINT PRIMARY KEY,
-                        language TEXT DEFAULT 'de'
-                    )
-                ''')
-                # Einmalige Willkommens-DM an User aus Gruppen
-                c.execute('''
-                    CREATE TABLE IF NOT EXISTS group_greeting_sent (
-                        user_id BIGINT PRIMARY KEY
-                    )
-                ''')
-                c.execute('''
-                    CREATE TABLE IF NOT EXISTS group_greeting_attempted (
-                        user_id BIGINT PRIMARY KEY
-                    )
-                ''')
-                # Azamat 2x täglich Begrüßung (user_id, sent_date, slot)
-                c.execute('''
-                    CREATE TABLE IF NOT EXISTS azamat_daily_sent (
-                        user_id BIGINT NOT NULL,
-                        sent_date TEXT NOT NULL,
-                        slot INTEGER NOT NULL,
-                        PRIMARY KEY (user_id, sent_date, slot)
-                    )
-                ''')
-                # Azamat Random-Posts Zähler (Witz/Info pro Tag)
-                c.execute('''
-                    CREATE TABLE IF NOT EXISTS azamat_random_count (
-                        sent_date TEXT PRIMARY KEY, count INTEGER DEFAULT 0
-                    )
-                ''')
-                # Gruppen-spezifische Credits pro User (Kauf über Gruppen-Button)
-                c.execute('''
-                    CREATE TABLE IF NOT EXISTS group_user_credits (
-                        user_id BIGINT NOT NULL,
-                        chat_id BIGINT NOT NULL,
-                        credits INTEGER DEFAULT 0,
-                        PRIMARY KEY (user_id, chat_id)
-                    )
-                ''')
-                # Replicate async Predictions (Webhook): Zuordnung prediction_id → Telegram + Abrechnung
-                c.execute('''
-                    CREATE TABLE IF NOT EXISTS replicate_webhook_jobs (
-                        prediction_id TEXT PRIMARY KEY,
-                        user_id BIGINT NOT NULL,
-                        model_key TEXT NOT NULL,
-                        lang TEXT NOT NULL DEFAULT 'en',
-                        effective_cost INTEGER NOT NULL,
-                        no_charge INTEGER NOT NULL DEFAULT 0,
-                        group_chat_id BIGINT,
-                        is_chat INTEGER NOT NULL DEFAULT 0,
-                        chat_history_mode TEXT,
-                        user_prompt TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                ''')
+                    # Generation Errors (Fehlermeldungen mit User/Modell; werden nach 7 Tagen gelöscht)
+                    c.execute('''
+                        CREATE TABLE IF NOT EXISTS generation_errors (
+                            id SERIAL PRIMARY KEY,
+                            user_id BIGINT NOT NULL,
+                            model_key TEXT,
+                            error_message TEXT,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    ''')
+                    # Bot-Einstellungen (global, z.B. menu_mode: commands | keyboard)
+                    c.execute('''
+                        CREATE TABLE IF NOT EXISTS bot_settings (
+                            key TEXT PRIMARY KEY,
+                            value TEXT NOT NULL DEFAULT ''
+                        )
+                    ''')
+                    # Gruppen-Einstellungen (Sprache pro Gruppe)
+                    c.execute('''
+                        CREATE TABLE IF NOT EXISTS group_settings (
+                            chat_id BIGINT PRIMARY KEY,
+                            language TEXT DEFAULT 'de'
+                        )
+                    ''')
+                    # Einmalige Willkommens-DM an User aus Gruppen
+                    c.execute('''
+                        CREATE TABLE IF NOT EXISTS group_greeting_sent (
+                            user_id BIGINT PRIMARY KEY
+                        )
+                    ''')
+                    c.execute('''
+                        CREATE TABLE IF NOT EXISTS group_greeting_attempted (
+                            user_id BIGINT PRIMARY KEY
+                        )
+                    ''')
+                    # Azamat 2x täglich Begrüßung (user_id, sent_date, slot)
+                    c.execute('''
+                        CREATE TABLE IF NOT EXISTS azamat_daily_sent (
+                            user_id BIGINT NOT NULL,
+                            sent_date TEXT NOT NULL,
+                            slot INTEGER NOT NULL,
+                            PRIMARY KEY (user_id, sent_date, slot)
+                        )
+                    ''')
+                    # Azamat Random-Posts Zähler (Witz/Info pro Tag)
+                    c.execute('''
+                        CREATE TABLE IF NOT EXISTS azamat_random_count (
+                            sent_date TEXT PRIMARY KEY, count INTEGER DEFAULT 0
+                        )
+                    ''')
+                    # Gruppen-spezifische Credits pro User (Kauf über Gruppen-Button)
+                    c.execute('''
+                        CREATE TABLE IF NOT EXISTS group_user_credits (
+                            user_id BIGINT NOT NULL,
+                            chat_id BIGINT NOT NULL,
+                            credits INTEGER DEFAULT 0,
+                            PRIMARY KEY (user_id, chat_id)
+                        )
+                    ''')
+                    # Replicate async Predictions (Webhook): Zuordnung prediction_id → Telegram + Abrechnung
+                    c.execute('''
+                        CREATE TABLE IF NOT EXISTS replicate_webhook_jobs (
+                            prediction_id TEXT PRIMARY KEY,
+                            user_id BIGINT NOT NULL,
+                            model_key TEXT NOT NULL,
+                            lang TEXT NOT NULL DEFAULT 'en',
+                            effective_cost INTEGER NOT NULL,
+                            no_charge INTEGER NOT NULL DEFAULT 0,
+                            group_chat_id BIGINT,
+                            is_chat INTEGER NOT NULL DEFAULT 0,
+                            chat_history_mode TEXT,
+                            user_prompt TEXT,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    ''')
                 
-                conn.commit()
-                conn.close()
             except Exception as e:
                 logger.exception("DB Init Error: %s", e)
 
@@ -599,8 +625,7 @@ class DatabaseManager:
     def get_fallback_model(self, original_model: AIModel) -> AIModel:
         """Sucht Ersatzmodell."""
         main_type = original_model.type[0] if original_model.type else ""
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection() as conn:
             c = conn.cursor()
             query = f"""
                 SELECT {self._get_model_columns()} FROM ai_models 
@@ -612,7 +637,6 @@ class DatabaseManager:
             """
             c.execute(query, (f"%{main_type}%", original_model.internal_cost + 5, original_model.key))
             r = c.fetchone()
-            conn.close()
             return self._map_row(r) if r else None
 
     def _map_row(self, r):
@@ -701,8 +725,7 @@ class DatabaseManager:
         """Credits für (user, group) hinzufügen. Nur für positive Beträge (Kauf)."""
         if amount <= 0:
             return
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection(commit=True) as conn:
             c = conn.cursor()
             c.execute("""
                 INSERT INTO group_user_credits (user_id, chat_id, credits)
@@ -713,8 +736,6 @@ class DatabaseManager:
                 "INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)",
                 (user_id, amount, f"{reason}_grp_{chat_id}")
             )
-            conn.commit()
-            conn.close()
 
     def get_effective_credits_for_group(self, user_id: int, chat_id: int) -> int:
         """Gesamt-Credits für Gruppen-Nutzung: Gruppen-Credits + User-Credits (Fallback)."""
@@ -724,8 +745,7 @@ class DatabaseManager:
 
     def deduct_credits_for_group(self, user_id: int, chat_id: int, amount: int, reason: str = "usage") -> bool:
         """Zieht Credits ab: zuerst von Gruppen-Kontingent, Rest von User. Returns True wenn genug da war."""
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection(commit=True) as conn:
             c = conn.cursor()
             c.execute(
                 "SELECT credits FROM group_user_credits WHERE user_id = %s AND chat_id = %s",
@@ -737,7 +757,6 @@ class DatabaseManager:
             urow = c.fetchone()
             user_creds = urow[0] if urow else 0
             if group_creds + user_creds < amount:
-                conn.close()
                 return False
             from_group = min(amount, group_creds)
             from_user = amount - from_group
@@ -755,8 +774,6 @@ class DatabaseManager:
                 c.execute("UPDATE users SET credits = credits - %s WHERE user_id = %s", (from_user, user_id))
                 c.execute("INSERT INTO transactions (user_id, amount, reason) VALUES (%s, %s, %s)", (user_id, -from_user, reason))
                 logger.warning("TRANSACTION_RECORDED (user) user_id=%s amount=%s reason=%s", user_id, -from_user, reason)
-            conn.commit()
-            conn.close()
             return True
 
     def get_user_settings(self, user_id):
@@ -811,67 +828,52 @@ class DatabaseManager:
 
     def get_bot_setting(self, key: str, default: str = "") -> str:
         """Liest einen globalen Bot-Einstellungswert (z.B. menu_mode)."""
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection() as conn:
             c = conn.cursor()
             c.execute("SELECT value FROM bot_settings WHERE key = %s", (key,))
             res = c.fetchone()
-            conn.close()
             return res[0] if res else default
 
     def set_bot_setting(self, key: str, value: str) -> None:
         """Speichert eine globale Bot-Einstellung."""
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection(commit=True) as conn:
             c = conn.cursor()
             c.execute(
                 "INSERT INTO bot_settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = %s",
                 (key, value, value)
             )
-            conn.commit()
-            conn.close()
 
     def has_group_greeting_been_sent(self, user_id: int) -> bool:
         """Prüft ob dem User bereits die einmalige Willkommens-DM geschickt wurde."""
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection() as conn:
             c = conn.cursor()
             c.execute("CREATE TABLE IF NOT EXISTS group_greeting_sent (user_id BIGINT PRIMARY KEY)")
             c.execute("SELECT 1 FROM group_greeting_sent WHERE user_id = %s", (user_id,))
             res = c.fetchone()
-            conn.close()
             return res is not None
 
     def has_group_greeting_been_attempted(self, user_id: int) -> bool:
         """Prüft ob wir bereits versucht haben, die Willkommens-DM zu senden (vermeidet erneute Gemini-Aufrufe)."""
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection() as conn:
             c = conn.cursor()
             c.execute("CREATE TABLE IF NOT EXISTS group_greeting_attempted (user_id BIGINT PRIMARY KEY)")
             c.execute("SELECT 1 FROM group_greeting_attempted WHERE user_id = %s", (user_id,))
             res = c.fetchone()
-            conn.close()
             return res is not None
 
     def mark_group_greeting_sent(self, user_id: int) -> None:
         """Markiert dass dem User die einmalige Willkommens-DM geschickt wurde."""
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection(commit=True) as conn:
             c = conn.cursor()
             c.execute("CREATE TABLE IF NOT EXISTS group_greeting_sent (user_id BIGINT PRIMARY KEY)")
             c.execute("INSERT INTO group_greeting_sent (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_id,))
-            conn.commit()
-            conn.close()
 
     def mark_group_greeting_attempted(self, user_id: int) -> None:
         """Markiert dass wir versucht haben, die Willkommens-DM zu senden."""
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection(commit=True) as conn:
             c = conn.cursor()
             c.execute("CREATE TABLE IF NOT EXISTS group_greeting_attempted (user_id BIGINT PRIMARY KEY)")
             c.execute("INSERT INTO group_greeting_attempted (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_id,))
-            conn.commit()
-            conn.close()
 
     def add_group_if_not_exists(self, chat_id: int, lang: str = "en") -> None:
         """Fügt eine Gruppe hinzu, falls nicht vorhanden (für Random-Posts)."""
@@ -879,14 +881,12 @@ class DatabaseManager:
             lang = "en"
         with self.lock:
             try:
-                conn = self._get_connection()
-                c = conn.cursor()
-                c.execute(
-                    "INSERT INTO group_settings (chat_id, language) VALUES (%s, %s) ON CONFLICT (chat_id) DO NOTHING",
-                    (chat_id, lang)
-                )
-                conn.commit()
-                conn.close()
+                with self._connection(commit=True) as conn:
+                    c = conn.cursor()
+                    c.execute(
+                        "INSERT INTO group_settings (chat_id, language) VALUES (%s, %s) ON CONFLICT (chat_id) DO NOTHING",
+                        (chat_id, lang)
+                    )
             except Exception as e:
                 logger.warning("add_group_if_not_exists failed: %s", e)
 
@@ -894,12 +894,11 @@ class DatabaseManager:
         """Alle bekannten Gruppen-Chat-IDs (group_settings)."""
         with self.lock:
             try:
-                conn = self._get_connection()
-                c = conn.cursor()
-                c.execute("SELECT chat_id FROM group_settings")
-                rows = c.fetchall()
-                conn.close()
-                return [r[0] for r in rows] if rows else []
+                with self._connection() as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT chat_id FROM group_settings")
+                    rows = c.fetchall()
+                    return [r[0] for r in rows] if rows else []
             except Exception:
                 return []
 
@@ -908,12 +907,11 @@ class DatabaseManager:
         today = datetime.now().strftime("%Y-%m-%d")
         with self.lock:
             try:
-                conn = self._get_connection()
-                c = conn.cursor()
-                c.execute("SELECT count FROM azamat_random_count WHERE sent_date = %s", (today,))
-                row = c.fetchone()
-                conn.close()
-                return int(row[0]) if row and row[0] is not None else 0
+                with self._connection() as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT count FROM azamat_random_count WHERE sent_date = %s", (today,))
+                    row = c.fetchone()
+                    return int(row[0]) if row and row[0] is not None else 0
             except Exception:
                 return 0
 
@@ -922,27 +920,23 @@ class DatabaseManager:
         today = datetime.now().strftime("%Y-%m-%d")
         with self.lock:
             try:
-                conn = self._get_connection()
-                c = conn.cursor()
-                c.execute(
-                    "INSERT INTO azamat_random_count (sent_date, count) VALUES (%s, 1) "
-                    "ON CONFLICT (sent_date) DO UPDATE SET count = azamat_random_count.count + 1",
-                    (today,)
-                )
-                conn.commit()
-                conn.close()
+                with self._connection(commit=True) as conn:
+                    c = conn.cursor()
+                    c.execute(
+                        "INSERT INTO azamat_random_count (sent_date, count) VALUES (%s, 1) "
+                        "ON CONFLICT (sent_date) DO UPDATE SET count = azamat_random_count.count + 1",
+                        (today,)
+                    )
             except Exception as e:
                 logger.warning("increment_azamat_random_count failed: %s", e)
 
     def get_group_language(self, chat_id: int) -> str:
         """Sprache für eine Gruppe. Default: en."""
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection() as conn:
             c = conn.cursor()
             c.execute("CREATE TABLE IF NOT EXISTS group_settings (chat_id BIGINT PRIMARY KEY, language TEXT DEFAULT 'en')")
             c.execute("SELECT language FROM group_settings WHERE chat_id = %s", (chat_id,))
             res = c.fetchone()
-            conn.close()
             lang = (res[0] or "en") if res else "en"
             return lang if lang in ("de", "en", "ru", "kk") else "en"
 
@@ -950,20 +944,16 @@ class DatabaseManager:
         """Sprache für eine Gruppe setzen."""
         if lang not in ("de", "en", "ru", "kk"):
             return
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection(commit=True) as conn:
             c = conn.cursor()
             c.execute("CREATE TABLE IF NOT EXISTS group_settings (chat_id BIGINT PRIMARY KEY, language TEXT DEFAULT 'de')")
             c.execute(
                 "INSERT INTO group_settings (chat_id, language) VALUES (%s, %s) ON CONFLICT (chat_id) DO UPDATE SET language = %s",
                 (chat_id, lang, lang)
             )
-            conn.commit()
-            conn.close()
 
     def set_user_chat_mode(self, user_id, model_key, active=True):
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection(commit=True) as conn:
             c = conn.cursor()
             # Ohne users-Zeile schlägt UPDATE still fehl → Chat-Modus wirkt „kaputt“ (z. B. erste DM ohne /start).
             c.execute(
@@ -978,22 +968,18 @@ class DatabaseManager:
                 )
             else:
                 c.execute("UPDATE users SET is_chat_mode = %s WHERE user_id = %s", (is_active, user_id))
-            conn.commit()
-            conn.close()
 
     def get_user_chat_state(self, user_id):
         with self.lock:
-            conn = self._get_connection()
-            c = conn.cursor()
             try:
-                c.execute("SELECT is_chat_mode, last_model_key FROM users WHERE user_id = %s", (user_id,))
-                res = c.fetchone()
-                conn.close()
-                if res:
-                    return {"is_chat": bool(res[0]), "model_key": res[1]}
+                with self._connection() as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT is_chat_mode, last_model_key FROM users WHERE user_id = %s", (user_id,))
+                    res = c.fetchone()
+                    if res:
+                        return {"is_chat": bool(res[0]), "model_key": res[1]}
             except Exception:
-                conn.rollback()
-                conn.close()
+                pass
             return {"is_chat": False, "model_key": None}
 
     def get_ai_news_rss_feed_urls(self) -> list[str]:
@@ -1016,21 +1002,16 @@ class DatabaseManager:
                 conn.close()
 
     def user_exists(self, user_id):
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection() as conn:
             c = conn.cursor()
             c.execute("SELECT 1 FROM users WHERE user_id = %s", (user_id,))
-            exists = c.fetchone() is not None
-            conn.close()
-            return exists
+            return c.fetchone() is not None
 
     def get_user(self, user_id: int) -> User:
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection() as conn:
             c = conn.cursor()
             c.execute("SELECT user_id, username, credits FROM users WHERE user_id = %s", (user_id,))
             res = c.fetchone()
-            conn.close()
             if res:
                 return User(id=res[0], username=res[1], credits=res[2])
             else:
@@ -1060,48 +1041,39 @@ class DatabaseManager:
                 conn.close()
 
     def mark_post_as_sent(self, post_id):
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection(commit=True) as conn:
             c = conn.cursor()
             c.execute("UPDATE daily_posts SET sent_status = 1 WHERE id = %s", (post_id,))
-            conn.commit()
-            conn.close()
 
     def get_subscribed_users(self):
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection() as conn:
             c = conn.cursor()
             c.execute("SELECT user_id FROM users WHERE daily_msg = 1")
             results = c.fetchall()
-            conn.close()
             return [r[0] for r in results]
 
     def has_azamat_greeting_been_sent(self, user_id: int, sent_date: str, slot: int) -> bool:
         with self.lock:
             try:
-                conn = self._get_connection()
-                c = conn.cursor()
-                c.execute(
-                    "SELECT 1 FROM azamat_daily_sent WHERE user_id = %s AND sent_date = %s AND slot = %s",
-                    (user_id, sent_date, slot)
-                )
-                res = c.fetchone()
-                conn.close()
-                return res is not None
+                with self._connection() as conn:
+                    c = conn.cursor()
+                    c.execute(
+                        "SELECT 1 FROM azamat_daily_sent WHERE user_id = %s AND sent_date = %s AND slot = %s",
+                        (user_id, sent_date, slot)
+                    )
+                    return c.fetchone() is not None
             except Exception:
                 return False
 
     def mark_azamat_greeting_sent(self, user_id: int, sent_date: str, slot: int) -> None:
         with self.lock:
             try:
-                conn = self._get_connection()
-                c = conn.cursor()
-                c.execute(
-                    "INSERT INTO azamat_daily_sent (user_id, sent_date, slot) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
-                    (user_id, sent_date, slot)
-                )
-                conn.commit()
-                conn.close()
+                with self._connection(commit=True) as conn:
+                    c = conn.cursor()
+                    c.execute(
+                        "INSERT INTO azamat_daily_sent (user_id, sent_date, slot) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                        (user_id, sent_date, slot)
+                    )
             except Exception as e:
                 logger.warning("mark_azamat_greeting_sent failed: %s", e)
 
@@ -1109,12 +1081,11 @@ class DatabaseManager:
         """Holt username oder user_id als Fallback für Begrüßungen."""
         with self.lock:
             try:
-                conn = self._get_connection()
-                c = conn.cursor()
-                c.execute("SELECT username FROM users WHERE user_id = %s", (user_id,))
-                row = c.fetchone()
-                conn.close()
-                return (row[0] or "User") if row else "User"
+                with self._connection() as conn:
+                    c = conn.cursor()
+                    c.execute("SELECT username FROM users WHERE user_id = %s", (user_id,))
+                    row = c.fetchone()
+                    return (row[0] or "User") if row else "User"
             except Exception:
                 return "User"
 
@@ -1123,14 +1094,12 @@ class DatabaseManager:
         """Speichert Fehlermeldung zu einem fehlgeschlagenen Generierungsversuch."""
         with self.lock:
             try:
-                conn = self._get_connection()
-                c = conn.cursor()
-                c.execute(
-                    "INSERT INTO generation_errors (user_id, model_key, error_message) VALUES (%s, %s, %s)",
-                    (user_id, model_key or "", (error_message or "")[:2000])
-                )
-                conn.commit()
-                conn.close()
+                with self._connection(commit=True) as conn:
+                    c = conn.cursor()
+                    c.execute(
+                        "INSERT INTO generation_errors (user_id, model_key, error_message) VALUES (%s, %s, %s)",
+                        (user_id, model_key or "", (error_message or "")[:2000])
+                    )
             except Exception as e:
                 logger.warning("Fehler beim Speichern von generation_error: %s", e)
 
@@ -1138,12 +1107,10 @@ class DatabaseManager:
         """Löscht Einträge älter als 7 Tage."""
         with self.lock:
             try:
-                conn = self._get_connection()
-                c = conn.cursor()
-                c.execute("DELETE FROM generation_errors WHERE created_at < NOW() - INTERVAL '7 days'")
-                deleted = c.rowcount
-                conn.commit()
-                conn.close()
+                with self._connection(commit=True) as conn:
+                    c = conn.cursor()
+                    c.execute("DELETE FROM generation_errors WHERE created_at < NOW() - INTERVAL '7 days'")
+                    deleted = c.rowcount
                 if deleted:
                     logger.info("generation_errors cleanup: %s Einträge älter als 7 Tage gelöscht.", deleted)
             except Exception as e:
@@ -1250,8 +1217,7 @@ class DatabaseManager:
 
     def get_chat_session(self, user_id: int, model_key: str) -> list[dict]:
         """Gibt History als Liste von {role, content} zurück."""
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection() as conn:
             c = conn.cursor()
             self._ensure_chat_sessions_table(c)
             conn.commit()
@@ -1260,7 +1226,6 @@ class DatabaseManager:
                 (user_id, model_key),
             )
             row = c.fetchone()
-            conn.close()
         if not row or not row[0]:
             return []
         try:
@@ -1271,8 +1236,7 @@ class DatabaseManager:
     def save_chat_session(self, user_id: int, model_key: str, messages: list[dict]) -> None:
         """Speichert History als JSON (UPSERT)."""
         payload = json.dumps(messages, ensure_ascii=False)
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection(commit=True) as conn:
             c = conn.cursor()
             self._ensure_chat_sessions_table(c)
             c.execute(
@@ -1284,13 +1248,10 @@ class DatabaseManager:
                 """,
                 (user_id, model_key, payload),
             )
-            conn.commit()
-            conn.close()
 
     def clear_chat_session(self, user_id: int, model_key: str | None = None) -> None:
         """Löscht den Chat-Verlauf eines Users (optional nur für ein Modell)."""
-        with self.lock:
-            conn = self._get_connection()
+        with self.lock, self._connection(commit=True) as conn:
             c = conn.cursor()
             self._ensure_chat_sessions_table(c)
             if model_key:
@@ -1300,8 +1261,6 @@ class DatabaseManager:
                 )
             else:
                 c.execute("DELETE FROM chat_sessions WHERE user_id = %s", (user_id,))
-            conn.commit()
-            conn.close()
 
     # --- Telegram-Kanäle (Tabelle telegram_channels, gleiche DB wie DATABASE_URL) ---
 
