@@ -68,7 +68,21 @@ nav{
 .gh-btn:hover{border-color:var(--tg)}
 
 /* ---------- Hero ---------- */
-.hero{padding:88px 0 72px;display:grid;grid-template-columns:1.1fr .9fr;gap:64px;align-items:center}
+.hero{padding:88px 0 72px;display:grid;grid-template-columns:1.1fr .9fr;gap:64px;align-items:center;position:relative}
+.hero::before{
+  content:"";position:absolute;inset:-64px -50vw 0;z-index:-1;pointer-events:none;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:56px 56px;opacity:.18;
+  -webkit-mask-image:radial-gradient(ellipse 70% 80% at 50% 0%,#000 30%,transparent 75%);
+  mask-image:radial-gradient(ellipse 70% 80% at 50% 0%,#000 30%,transparent 75%);
+}
+.status-strip{
+  display:flex;gap:18px;flex-wrap:wrap;margin-top:30px;
+  font-family:'JetBrains Mono',monospace;font-size:.76rem;color:var(--mut);
+}
+.status-strip span::before{content:"●";font-size:.55rem;vertical-align:2px;margin-right:7px;color:#7BC97F}
+.status-strip span.y::before{color:var(--star)}
+.status-strip span.b::before{color:var(--tg)}
 .eyebrow{
   font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--star);
   letter-spacing:.12em;text-transform:uppercase;margin-bottom:20px;
@@ -166,6 +180,8 @@ h2{
 
 /* ---------- Feature grid ---------- */
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.card.wide{grid-column:span 2}
+.card.wide p{max-width:56ch}
 .card{
   background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   padding:28px 26px;transition:border-color .2s,transform .2s;
@@ -273,9 +289,11 @@ footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--mut);fon
   .stage + .stage{border-left:none;border-top:1px solid var(--line)}
   .duo{grid-template-columns:1fr}
   .phases{grid-template-columns:1fr}
+  .card.wide{grid-column:span 2}
 }
 @media (max-width:600px){
   .grid{grid-template-columns:1fr}
+  .card.wide{grid-column:auto}
   .nav-links a:not(.gh-btn){display:none}
 }
 </style>
@@ -290,7 +308,7 @@ footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--mut);fon
       <a href="#pipeline">How it works</a>
       <a href="#roadmap">Roadmap</a>
       <a href="#start">Quick start</a>
-      <a href="https://github.com/alivsch-ai-code/flux-bot-azamat#-documentation">Docs</a>
+      <a href="https://github.com/alivsch-ai-code/flux-bot-azamat#documentation">Docs</a>
       <a class="gh-btn" href="https://github.com/alivsch-ai-code/flux-bot-azamat">GitHub →</a>
     </div>
   </div>
@@ -302,8 +320,13 @@ footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--mut);fon
     <h1>Your AI studio lives <span class="hl">inside the chat</span>.</h1>
     <p class="lead">Generate images, videos and music, or talk to an LLM — without leaving Telegram. Dozens of models behind one bot, paid with Telegram Stars, managed from a Mini App.</p>
     <div class="cta-row">
-      <a class="btn btn-primary" href="https://github.com/alivsch-ai-code/flux-bot-azamat#-quick-start">Deploy your own</a>
+      <a class="btn btn-primary" href="https://github.com/alivsch-ai-code/flux-bot-azamat#quick-start">Deploy your own</a>
       <a class="btn btn-ghost" href="#features">See what it does</a>
+    </div>
+    <div class="status-strip" aria-label="Project status">
+      <span>200 tests passing</span>
+      <span class="y">MIT licensed</span>
+      <span class="b">clean architecture</span>
     </div>
   </div>
 
@@ -343,7 +366,7 @@ footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--mut);fon
   <h2 class="reveal">One bot, every modality</h2>
   <p class="sec-intro reveal">Each capability is a pluggable model behind a unified pipeline — adding a new Replicate model is configuration, not code.</p>
   <div class="grid">
-    <div class="card reveal">
+    <div class="card wide reveal">
       <span class="icon">🎨</span>
       <h3>Image generation</h3>
       <p>Text-to-image, image-to-image and inpainting with Flux, DALL·E 3 and Stable Diffusion. Prompt optimization and negative prompts built in.</p>
@@ -358,7 +381,7 @@ footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--mut);fon
       <h3>Audio &amp; voice</h3>
       <p>Music generation, voice cloning and text-to-speech through the same credit and delivery pipeline as images and video.</p>
     </div>
-    <div class="card reveal">
+    <div class="card wide reveal">
       <span class="icon">💬</span>
       <h3>LLM chat with memory</h3>
       <p>Persistent chat history with periodic summarization. Rapid bursts of messages are batched into one coherent reply instead of five fragmented ones.</p>
@@ -485,6 +508,13 @@ footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--mut);fon
       </div>
     </div>
   </div>
+  <div class="terminal reveal" style="margin-top:18px">
+    <div class="term-bar"><i></i><i></i><i></i></div>
+    <pre><span class="c"># the roadmap is not a wishlist — phases 1-3 run today, zero API keys:</span>
+<span class="g">$</span> python research/01_react_tool_selection/prototype.py
+<span class="g">$</span> python research/02_pipeline_planner/prototype.py
+<span class="g">$</span> python research/03_hierarchical_memory/prototype.py</pre>
+  </div>
 </section>
 
 <section id="start" class="wrap">
@@ -527,7 +557,7 @@ footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--mut);fon
       <h5>Project</h5>
       <ul>
         <li><a href="https://github.com/alivsch-ai-code/flux-bot-azamat">Repository</a></li>
-        <li><a href="https://github.com/alivsch-ai-code/flux-bot-azamat#-quick-start">Quick start</a></li>
+        <li><a href="https://github.com/alivsch-ai-code/flux-bot-azamat#quick-start">Quick start</a></li>
         <li><a href="https://github.com/alivsch-ai-code/flux-bot-azamat/blob/main/doc/architecture.md">Architecture</a></li>
       </ul>
     </div>

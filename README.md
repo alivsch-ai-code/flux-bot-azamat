@@ -4,26 +4,25 @@
 
 **Your AI studio lives inside the chat.**
 
-Generate AI images, videos and music, or talk to an LLM — all inside Telegram.
-One bot, dozens of models, paid with Telegram Stars.
+AI images, video and music inside Telegram — one bot, dozens of models,
+agent-grade architecture, native Telegram Stars payments.
 
 [![CI](https://github.com/alivsch-ai-code/flux-bot-azamat/actions/workflows/ci.yml/badge.svg)](https://github.com/alivsch-ai-code/flux-bot-azamat/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Telegram](https://img.shields.io/badge/Telegram-Bot-2CA5E0?logo=telegram)](https://core.telegram.org/bots)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-336791?logo=postgresql)](https://neon.tech)
 
-**[🌐 Website](https://alivsch-ai-code.github.io/flux-bot-azamat/)** ·
-**[📚 Documentation](#-documentation)** ·
-**[🚀 Quick Start](#-quick-start)** ·
-**[📦 Deploy](#-deployment)** ·
-**[🤝 Contributing](CONTRIBUTING.md)**
+[Website](https://alivsch-ai-code.github.io/flux-bot-azamat/) ·
+[Documentation](#documentation) ·
+[Quick start](#quick-start) ·
+[Research](research/) ·
+[Contributing](CONTRIBUTING.md)
 
 </div>
 
 ---
 
-## 🎯 What is this?
+## What is this?
 
 **AZAMAT AI Hub** is an open-source **Telegram bot** that turns your chat into a full **AI creative studio**. Generate images from text (text-to-image), videos, music, voice clones, and chat with LLMs — all inside Telegram. No app switching, no complicated UIs. Just message the bot or open its Mini App.
 
@@ -31,7 +30,7 @@ Perfect for developers who want a **ready-made AI bot** for Telegram, or anyone 
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 | Feature | Description |
 |---------|-------------|
@@ -48,9 +47,9 @@ Perfect for developers who want a **ready-made AI bot** for Telegram, or anyone 
 
 ---
 
-## 📚 Documentation
+## Documentation
 
-**Start here:** 🌐 [Project website](https://alivsch-ai-code.github.io/flux-bot-azamat/) (overview) → [Quick Start](#-quick-start) (run it) → guides below (go deep).
+**Start here:** 🌐 [Project website](https://alivsch-ai-code.github.io/flux-bot-azamat/) (overview) → [Quick Start](#quick-start) (run it) → guides below (go deep).
 
 | Topic | Document |
 |-------|----------|
@@ -69,7 +68,7 @@ Perfect for developers who want a **ready-made AI bot** for Telegram, or anyone 
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
 - **Bot:** [pyTelegramBotAPI](https://github.com/eternnoir/pyTelegramBotAPI)
 - **AI:** [Replicate](https://replicate.com) (Flux, Kling, Hunyuan, etc.), OpenAI (DALL·E), Google Gemini
@@ -79,7 +78,7 @@ Perfect for developers who want a **ready-made AI bot** for Telegram, or anyone 
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 git clone https://github.com/alivsch-ai-code/flux-bot-azamat.git
@@ -95,7 +94,7 @@ python main.py
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -111,7 +110,7 @@ python main.py
 
 ---
 
-## 🛡️ Ops & Security Notes
+## Ops & Security Notes
 - Flask/WebApp: bei unerwarteten Fehlern geben APIs an Clients nur `error="internal_error"` zurück; die Details stehen in den Server-Logs.
 - CI: GitHub Actions testet jetzt mit Python **3.12**.
 - DB: `DatabaseManager` sorgt zuverlässig dafür, dass Connections auch bei Exceptions wieder an den Pool zurückgegeben werden (verhindert Pool-„Lecks“ im Fehlerfall).
@@ -121,7 +120,7 @@ python main.py
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 flux-bot-azamat/
@@ -147,7 +146,7 @@ flux-bot-azamat/
 
 ---
 
-## 🌐 Menu Modes
+## Menu Modes
 
 | Mode | Description |
 |------|-------------|
@@ -161,7 +160,7 @@ For WebApp mode, set `APP_URL` and whitelist the domain in [@BotFather](https://
 
 ---
 
-## 👥 Group Mode
+## Group Mode
 
 When added to a **group**:
 
@@ -173,7 +172,7 @@ When added to a **group**:
 
 ---
 
-## 📢 Broadcast channels (Daily News)
+## Broadcast channels (Daily News)
 
 Register a **Telegram broadcast channel** for **Azamat AI News** using the same Neon DB as everything else (`telegram_channels` table).
 
@@ -188,7 +187,7 @@ Register a **Telegram broadcast channel** for **Azamat AI News** using the same 
 
 ---
 
-## 📋 Use cases
+## Use cases
 
 | Scenario | What happens |
 |----------|----------------|
@@ -202,7 +201,7 @@ For a **German, detailed** breakdown (handlers, HTTP routes, `GenerationService`
 
 ---
 
-## 🔌 Interfaces (overview)
+## Interfaces (overview)
 
 | Layer | Interface | Notes |
 |-------|-----------|--------|
@@ -215,7 +214,7 @@ For a **German, detailed** breakdown (handlers, HTTP routes, `GenerationService`
 
 ---
 
-## 🧩 System Block Diagram
+## System Block Diagram
 
 Simulink-style Überblick über Datenfluss und Komponenten:
 
@@ -240,14 +239,14 @@ Vollständige Diagramm-Doku: [`doc/system_block_diagram.md`](doc/system_block_di
 
 ---
 
-## 📦 Deployment
+## Deployment
 
 - **[Render](doc/render_deploy.md)** — Recommended, web service + health checks
 - **[Railway](doc/railway_deploy.md)** — Simple alternative
 
 ---
 
-## 🔎 Replicate Notes
+## Replicate Notes
 
 - Offizielle Referenz zum Erstellen von Predictions: [Replicate Create Prediction](https://replicate.com/docs/topics/predictions/create-a-prediction)
 - Input-Files (Datei-Uploads, File URLs, Limits): [Replicate Input Files](https://replicate.com/docs/topics/predictions/input-files)
@@ -255,7 +254,7 @@ Vollständige Diagramm-Doku: [`doc/system_block_diagram.md`](doc/system_block_di
 
 ---
 
-## 🔭 Research Roadmap — Toward an Agentic AZAMAT
+## Research Roadmap — Toward an Agentic AZAMAT
 
 Today AZAMAT is a **menu-driven generation hub**: the user picks a model, sends a prompt, gets a result. The next evolution — inspired by agent frameworks like [OpenClaw](https://github.com/openclaw/openclaw) — is a bot that **plans, acts and remembers on its own**: you describe a goal ("make a logo for my café, animate it, add a jingle") and the bot orchestrates every step. The roadmap below maps each capability to the research that defines the state of the art.
 
@@ -270,16 +269,24 @@ Today AZAMAT is a **menu-driven generation hub**: the user picks a model, sends 
 
 **Why this order?** Tool selection (1) and planning (2) deliver the biggest UX jump and build directly on the existing `GenerationService` routing. Memory (3) extends infrastructure that already exists (`chat_sessions`, summarization, dynamic model schemas in `ai_models`). Reflection (4) and the open ecosystem (5) turn the bot from a product into a platform. Guardrails (6) run alongside every phase — an agent that spends user credits autonomously must be budget-aware from day one.
 
+**Runnable prototypes** for phases 1–3 live in [`research/`](research/) — standalone, deterministic, zero API keys:
+
+```bash
+python research/01_react_tool_selection/prototype.py   # ReAct: intent -> model
+python research/02_pipeline_planner/prototype.py       # goal -> budgeted multi-step plan
+python research/03_hierarchical_memory/prototype.py    # MemGPT-style memory tiers
+```
+
 Contributions to any phase are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for the development setup, project layout and conventions. In short: run `pytest` and `ruff check` before opening a PR, and keep changes in the right architecture layer.
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
