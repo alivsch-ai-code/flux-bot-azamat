@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AZAMAT AI Hub — AI Image, Video & Audio Generation in Telegram</title>
+<meta name="description" content="Open-source Telegram bot for AI image, video, music and chat generation. Flux, DALL·E 3, Kling, HunyuanVideo, Gemini — with Telegram Stars payments and a Mini App.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Manrope:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0D1320;
+  --panel:#151D2E;
+  --panel-2:#1B2438;
+  --line:#26314A;
+  --tg:#4DA8E8;
+  --tg-deep:#2B7FBE;
+  --star:#F2B53C;
+  --text:#E8EDF4;
+  --mut:#8A96AA;
+  --bubble-user:#2B6FA8;
+  --bubble-bot:#1E2A40;
+  --radius:14px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  background:var(--ink);
+  color:var(--text);
+  font-family:'Manrope',system-ui,sans-serif;
+  font-size:17px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--tg);text-decoration:none}
+a:hover{text-decoration:underline}
+a:focus-visible,button:focus-visible{outline:2px solid var(--star);outline-offset:3px;border-radius:4px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+
+/* ---------- Nav ---------- */
+nav{
+  position:sticky;top:0;z-index:40;
+  background:rgba(13,19,32,.85);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;height:64px}
+.logo{font-family:'Unbounded',sans-serif;font-weight:800;font-size:.95rem;letter-spacing:.04em;color:var(--text)}
+.logo .dot{color:var(--star)}
+.nav-links{display:flex;gap:28px;align-items:center;font-size:.92rem;font-weight:500}
+.nav-links a{color:var(--mut)}
+.nav-links a:hover{color:var(--text);text-decoration:none}
+.gh-btn{
+  border:1px solid var(--line);border-radius:10px;padding:8px 16px;
+  color:var(--text) !important;background:var(--panel);
+  transition:border-color .2s;
+}
+.gh-btn:hover{border-color:var(--tg)}
+
+/* ---------- Hero ---------- */
+.hero{padding:88px 0 72px;display:grid;grid-template-columns:1.1fr .9fr;gap:64px;align-items:center}
+.eyebrow{
+  font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--star);
+  letter-spacing:.12em;text-transform:uppercase;margin-bottom:20px;
+}
+h1{
+  font-family:'Unbounded',sans-serif;font-weight:800;
+  font-size:clamp(2rem,4.4vw,3.1rem);line-height:1.14;letter-spacing:-.01em;
+  margin-bottom:22px;
+}
+h1 .hl{color:var(--tg)}
+.hero p.lead{color:var(--mut);font-size:1.08rem;max-width:46ch;margin-bottom:34px}
+.cta-row{display:flex;gap:14px;flex-wrap:wrap}
+.btn{
+  display:inline-block;padding:13px 26px;border-radius:12px;font-weight:700;font-size:.95rem;
+  transition:transform .15s,box-shadow .15s;
+}
+.btn:hover{text-decoration:none;transform:translateY(-1px)}
+.btn-primary{background:var(--tg);color:#0A1622}
+.btn-primary:hover{box-shadow:0 6px 24px rgba(77,168,232,.35)}
+.btn-ghost{border:1px solid var(--line);color:var(--text);background:transparent}
+.btn-ghost:hover{border-color:var(--tg)}
+
+/* ---------- Chat mockup (signature) ---------- */
+.phone{
+  background:var(--panel);border:1px solid var(--line);border-radius:26px;
+  padding:18px 16px 20px;box-shadow:0 24px 80px rgba(0,0,0,.45);
+  max-width:400px;justify-self:end;width:100%;
+}
+.phone-head{
+  display:flex;align-items:center;gap:12px;padding:6px 6px 16px;border-bottom:1px solid var(--line);margin-bottom:16px;
+}
+.avatar{
+  width:38px;height:38px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,var(--tg),var(--star));
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Unbounded',sans-serif;font-weight:800;font-size:.8rem;color:#0A1622;
+}
+.phone-head .name{font-weight:700;font-size:.95rem}
+.phone-head .status{font-size:.78rem;color:var(--tg)}
+.chat{display:flex;flex-direction:column;gap:10px;min-height:330px}
+.bubble{
+  max-width:82%;padding:10px 14px;border-radius:16px;font-size:.9rem;line-height:1.5;
+  opacity:0;animation:pop .4s ease forwards;
+}
+.bubble.user{align-self:flex-end;background:var(--bubble-user);border-bottom-right-radius:4px}
+.bubble.bot{align-self:flex-start;background:var(--bubble-bot);border-bottom-left-radius:4px}
+.bubble .meta{display:block;font-size:.72rem;color:rgba(232,237,244,.55);margin-top:5px}
+.bubble.b1{animation-delay:.4s}
+.bubble.b2{animation-delay:1.6s}
+.bubble.b3{animation-delay:3.4s}
+.bubble.b4{animation-delay:4.6s}
+.typing{
+  align-self:flex-start;display:flex;gap:5px;padding:13px 16px;background:var(--bubble-bot);
+  border-radius:16px;border-bottom-left-radius:4px;
+  opacity:0;animation:typeshow 1.8s ease 1.5s forwards;
+}
+.typing span{
+  width:7px;height:7px;border-radius:50%;background:var(--mut);
+  animation:blink 1s infinite;
+}
+.typing span:nth-child(2){animation-delay:.2s}
+.typing span:nth-child(3){animation-delay:.4s}
+.genimg{
+  width:230px;height:150px;border-radius:10px;margin-bottom:6px;
+  background:
+    radial-gradient(ellipse 60% 50% at 70% 30%,#F2B53C55,transparent),
+    radial-gradient(ellipse 50% 60% at 25% 70%,#4DA8E866,transparent),
+    linear-gradient(160deg,#1A2C4A,#0E1830 60%,#2A1E3E);
+  border:1px solid var(--line);
+}
+@keyframes pop{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes typeshow{0%{opacity:0}15%{opacity:1}85%{opacity:1}100%{opacity:0;height:0;padding:0;margin:0}}
+@keyframes blink{0%,80%,100%{opacity:.3}40%{opacity:1}}
+
+/* ---------- Model strip ---------- */
+.models{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--panel)}
+.models-inner{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;padding:22px 24px}
+.pill{
+  font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--mut);
+  border:1px solid var(--line);border-radius:99px;padding:7px 16px;
+}
+.pill b{color:var(--text);font-weight:600}
+
+/* ---------- Sections ---------- */
+section{padding:84px 0}
+.sec-label{
+  font-family:'JetBrains Mono',monospace;font-size:.76rem;color:var(--star);
+  letter-spacing:.12em;text-transform:uppercase;margin-bottom:14px;
+}
+h2{
+  font-family:'Unbounded',sans-serif;font-weight:600;font-size:clamp(1.4rem,2.6vw,1.9rem);
+  margin-bottom:18px;letter-spacing:-.01em;
+}
+.sec-intro{color:var(--mut);max-width:60ch;margin-bottom:48px}
+
+/* ---------- Feature grid ---------- */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.card{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:28px 26px;transition:border-color .2s,transform .2s;
+}
+.card:hover{border-color:var(--tg-deep);transform:translateY(-2px)}
+.card .icon{font-size:1.5rem;margin-bottom:16px;display:block}
+.card h3{font-size:1.02rem;font-weight:700;margin-bottom:10px}
+.card p{font-size:.92rem;color:var(--mut)}
+.card p code{font-family:'JetBrains Mono',monospace;font-size:.82rem;color:var(--tg)}
+
+/* ---------- Pipeline ---------- */
+.pipeline{
+  display:flex;align-items:stretch;gap:0;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+}
+.stage{flex:1;padding:26px 22px;position:relative}
+.stage + .stage{border-left:1px solid var(--line)}
+.stage .num{
+  font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--star);margin-bottom:10px;display:block;
+}
+.stage h4{font-size:.95rem;font-weight:700;margin-bottom:6px}
+.stage p{font-size:.85rem;color:var(--mut)}
+
+/* ---------- Payments / languages ---------- */
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.duo .card h3 .star{color:var(--star)}
+.langs{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.lang{
+  border:1px solid var(--line);border-radius:8px;padding:6px 14px;
+  font-family:'JetBrains Mono',monospace;font-size:.82rem;color:var(--text);
+}
+
+/* ---------- Quick start ---------- */
+.terminal{
+  background:#0A0F1A;border:1px solid var(--line);border-radius:var(--radius);
+  overflow:hidden;font-family:'JetBrains Mono',monospace;font-size:.88rem;
+}
+.term-bar{
+  display:flex;gap:7px;padding:13px 16px;border-bottom:1px solid var(--line);background:var(--panel);
+}
+.term-bar i{width:11px;height:11px;border-radius:50%;background:var(--line)}
+.terminal pre{padding:24px;overflow-x:auto;line-height:1.9;color:var(--text)}
+.terminal .c{color:var(--mut)}
+.terminal .g{color:#7BC97F}
+.env-table{width:100%;border-collapse:collapse;margin-top:28px;font-size:.9rem}
+.env-table th{
+  text-align:left;font-family:'JetBrains Mono',monospace;font-size:.74rem;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--mut);
+  padding:10px 14px;border-bottom:1px solid var(--line);
+}
+.env-table td{padding:12px 14px;border-bottom:1px solid var(--line);color:var(--mut)}
+.env-table td:first-child{font-family:'JetBrains Mono',monospace;color:var(--tg);font-size:.84rem;white-space:nowrap}
+.env-table .req{color:var(--star);font-size:.78rem}
+
+/* ---------- Footer ---------- */
+footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--mut);font-size:.9rem}
+.foot-grid{display:flex;justify-content:space-between;gap:32px;flex-wrap:wrap}
+.foot-grid h5{
+  font-family:'JetBrains Mono',monospace;font-size:.74rem;text-transform:uppercase;
+  letter-spacing:.1em;color:var(--text);margin-bottom:12px;
+}
+.foot-grid ul{list-style:none}
+.foot-grid li{margin-bottom:8px}
+.foot-grid a{color:var(--mut)}
+.foot-grid a:hover{color:var(--tg)}
+
+/* ---------- Reveal on scroll ---------- */
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease}
+.reveal.in{opacity:1;transform:none}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none !important;transition:none !important}
+  .bubble,.reveal{opacity:1;transform:none}
+  .typing{display:none}
+}
+@media (max-width:920px){
+  .hero{grid-template-columns:1fr;gap:48px;padding-top:56px}
+  .phone{justify-self:center}
+  .grid{grid-template-columns:1fr 1fr}
+  .pipeline{flex-direction:column}
+  .stage + .stage{border-left:none;border-top:1px solid var(--line)}
+  .duo{grid-template-columns:1fr}
+}
+@media (max-width:600px){
+  .grid{grid-template-columns:1fr}
+  .nav-links a:not(.gh-btn){display:none}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <div class="logo">AZAMAT<span class="dot">·</span>AI HUB</div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#pipeline">How it works</a>
+      <a href="#start">Quick start</a>
+      <a class="gh-btn" href="https://github.com/alivsch-ai-code/flux-bot-azamat">GitHub →</a>
+    </div>
+  </div>
+</nav>
+
+<header class="wrap hero">
+  <div>
+    <div class="eyebrow">Open-source Telegram bot</div>
+    <h1>Your AI studio lives <span class="hl">inside the chat</span>.</h1>
+    <p class="lead">Generate images, videos and music, or talk to an LLM — without leaving Telegram. Dozens of models behind one bot, paid with Telegram Stars, managed from a Mini App.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/alivsch-ai-code/flux-bot-azamat#-quick-start">Deploy your own</a>
+      <a class="btn btn-ghost" href="#features">See what it does</a>
+    </div>
+  </div>
+
+  <div class="phone" aria-label="Example conversation with the bot">
+    <div class="phone-head">
+      <div class="avatar">AZ</div>
+      <div>
+        <div class="name">AZAMAT AI Hub</div>
+        <div class="status">online</div>
+      </div>
+    </div>
+    <div class="chat">
+      <div class="bubble user b1">a foggy harbor at dawn, fishing boats, cinematic light<span class="meta">12:04</span></div>
+      <div class="typing"><span></span><span></span><span></span></div>
+      <div class="bubble bot b2"><div class="genimg" role="img" aria-label="Generated image preview"></div>Done — generated with <b>Flux Pro</b>.<span class="meta">12:04 · ⭐ 12 Stars</span></div>
+      <div class="bubble user b3">now make it a 5 second video<span class="meta">12:05</span></div>
+      <div class="bubble bot b4">🎬 Rendering with <b>Kling</b> — I'll send it here when it's ready.<span class="meta">12:05</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="models">
+  <div class="wrap models-inner">
+    <span class="pill"><b>Flux</b> / Flux Pro</span>
+    <span class="pill"><b>DALL·E 3</b></span>
+    <span class="pill"><b>Kling</b> video</span>
+    <span class="pill"><b>HunyuanVideo</b></span>
+    <span class="pill"><b>Wan</b></span>
+    <span class="pill"><b>Gemini</b> chat</span>
+    <span class="pill"><b>Stable Diffusion</b></span>
+    <span class="pill">+ any Replicate model</span>
+  </div>
+</div>
+
+<section id="features" class="wrap">
+  <div class="sec-label reveal">Features</div>
+  <h2 class="reveal">One bot, every modality</h2>
+  <p class="sec-intro reveal">Each capability is a pluggable model behind a unified pipeline — adding a new Replicate model is configuration, not code.</p>
+  <div class="grid">
+    <div class="card reveal">
+      <span class="icon">🎨</span>
+      <h3>Image generation</h3>
+      <p>Text-to-image, image-to-image and inpainting with Flux, DALL·E 3 and Stable Diffusion. Prompt optimization and negative prompts built in.</p>
+    </div>
+    <div class="card reveal">
+      <span class="icon">🎬</span>
+      <h3>Video generation</h3>
+      <p>Create clips from prompts or animate a still image — Kling, Wan and HunyuanVideo, delivered straight to the chat when rendering finishes.</p>
+    </div>
+    <div class="card reveal">
+      <span class="icon">🎙️</span>
+      <h3>Audio &amp; voice</h3>
+      <p>Music generation, voice cloning and text-to-speech through the same credit and delivery pipeline as images and video.</p>
+    </div>
+    <div class="card reveal">
+      <span class="icon">💬</span>
+      <h3>LLM chat with memory</h3>
+      <p>Persistent chat history with periodic summarization. Rapid bursts of messages are batched into one coherent reply instead of five fragmented ones.</p>
+    </div>
+    <div class="card reveal">
+      <span class="icon">📱</span>
+      <h3>Telegram Mini App</h3>
+      <p>A React web app inside Telegram: browse models, buy credit packages and change settings. Calls a Flask API with signed <code>init_data</code>.</p>
+    </div>
+    <div class="card reveal">
+      <span class="icon">👥</span>
+      <h3>Group mode</h3>
+      <p>Add the bot to a group: Gemini-powered chat with personality, per-group language, group-aware credits and a one-time AI-generated welcome DM.</p>
+    </div>
+  </div>
+</section>
+
+<section id="pipeline" class="wrap">
+  <div class="sec-label reveal">How it works</div>
+  <h2 class="reveal">From message to media</h2>
+  <p class="sec-intro reveal">Clean architecture under the hood: presentation, application and infrastructure layers stay separate, so backends can be swapped without touching handlers.</p>
+  <div class="pipeline reveal">
+    <div class="stage">
+      <span class="num">01 — Telegram</span>
+      <h4>Message arrives</h4>
+      <p>aiogram handlers route by context: group chat, menu, payments or generation.</p>
+    </div>
+    <div class="stage">
+      <span class="num">02 — Application</span>
+      <h4>GenerationService</h4>
+      <p>Validates input, checks and charges credits, picks the model and routes the request.</p>
+    </div>
+    <div class="stage">
+      <span class="num">03 — Infrastructure</span>
+      <h4>UnifiedAIClient</h4>
+      <p>Talks to Replicate, OpenAI or Gemini behind one interface. Webhooks handle async renders.</p>
+    </div>
+    <div class="stage">
+      <span class="num">04 — Delivery</span>
+      <h4>Result in chat</h4>
+      <p>Media is sent back to the user; state and transactions live in Neon PostgreSQL.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="sec-label reveal">Payments &amp; reach</div>
+  <h2 class="reveal">Stars in, four languages out</h2>
+  <div class="duo" style="margin-top:42px">
+    <div class="card reveal">
+      <h3><span class="star">⭐</span> Telegram Stars (XTR)</h3>
+      <p>Native in-chat payments — no Stripe, no external provider, no checkout redirect. Users buy credit packages in the shop or the Mini App; every transaction is recorded in the database.</p>
+    </div>
+    <div class="card reveal">
+      <h3>🌍 Full i18n</h3>
+      <p>Every menu, prompt and error message is localized. Group admins set the language per group.</p>
+      <div class="langs">
+        <span class="lang">DE Deutsch</span>
+        <span class="lang">EN English</span>
+        <span class="lang">RU Русский</span>
+        <span class="lang">KK Қазақша</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="start" class="wrap">
+  <div class="sec-label reveal">Quick start</div>
+  <h2 class="reveal">Running in five minutes</h2>
+  <p class="sec-intro reveal">Python 3.10+, a PostgreSQL database (a free Neon instance works) and two API tokens are all you need.</p>
+  <div class="terminal reveal">
+    <div class="term-bar"><i></i><i></i><i></i></div>
+    <pre><span class="c"># clone &amp; install</span>
+<span class="g">$</span> git clone https://github.com/alivsch-ai-code/flux-bot-azamat.git
+<span class="g">$</span> cd flux-bot-azamat
+<span class="g">$</span> pip install -r requirements.txt
+
+<span class="c"># configure (.env)</span>
+<span class="g">$</span> cp .env.example .env
+
+<span class="c"># run</span>
+<span class="g">$</span> python main.py</pre>
+  </div>
+  <table class="env-table reveal">
+    <thead><tr><th>Variable</th><th>Required</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>TELEGRAM_TOKEN</td><td class="req">required</td><td>Bot token from @BotFather</td></tr>
+      <tr><td>REPLICATE_API_TOKEN</td><td class="req">required</td><td>API token from replicate.com</td></tr>
+      <tr><td>DATABASE_URL</td><td class="req">required</td><td>PostgreSQL connection string (e.g. Neon)</td></tr>
+      <tr><td>APP_URL</td><td>optional</td><td>HTTPS base URL for the Mini App</td></tr>
+      <tr><td>OPENAI_API_KEY</td><td>optional</td><td>Enables DALL·E and GPT models</td></tr>
+      <tr><td>ADMIN_ID</td><td>optional</td><td>Your Telegram user ID for admin commands</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  <div class="wrap foot-grid">
+    <div>
+      <div class="logo" style="margin-bottom:10px">AZAMAT<span class="dot">·</span>AI HUB</div>
+      <p>Open-source AI generation bot for Telegram.<br>Python · aiogram · Flask · React · PostgreSQL · Replicate</p>
+    </div>
+    <div>
+      <h5>Project</h5>
+      <ul>
+        <li><a href="https://github.com/alivsch-ai-code/flux-bot-azamat">Repository</a></li>
+        <li><a href="https://github.com/alivsch-ai-code/flux-bot-azamat#-quick-start">Quick start</a></li>
+        <li><a href="https://github.com/alivsch-ai-code/flux-bot-azamat/blob/main/doc/architecture.md">Architecture</a></li>
+      </ul>
+    </div>
+    <div>
+      <h5>Guides</h5>
+      <ul>
+        <li><a href="https://github.com/alivsch-ai-code/flux-bot-azamat/blob/main/doc/render_deploy.md">Deploy on Render</a></li>
+        <li><a href="https://github.com/alivsch-ai-code/flux-bot-azamat/blob/main/doc/railway_deploy.md">Deploy on Railway</a></li>
+        <li><a href="https://github.com/alivsch-ai-code/flux-bot-azamat/blob/main/doc/telegram_channels.md">Broadcast channels</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+<script>
+const io = new IntersectionObserver(es => {
+  es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
+</html>

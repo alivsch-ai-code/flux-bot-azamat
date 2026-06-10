@@ -5,6 +5,9 @@
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
 [![Telegram](https://img.shields.io/badge/Telegram-Bot-2CA5E0?logo=telegram)](https://core.telegram.org/bots)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-336791?logo=postgresql)](https://neon.tech)
+[![Website](https://img.shields.io/badge/Website-Project_Page-F2B53C)](https://alivsch-ai-code.github.io/flux-bot-azamat/)
+
+### 🌐 **[→ Visit the project website](https://alivsch-ai-code.github.io/flux-bot-azamat/)** — features, architecture and quick start, beautifully presented.
 
 **Find this project when searching for:** *telegram ai image generation bot* · *flux telegram bot* · *dall-e telegram* · *ai art bot* · *text to image telegram* · *video generation bot* · *replicate telegram* · *telegram stars payment*
 
@@ -32,6 +35,27 @@ Perfect for developers who want a **ready-made AI bot** for Telegram, or anyone 
 | 💳 **Telegram Stars (XTR)** | Native payments — no external payment providers needed |
 | 🌍 **Multilingual** | German, English, Russian, Kazakh — full i18n |
 | 🔌 **Replicate + OpenAI + Gemini** | Pluggable AI backends, easy to add new models |
+
+---
+
+## 📚 Documentation
+
+**Start here:** 🌐 [Project website](https://alivsch-ai-code.github.io/flux-bot-azamat/) (overview) → [Quick Start](#-quick-start) (run it) → guides below (go deep).
+
+| Topic | Document |
+|-------|----------|
+| 🏛️ **Architecture** (layers, components) | [doc/architecture.md](doc/architecture.md) |
+| 🧩 **System block diagram** (data flow) | [doc/system_block_diagram.md](doc/system_block_diagram.md) |
+| 📋 **Use cases & interfaces** (handlers, HTTP routes, services — German, detailed) | [doc/use_cases_und_schnittstellen.md](doc/use_cases_und_schnittstellen.md) |
+| 🚀 **Deploy on Render** | [doc/render_deploy.md](doc/render_deploy.md) |
+| 🚂 **Deploy on Railway** | [doc/railway_deploy.md](doc/railway_deploy.md) |
+| 📈 **Scaling on Render** | [doc/skalierbarkeit_render.md](doc/skalierbarkeit_render.md) |
+| 📢 **Broadcast channels / Daily News** | [doc/telegram_channels.md](doc/telegram_channels.md) |
+| 🍔 **Menu modes & structure** | [doc/menu_modes.md](doc/menu_modes.md) · [doc/menu_structure_analysis.md](doc/menu_structure_analysis.md) |
+| 🛡️ **Performance & security hardening** | [doc/perf_security_hardening_2026_04.md](doc/perf_security_hardening_2026_04.md) |
+| 🔍 **Project audit** | [doc/projekt_audit_2026.md](doc/projekt_audit_2026.md) |
+| 🧪 **Tests documentation** | [doc/tests_dokumentation.md](doc/tests_dokumentation.md) |
+| 🤖 **Replicate schema & UX audit** | [doc/replicate_schema_ux_audit_2026_04.md](doc/replicate_schema_ux_audit_2026_04.md) |
 
 ---
 
