@@ -256,7 +256,9 @@ Vollständige Diagramm-Doku: [`doc/system_block_diagram.md`](doc/system_block_di
 
 ## Research Roadmap — Toward an Agentic AZAMAT
 
-Today AZAMAT is a **menu-driven generation hub**: the user picks a model, sends a prompt, gets a result. The next evolution — inspired by agent frameworks like [OpenClaw](https://github.com/openclaw/openclaw) — is a bot that **plans, acts and remembers on its own**: you describe a goal ("make a logo for my café, animate it, add a jingle") and the bot orchestrates every step. The roadmap below maps each capability to the research that defines the state of the art.
+Today AZAMAT is a **menu-driven generation hub**: the user picks a model, sends a prompt, gets a result. The next evolution is a bot that **plans, acts and remembers on its own**: you describe a goal ("make a logo for my café, animate it, add a jingle") and the bot orchestrates every step.
+
+> **Why now?** [OpenClaw](https://github.com/openclaw/openclaw) (formerly Clawdbot/Moltbot) went viral in early 2026 and proved the thesis this roadmap is built on: **the chat app is the natural home of the personal AI agent.** Millions discovered that an agent living in Telegram or WhatsApp — one that remembers, plans and acts — beats yet another app. AZAMAT already owns the hard parts of that equation (Telegram-native UX, payments, a unified multi-model pipeline, persistent sessions); the roadmap below adds the agency, with each capability mapped to the research that defines the state of the art.
 
 | Phase | Capability | Key research | Status |
 |-------|-----------|--------------|--------|
