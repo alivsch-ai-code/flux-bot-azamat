@@ -9,7 +9,6 @@ replicate~=1.0
 python-dotenv~=1.0
 Pillow~=10.0
 psycopg2-binary~=2.9
-jwt~=1.3
 openai~=1.40
 ruff~=0.6
 psutil~=6.0
