@@ -1,15 +1,25 @@
-# 🤖 AZAMAT AI Hub — All-in-One Telegram Bot for AI Image, Video & Audio Generation
+<div align="center">
 
-> **The ultimate Telegram bot** for generating AI images, videos, music, and chat — powered by **Flux**, **DALL·E 3**, **Kling (via Replicate models)**, **HunyuanVideo**, **Gemini**, and more. One bot, dozens of models, Telegram Stars payments.
+# AZAMAT AI Hub
 
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
+**Your AI studio lives inside the chat.**
+
+Generate AI images, videos and music, or talk to an LLM — all inside Telegram.
+One bot, dozens of models, paid with Telegram Stars.
+
+[![CI](https://github.com/alivsch-ai-code/flux-bot-azamat/actions/workflows/ci.yml/badge.svg)](https://github.com/alivsch-ai-code/flux-bot-azamat/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Telegram](https://img.shields.io/badge/Telegram-Bot-2CA5E0?logo=telegram)](https://core.telegram.org/bots)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-336791?logo=postgresql)](https://neon.tech)
-[![Website](https://img.shields.io/badge/Website-Project_Page-F2B53C)](https://alivsch-ai-code.github.io/flux-bot-azamat/)
 
-### 🌐 **[→ Visit the project website](https://alivsch-ai-code.github.io/flux-bot-azamat/)** — features, architecture and quick start, beautifully presented.
+**[🌐 Website](https://alivsch-ai-code.github.io/flux-bot-azamat/)** ·
+**[📚 Documentation](#-documentation)** ·
+**[🚀 Quick Start](#-quick-start)** ·
+**[📦 Deploy](#-deployment)** ·
+**[🤝 Contributing](CONTRIBUTING.md)**
 
-**Find this project when searching for:** *telegram ai image generation bot* · *flux telegram bot* · *dall-e telegram* · *ai art bot* · *text to image telegram* · *video generation bot* · *replicate telegram* · *telegram stars payment*
+</div>
 
 ---
 
@@ -245,6 +255,12 @@ Vollständige Diagramm-Doku: [`doc/system_block_diagram.md`](doc/system_block_di
 
 ---
 
+## 🤝 Contributing
+
+Contributions are welcome! Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for the development setup, project layout and conventions. In short: run `pytest` and `ruff check` before opening a PR, and keep changes in the right architecture layer.
+
+---
+
 ## 📄 License
 
-MIT
+This project is licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
