@@ -255,6 +255,25 @@ Vollständige Diagramm-Doku: [`doc/system_block_diagram.md`](doc/system_block_di
 
 ---
 
+## 🔭 Research Roadmap — Toward an Agentic AZAMAT
+
+Today AZAMAT is a **menu-driven generation hub**: the user picks a model, sends a prompt, gets a result. The next evolution — inspired by agent frameworks like [OpenClaw](https://github.com/openclaw/openclaw) — is a bot that **plans, acts and remembers on its own**: you describe a goal ("make a logo for my café, animate it, add a jingle") and the bot orchestrates every step. The roadmap below maps each capability to the research that defines the state of the art.
+
+| Phase | Capability | Key research | Status |
+|-------|-----------|--------------|--------|
+| **1** | **Autonomous tool selection** — the bot reasons about *which* model fits the request instead of requiring menu navigation; interleaved reasoning + acting loop | ReAct ([Yao et al., 2022](https://arxiv.org/abs/2210.03629)) · Toolformer ([Schick et al., 2023](https://arxiv.org/abs/2302.04761)) | 🔬 planned |
+| **2** | **Multi-step planning** — decompose "logo → animation → music" into an executed pipeline with intermediate results passed between models | Tree of Thoughts ([Yao et al., 2023](https://arxiv.org/abs/2305.10601)) · Plan-and-Solve ([Wang et al., 2023](https://arxiv.org/abs/2305.04091)) | 🔬 planned |
+| **3** | **Long-term memory** — evolve `chat_sessions` + summarization into hierarchical memory: user preferences, past generations, style profiles that persist across sessions | MemGPT ([Packer et al., 2023](https://arxiv.org/abs/2310.08560)) · Generative Agents ([Park et al., 2023](https://arxiv.org/abs/2304.03442)) | 🌱 foundation exists |
+| **4** | **Self-reflection & skill learning** — learn from failed generations (retry with improved prompts), build a growing library of proven prompt/parameter "skills" | Reflexion ([Shinn et al., 2023](https://arxiv.org/abs/2303.11366)) · Voyager ([Wang et al., 2023](https://arxiv.org/abs/2305.16291)) | 🔬 planned |
+| **5** | **Open tool ecosystem** — auto-discover Replicate model schemas as callable tools; expose the bot's capabilities via [Model Context Protocol](https://modelcontextprotocol.io) so external agents can use AZAMAT as a tool | ToolLLM ([Qin et al., 2023](https://arxiv.org/abs/2307.16789)) · Gorilla ([Patil et al., 2023](https://arxiv.org/abs/2305.15334)) | 🌱 schema sync exists |
+| **6** | **Evaluation & guardrails** — benchmark agent decisions, enforce credit budgets on autonomous actions, require confirmation above spend thresholds | AgentBench ([Liu et al., 2023](https://arxiv.org/abs/2308.03688)) · Agent survey ([Wang et al., 2023](https://arxiv.org/abs/2308.11432)) | 🔬 planned |
+
+**Why this order?** Tool selection (1) and planning (2) deliver the biggest UX jump and build directly on the existing `GenerationService` routing. Memory (3) extends infrastructure that already exists (`chat_sessions`, summarization, dynamic model schemas in `ai_models`). Reflection (4) and the open ecosystem (5) turn the bot from a product into a platform. Guardrails (6) run alongside every phase — an agent that spends user credits autonomously must be budget-aware from day one.
+
+Contributions to any phase are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for the development setup, project layout and conventions. In short: run `pytest` and `ruff check` before opening a PR, and keep changes in the right architecture layer.

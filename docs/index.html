@@ -220,6 +220,30 @@ h2{
 .env-table td:first-child{font-family:'JetBrains Mono',monospace;color:var(--tg);font-size:.84rem;white-space:nowrap}
 .env-table .req{color:var(--star);font-size:.78rem}
 
+/* ---------- Roadmap ---------- */
+.phases{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.phase{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:26px;transition:border-color .2s;
+}
+.phase:hover{border-color:var(--tg-deep)}
+.phase .ph-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.phase .ph-num{font-family:'JetBrains Mono',monospace;font-size:.74rem;color:var(--star);letter-spacing:.08em}
+.phase .ph-status{
+  font-size:.7rem;font-family:'JetBrains Mono',monospace;border:1px solid var(--line);
+  border-radius:99px;padding:3px 10px;color:var(--mut);
+}
+.phase .ph-status.live{color:#7BC97F;border-color:#2E4A33}
+.phase h3{font-size:1rem;font-weight:700;margin-bottom:8px}
+.phase p{font-size:.9rem;color:var(--mut);margin-bottom:14px}
+.papers{display:flex;flex-direction:column;gap:6px}
+.paper{
+  font-size:.8rem;font-family:'JetBrains Mono',monospace;color:var(--mut);
+  display:flex;gap:8px;align-items:baseline;
+}
+.paper::before{content:"›";color:var(--star)}
+.paper a{color:var(--tg)}
+
 /* ---------- Footer ---------- */
 footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--mut);font-size:.9rem}
 .foot-grid{display:flex;justify-content:space-between;gap:32px;flex-wrap:wrap}
@@ -248,6 +272,7 @@ footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--mut);fon
   .pipeline{flex-direction:column}
   .stage + .stage{border-left:none;border-top:1px solid var(--line)}
   .duo{grid-template-columns:1fr}
+  .phases{grid-template-columns:1fr}
 }
 @media (max-width:600px){
   .grid{grid-template-columns:1fr}
@@ -263,6 +288,7 @@ footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--mut);fon
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#pipeline">How it works</a>
+      <a href="#roadmap">Roadmap</a>
       <a href="#start">Quick start</a>
       <a href="https://github.com/alivsch-ai-code/flux-bot-azamat#-documentation">Docs</a>
       <a class="gh-btn" href="https://github.com/alivsch-ai-code/flux-bot-azamat">GitHub →</a>
@@ -394,6 +420,68 @@ footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--mut);fon
         <span class="lang">EN English</span>
         <span class="lang">RU Русский</span>
         <span class="lang">KK Қазақша</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="roadmap" class="wrap">
+  <div class="sec-label reveal">Research roadmap</div>
+  <h2 class="reveal">From generation hub to autonomous agent</h2>
+  <p class="sec-intro reveal">Today you pick a model and send a prompt. The next evolution — in the spirit of agent frameworks like <a href="https://github.com/openclaw/openclaw">OpenClaw</a> — is a bot that plans, acts and remembers on its own. Each phase is grounded in the research that defines it.</p>
+  <div class="phases">
+    <div class="phase reveal">
+      <div class="ph-top"><span class="ph-num">PHASE 01</span><span class="ph-status">planned</span></div>
+      <h3>Autonomous tool selection</h3>
+      <p>The bot reasons about which model fits a request — no menu navigation, just intent. A reasoning + acting loop picks image, video or audio backends by itself.</p>
+      <div class="papers">
+        <span class="paper"><a href="https://arxiv.org/abs/2210.03629">ReAct — Yao et al., 2022</a></span>
+        <span class="paper"><a href="https://arxiv.org/abs/2302.04761">Toolformer — Schick et al., 2023</a></span>
+      </div>
+    </div>
+    <div class="phase reveal">
+      <div class="ph-top"><span class="ph-num">PHASE 02</span><span class="ph-status">planned</span></div>
+      <h3>Multi-step planning</h3>
+      <p>"Make a logo, animate it, add a jingle" becomes one request: the bot decomposes the goal and pipes intermediate results between models automatically.</p>
+      <div class="papers">
+        <span class="paper"><a href="https://arxiv.org/abs/2305.10601">Tree of Thoughts — Yao et al., 2023</a></span>
+        <span class="paper"><a href="https://arxiv.org/abs/2305.04091">Plan-and-Solve — Wang et al., 2023</a></span>
+      </div>
+    </div>
+    <div class="phase reveal">
+      <div class="ph-top"><span class="ph-num">PHASE 03</span><span class="ph-status live">foundation exists</span></div>
+      <h3>Long-term memory</h3>
+      <p>Chat sessions and summarization already persist — next: hierarchical memory with user preferences, past generations and style profiles across sessions.</p>
+      <div class="papers">
+        <span class="paper"><a href="https://arxiv.org/abs/2310.08560">MemGPT — Packer et al., 2023</a></span>
+        <span class="paper"><a href="https://arxiv.org/abs/2304.03442">Generative Agents — Park et al., 2023</a></span>
+      </div>
+    </div>
+    <div class="phase reveal">
+      <div class="ph-top"><span class="ph-num">PHASE 04</span><span class="ph-status">planned</span></div>
+      <h3>Self-reflection &amp; skill learning</h3>
+      <p>Failed generations become training signal: the bot retries with improved prompts and grows a library of proven prompt and parameter "skills".</p>
+      <div class="papers">
+        <span class="paper"><a href="https://arxiv.org/abs/2303.11366">Reflexion — Shinn et al., 2023</a></span>
+        <span class="paper"><a href="https://arxiv.org/abs/2305.16291">Voyager — Wang et al., 2023</a></span>
+      </div>
+    </div>
+    <div class="phase reveal">
+      <div class="ph-top"><span class="ph-num">PHASE 05</span><span class="ph-status live">schema sync exists</span></div>
+      <h3>Open tool ecosystem</h3>
+      <p>Replicate model schemas auto-discovered as callable tools, and AZAMAT itself exposed via the Model Context Protocol — usable by external agents.</p>
+      <div class="papers">
+        <span class="paper"><a href="https://arxiv.org/abs/2307.16789">ToolLLM — Qin et al., 2023</a></span>
+        <span class="paper"><a href="https://arxiv.org/abs/2305.15334">Gorilla — Patil et al., 2023</a></span>
+      </div>
+    </div>
+    <div class="phase reveal">
+      <div class="ph-top"><span class="ph-num">PHASE 06</span><span class="ph-status">planned</span></div>
+      <h3>Evaluation &amp; guardrails</h3>
+      <p>Benchmarked agent decisions, hard credit budgets on autonomous actions and confirmation thresholds — autonomy that never surprises the user's wallet.</p>
+      <div class="papers">
+        <span class="paper"><a href="https://arxiv.org/abs/2308.03688">AgentBench — Liu et al., 2023</a></span>
+        <span class="paper"><a href="https://arxiv.org/abs/2308.11432">Agent survey — Wang et al., 2023</a></span>
       </div>
     </div>
   </div>
